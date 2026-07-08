@@ -61,6 +61,7 @@ class DesktopReceiver(
         cipher = cipher,
         store = store,
         deviceName = config.deviceName!!,
+        persistSensitiveHistory = config.persistSensitiveHistory,
         onItemAppended = ::handleAppended,
     )
 

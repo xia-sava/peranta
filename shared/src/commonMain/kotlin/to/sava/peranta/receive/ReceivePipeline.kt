@@ -10,6 +10,7 @@ import kotlinx.serialization.SerializationException
 import to.sava.peranta.crypto.DecryptionException
 import to.sava.peranta.crypto.KeyIdMismatchException
 import to.sava.peranta.crypto.MessageCipher
+import to.sava.peranta.filter.payloadForPersistence
 import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
@@ -38,12 +39,16 @@ private const val DEDUPE_CAPACITY = 1000
  * Android は UnifiedPush のコールバックから [loadHistory] + [handleEvent] を直接呼んで駆動する。
  * UnifiedPush 駆動時は購読しないため [ntfy] は null でよい。
  * 各段階を kermit で構造化ログに残す。本文は info に出さず debug のみとする（§16）。
+ *
+ * [persistSensitiveHistory] が false（既定）のとき、OTP・SMS の本文は履歴保存時に伏せる（§11）。
+ * 表示用の [items] と [onItemAppended] には伏せ字前の本文を渡し、永続のみを伏せる。
  */
 class ReceivePipeline(
     private val ntfy: NtfyClient?,
     private val cipher: MessageCipher,
     private val store: TimelineStore,
     private val deviceName: String,
+    private val persistSensitiveHistory: Boolean = false,
     private val log: Logger = Logger.withTag("Receive"),
     private val now: () -> Long = ::nowEpochMillis,
     private val onItemAppended: (TimelineItem) -> Unit = {},
@@ -63,9 +68,16 @@ class ReceivePipeline(
      */
     suspend fun loadHistory() {
         val history = store.loadAll()
-        _items.value = history
+        val at = now()
+        _items.value = history.filterNot { isExpiredItem(it, at) }
         history.forEach { rememberId(it.id) }
         log.i { "receive pipeline primed: history=${history.size}" }
+    }
+
+    /** 履歴アイテムが表示時点で失効しているか（表示から除外する判定）。 */
+    private fun isExpiredItem(item: TimelineItem, at: Long): Boolean {
+        val expiresAt = item.expiresAtEpochMillis ?: return false
+        return expiresAt < at
     }
 
     /** 保存済み履歴を読み込み、[topic] の購読を開始する。呼び出しはキャンセルまで戻らない。 */
@@ -128,12 +140,14 @@ class ReceivePipeline(
         payload.to == BROADCAST_TARGET || payload.to == deviceName
 
     private fun isExpired(payload: Payload): Boolean {
-        val expiresAt = when (payload) {
-            is NotificationPayload -> payload.expiresAtEpochMillis
-            is SmsPayload -> payload.expiresAtEpochMillis
-            else -> null
-        }
-        return expiresAt != null && expiresAt < now()
+        val expiresAt = expiresAtOf(payload) ?: return false
+        return expiresAt < now()
+    }
+
+    private fun expiresAtOf(payload: Payload): Long? = when (payload) {
+        is NotificationPayload -> payload.expiresAtEpochMillis
+        is SmsPayload -> payload.expiresAtEpochMillis
+        else -> null
     }
 
     /** [id] を記憶し、初出なら true・既知なら false を返す。上限超過分は FIFO で淘汰する。 */
@@ -147,19 +161,24 @@ class ReceivePipeline(
     }
 
     private suspend fun appendReceived(payload: Payload) {
-        val expiresAt = when (payload) {
-            is NotificationPayload -> payload.expiresAtEpochMillis
-            is SmsPayload -> payload.expiresAtEpochMillis
-            else -> null
-        }
-        val item = ReceivedNotification(
+        val expiresAt = expiresAtOf(payload)
+        val displayItem = ReceivedNotification(
             id = payload.id,
             timestampEpochMillis = now(),
             payload = payload,
             expiresAtEpochMillis = expiresAt,
         )
-        record(item)
+        record(displayItem = displayItem, persistItem = persistItemFor(displayItem, payload))
         log.i { "notification appended id=${payload.id}" }
+    }
+
+    /**
+     * 保存用アイテムを組む。[persistSensitiveHistory] が false なら本文を伏せる（§11）。
+     * 伏せる必要が無ければ表示用アイテムをそのまま保存に使う。
+     */
+    private fun persistItemFor(displayItem: ReceivedNotification, payload: Payload): ReceivedNotification {
+        val redacted = payloadForPersistence(payload, persistSensitiveHistory)
+        return if (redacted === payload) displayItem else displayItem.copy(payload = redacted)
     }
 
     private suspend fun recordError(
@@ -183,15 +202,20 @@ class ReceivePipeline(
         )
     }
 
-    private suspend fun record(item: TimelineItem) {
+    /**
+     * [persistItem] を永続化し、[displayItem] を表示（[items]・[onItemAppended]）へ流す。
+     * 受信通知では [persistItem] を伏せ字適用後に、[displayItem] を伏せ字前にすることで、
+     * 表示は本文を保ちつつ永続だけを伏せる（§11）。エラー等は両者が同一でよい。
+     */
+    private suspend fun record(displayItem: TimelineItem, persistItem: TimelineItem = displayItem) {
         try {
-            store.append(item)
+            store.append(persistItem)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            log.e { "failed to persist timeline item id=${item.id} (${e::class.simpleName})" }
+            log.e { "failed to persist timeline item id=${displayItem.id} (${e::class.simpleName})" }
         }
-        _items.update { it + item }
-        onItemAppended(item)
+        _items.update { it + displayItem }
+        onItemAppended(displayItem)
     }
 }

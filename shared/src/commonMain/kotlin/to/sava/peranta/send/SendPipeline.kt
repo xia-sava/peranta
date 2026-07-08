@@ -4,8 +4,7 @@ import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import to.sava.peranta.crypto.MessageCipher
-import to.sava.peranta.filter.hasOtpDigits
-import to.sava.peranta.filter.looksLikeOtp
+import to.sava.peranta.filter.payloadForPersistence
 import to.sava.peranta.model.Envelope
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
@@ -23,9 +22,6 @@ import to.sava.peranta.timeline.TimelineStore
 
 /** high 優先（OTP 等）の配送で使う短キャッシュ秒数（§8）。 */
 const val HIGH_PRIORITY_CACHE_SECONDS: Int = 60
-
-/** 送信履歴でセンシティブ本文を伏せる際に入れる文字列（§11）。 */
-const val SENSITIVE_HISTORY_PLACEHOLDER: String = "（本文は記録しません）"
 
 /** 封緘や送信で回復不能な失敗が起きたときにタイムラインへ出す文言。 */
 const val SEND_FAILED_MESSAGE: String = "通知の送信に失敗しました"
@@ -229,27 +225,4 @@ fun expiresOf(payload: Payload): Long? = when (payload) {
 fun isRetriablePublishError(error: Throwable): Boolean = when (error) {
     is NtfyPublishException -> error.status !in HTTP_CLIENT_ERROR_RANGE
     else -> true
-}
-
-/**
- * 永続化する payload の本文を §11 に従って調整する。
- * [keepSensitive] が true ならそのまま。false のとき、SMS と OTP 通知の本文を伏せる。
- * OTP 判定はタイトルと本文の連結で行うため、コードがタイトル側にある場合はタイトルも伏せる。
- */
-fun payloadForPersistence(payload: Payload, keepSensitive: Boolean): Payload {
-    if (keepSensitive) return payload
-    return when (payload) {
-        is SmsPayload -> payload.copy(text = SENSITIVE_HISTORY_PLACEHOLDER)
-        is NotificationPayload ->
-            if (looksLikeOtp("${payload.title} ${payload.text}")) {
-                payload.copy(
-                    title = if (hasOtpDigits(payload.title)) SENSITIVE_HISTORY_PLACEHOLDER else payload.title,
-                    text = SENSITIVE_HISTORY_PLACEHOLDER,
-                )
-            } else {
-                payload
-            }
-
-        else -> payload
-    }
 }

@@ -121,6 +121,7 @@ object PerantaReceive {
             cipher = perantaCipher(config),
             store = PerantaSend.timelineStore,
             deviceName = config.deviceName ?: error("device name not configured"),
+            persistSensitiveHistory = config.persistSensitiveHistory,
             onItemAppended = { item -> onAppended(presenter, item) },
         )
         created.loadHistory()

@@ -1,5 +1,6 @@
 package to.sava.peranta.send
 
+import to.sava.peranta.filter.payloadForPersistence
 import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType

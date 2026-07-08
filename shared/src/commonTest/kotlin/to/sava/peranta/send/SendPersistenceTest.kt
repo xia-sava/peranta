@@ -1,5 +1,7 @@
 package to.sava.peranta.send
 
+import to.sava.peranta.filter.SENSITIVE_HISTORY_PLACEHOLDER
+import to.sava.peranta.filter.payloadForPersistence
 import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Priority

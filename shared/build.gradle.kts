@@ -43,6 +43,7 @@ kotlin {
             implementation(libs.cryptography.provider.jdk)
             implementation(libs.ktor.client.cio)
             implementation(libs.multiplatform.settings.noArg)
+            implementation(libs.zxing.core)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -95,6 +96,7 @@ kover {
                     "to.sava.peranta.receive",
                     "to.sava.peranta.filter",
                     "to.sava.peranta.send",
+                    "to.sava.peranta.pairing",
                     "to.sava.peranta.toast",
                     "to.sava.peranta.update",
                 )
@@ -102,6 +104,10 @@ kover {
             excludes {
                 // net パッケージ内の HTTP クライアント生成配線（実 ntfy 接続が必要）。
                 classes("to.sava.peranta.net.JvmNtfyHttpKt")
+                // pairing パッケージのうち QR 生成・PNG 描画の配線（zxing と画像 I/O が要る。
+                // 生成結果は jvmTest の round-trip（PNG を再デコード）で振る舞いを担保する）。
+                classes("to.sava.peranta.pairing.QrCodeKt")
+                classes("to.sava.peranta.pairing.QrMatrix")
                 // toast パッケージのうち SnoreToast プロセス起動・exe 展開・OS 判定・データ定義の配線
                 // （実行に Windows と同梱 exe が要る。純粋ロジックは SnoreToastCommand / ToastContentKt）。
                 classes("to.sava.peranta.toast.SnoreToastToaster")
