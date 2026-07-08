@@ -21,6 +21,7 @@ class PairingApplier(private val configRepository: ConfigRepository) {
                 sharedKeyBase64 = Base64.encode(data.key),
                 useTls = data.tls,
                 port = data.port,
+                controlTopic = data.controlTopic ?: current.controlTopic,
             ),
         )
     }

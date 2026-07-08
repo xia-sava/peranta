@@ -47,7 +47,7 @@ class ReceivePipeline(
     private val ntfy: NtfyClient?,
     private val cipher: MessageCipher,
     private val store: TimelineStore,
-    private val deviceName: String,
+    private val deviceId: String,
     private val persistSensitiveHistory: Boolean = false,
     private val log: Logger = Logger.withTag("Receive"),
     private val now: () -> Long = ::nowEpochMillis,
@@ -137,7 +137,7 @@ class ReceivePipeline(
     }
 
     private fun isForMe(payload: Payload): Boolean =
-        payload.to == BROADCAST_TARGET || payload.to == deviceName
+        payload.to == BROADCAST_TARGET || payload.to == deviceId
 
     private fun isExpired(payload: Payload): Boolean {
         val expiresAt = expiresAtOf(payload) ?: return false

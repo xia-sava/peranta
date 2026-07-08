@@ -56,6 +56,7 @@ object PerantaReceive {
             return
         }
         mutex.withLock { pipelineLocked(appContext, config) }
+        announcePresence(appContext)
     }
 
     /**
@@ -120,7 +121,7 @@ object PerantaReceive {
             ntfy = null,
             cipher = perantaCipher(config),
             store = PerantaSend.timelineStore,
-            deviceName = config.deviceName ?: error("device name not configured"),
+            deviceId = androidConfigRepository(appContext).ensureDeviceId(),
             persistSensitiveHistory = config.persistSensitiveHistory,
             onItemAppended = { item -> onAppended(presenter, item) },
         )

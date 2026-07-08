@@ -2,7 +2,8 @@ package to.sava.peranta.pairing
 
 /**
  * QR ペアリングで受け渡す設定一式（§6）。
- * host / token / keyId と 32 バイトの共有鍵、任意で TLS 可否とポートを持つ。
+ * host / token / keyId と 32 バイトの共有鍵、任意で TLS 可否・ポート・control topic を持つ。
+ * [controlTopic] は全端末共有の presence/ロスター用 topic（§8）で、設定元端末が確定して配布する。
  * token と key は秘密の塊のため、[toString] では伏せてログ漏れを防ぐ。
  */
 class PairingData(
@@ -12,6 +13,7 @@ class PairingData(
     val key: ByteArray,
     val tls: Boolean = true,
     val port: Int? = null,
+    val controlTopic: String? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -21,7 +23,8 @@ class PairingData(
             keyId == other.keyId &&
             key.contentEquals(other.key) &&
             tls == other.tls &&
-            port == other.port
+            port == other.port &&
+            controlTopic == other.controlTopic
     }
 
     override fun hashCode(): Int {
@@ -31,11 +34,12 @@ class PairingData(
         result = 31 * result + key.contentHashCode()
         result = 31 * result + tls.hashCode()
         result = 31 * result + (port ?: 0)
+        result = 31 * result + (controlTopic?.hashCode() ?: 0)
         return result
     }
 
     override fun toString(): String =
-        "PairingData(host=$host, token=***, keyId=$keyId, key=***, tls=$tls, port=$port)"
+        "PairingData(host=$host, token=***, keyId=$keyId, key=***, tls=$tls, port=$port, controlTopic=$controlTopic)"
 }
 
 /** 失敗理由の文言に埋め込む生値の最大長（超過分は省略記号で切り詰める）。 */

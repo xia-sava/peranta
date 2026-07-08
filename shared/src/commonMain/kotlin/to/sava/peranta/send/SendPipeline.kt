@@ -84,6 +84,7 @@ class SendPipeline(
      * - 送信成功: 送信済みを記録して true。
      * - リトライ可能な失敗・[publishTimeoutMillis] 超過: [enqueueRetry] へ封筒と表示メタを渡して false。
      * - リトライ不能な失敗（4xx）・封緘失敗: ErrorItem を記録して false。
+     * - [topics] が空: 配送先が解決できていないため送信済みとはみなさず、リトライ可能な失敗と同様に扱う。
      *
      * [persistSensitive] が false のとき、OTP・SMS の本文は履歴に伏せて保存する（§11）。
      * [enqueueRetry] へ渡す表示メタは伏せ字適用後の値で、本文を含まない（再送成功時の記録に使う）。
@@ -142,6 +143,10 @@ class SendPipeline(
         cacheSeconds: Int?,
         publishTimeoutMillis: Long?,
     ): PublishOutcome {
+        if (topics.isEmpty()) {
+            log.w { "no delivery topics resolved for id=${payload.id}; enqueuing retry" }
+            return PublishOutcome.RETRY
+        }
         return try {
             val completed = if (publishTimeoutMillis == null) {
                 publishEnvelope(body, topics, cacheSeconds)

@@ -19,7 +19,7 @@ import kotlin.test.assertEquals
 class ReceiveRedactionTest {
 
     private val now = 10_000L
-    private val deviceName = "desk"
+    private val deviceId = "desk"
     private val cipher = MessageCipher(generateKey(), "k1")
 
     private fun store(): TimelineStore = JsonlTimelineStore(FakeTimelineFile())
@@ -28,7 +28,7 @@ class ReceiveRedactionTest {
         ntfy = FakeNtfyClient(),
         cipher = cipher,
         store = store,
-        deviceName = deviceName,
+        deviceId = deviceId,
         persistSensitiveHistory = persistSensitive,
         now = { now },
     )
@@ -84,7 +84,7 @@ class ReceiveRedactionTest {
             ntfy = FakeNtfyClient(),
             cipher = cipher,
             store = store(),
-            deviceName = deviceName,
+            deviceId = deviceId,
             persistSensitiveHistory = false,
             now = { now },
             onItemAppended = { item ->

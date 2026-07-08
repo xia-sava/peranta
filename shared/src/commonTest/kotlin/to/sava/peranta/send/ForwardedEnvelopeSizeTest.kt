@@ -29,7 +29,7 @@ class ForwardedEnvelopeSizeTest {
         input(title = title, text = text),
         mode = FilterMode.DENYLIST,
         rules = emptyList(),
-        deviceName = "phone",
+        deviceId = "phone",
         now = 2000,
     )!!
 

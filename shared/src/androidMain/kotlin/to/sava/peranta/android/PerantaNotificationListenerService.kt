@@ -41,10 +41,11 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             log.w { "send enabled but not configured; skipping notification" }
             return
         }
-        val deviceName = config.deviceName ?: run {
+        if (config.deviceName == null) {
             log.w { "device name missing; skipping notification" }
             return
         }
+        val deviceId = androidConfigRepository().ensureDeviceId()
 
         val packageName = sbn.packageName
         val fields = extractFields(sbn)
@@ -83,23 +84,24 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             postedAtEpochMillis = sbn.postTime,
             priority = resolvePriority(sbn.notification),
         )
-        forward(input, deviceName, config)
+        forward(input, deviceId, config)
     }
 
-    private fun forward(input: NotificationInput, deviceName: String, config: PerantaConfig) {
+    private fun forward(input: NotificationInput, deviceId: String, config: PerantaConfig) {
         val payload = buildNotificationPayload(
             input = input,
             mode = config.filterMode,
             rules = config.filterRules,
-            deviceName = deviceName,
+            deviceId = deviceId,
             now = nowEpochMillis(),
             otpSenderPackages = config.otpSenderPackages,
         ) ?: run {
             log.d { "filtered out notification from ${input.packageName}" }
             return
         }
+        val sendConfig = config.copy(deviceId = deviceId)
         scope.launch {
-            if (PerantaSend.dispatch(applicationContext, payload, config)) {
+            if (PerantaSend.dispatch(applicationContext, payload, sendConfig)) {
                 log.i { "notification sent id=${payload.id}" }
             } else {
                 log.d { "notification queued for retry or dropped id=${payload.id}" }

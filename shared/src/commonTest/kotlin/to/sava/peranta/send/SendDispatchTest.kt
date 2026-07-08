@@ -63,6 +63,27 @@ class SendDispatchTest {
         assertTrue(store.appended.single() is SentNotification)
     }
 
+    /**
+     * 配送先 topic が 0 件に解決されたときは publish 自体を行わず、送信済みとして記録してはいけない
+     * （フォールバック不能で OTP がサイレントに失われる回帰の防止）。リトライへ回す。
+     */
+    @Test
+    fun emptyTopicsIsTreatedAsRetryNotDelivered() = runTest {
+        val ntfy = ControlledNtfyClient()
+        val store = RecordingStore()
+        val pipeline = SendPipeline(cipher(), ntfy, store)
+        var enqueueCalled = false
+
+        val delivered = pipeline.dispatch(payload(), emptyList(), persistSensitive = true) { _, _, _, _ ->
+            enqueueCalled = true
+        }
+
+        assertFalse(delivered)
+        assertTrue(enqueueCalled)
+        assertTrue(ntfy.published.isEmpty())
+        assertTrue(store.appended.isEmpty())
+    }
+
     /** 5xx は再送に回し、送信済みも ErrorItem も記録しない。 */
     @Test
     fun serverErrorEnqueuesRetry() = runTest {

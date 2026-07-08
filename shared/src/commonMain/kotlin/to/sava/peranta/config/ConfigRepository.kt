@@ -6,6 +6,8 @@ import to.sava.peranta.filter.FilterMode
 import to.sava.peranta.filter.decodeFilterRules
 import to.sava.peranta.filter.encodeFilterRules
 import kotlin.io.encoding.Base64
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * [PerantaConfig] を multiplatform-settings に読み書きする。
@@ -23,10 +25,12 @@ class ConfigRepository(
             useTls = settings.getBoolean(KEY_USE_TLS, true),
             port = if (settings.hasKey(KEY_PORT)) settings.getInt(KEY_PORT, 0) else null,
             accessToken = settings.getStringOrNull(KEY_TOKEN),
+            deviceId = settings.getStringOrNull(KEY_DEVICE_ID),
             deviceName = settings.getStringOrNull(KEY_DEVICE_NAME),
             sharedKeyBase64 = sharedKeyBase64,
             keyId = settings.getStringOrNull(KEY_KEY_ID),
             receiveTopic = settings.getStringOrNull(KEY_RECEIVE_TOPIC),
+            controlTopic = settings.getStringOrNull(KEY_CONTROL_TOPIC),
             unifiedPushEndpoint = settings.getStringOrNull(KEY_UNIFIED_PUSH_ENDPOINT),
             sendEnabled = settings.getBoolean(KEY_SEND_ENABLED, false),
             smsDirectReceive = settings.getBoolean(KEY_SMS_DIRECT_RECEIVE, true),
@@ -43,9 +47,11 @@ class ConfigRepository(
         settings.putBoolean(KEY_USE_TLS, config.useTls)
         config.port?.let { settings.putInt(KEY_PORT, it) } ?: settings.remove(KEY_PORT)
         putOrRemove(KEY_TOKEN, config.accessToken)
+        putOrRemove(KEY_DEVICE_ID, config.deviceId)
         putOrRemove(KEY_DEVICE_NAME, config.deviceName)
         putOrRemove(KEY_KEY_ID, config.keyId)
         putOrRemove(KEY_RECEIVE_TOPIC, config.receiveTopic)
+        putOrRemove(KEY_CONTROL_TOPIC, config.controlTopic)
         putOrRemove(KEY_UNIFIED_PUSH_ENDPOINT, config.unifiedPushEndpoint)
         settings.putBoolean(KEY_SEND_ENABLED, config.sendEnabled)
         settings.putBoolean(KEY_SMS_DIRECT_RECEIVE, config.smsDirectReceive)
@@ -82,6 +88,24 @@ class ConfigRepository(
             settings.putString(KEY_RECEIVE_TOPIC, it)
         }
 
+    /**
+     * この端末の安定 ID を返す。未設定なら生成して永続化する。
+     * 一度確定した ID は端末名を変えても不変で、ペイロードの from/to に使う。
+     */
+    fun ensureDeviceId(): String =
+        settings.getStringOrNull(KEY_DEVICE_ID) ?: generateDeviceId().also {
+            settings.putString(KEY_DEVICE_ID, it)
+        }
+
+    /**
+     * control topic を返す。未設定なら生成して永続化する（§8）。
+     * 全端末で共有する topic のため、設定元端末で確定した値をペアリングで配布する。
+     */
+    fun ensureControlTopic(): String =
+        settings.getStringOrNull(KEY_CONTROL_TOPIC) ?: generateControlTopic().also {
+            settings.putString(KEY_CONTROL_TOPIC, it)
+        }
+
     private fun putOrRemove(key: String, value: String?) {
         value?.let { settings.putString(key, it) } ?: settings.remove(key)
     }
@@ -91,9 +115,11 @@ class ConfigRepository(
         const val KEY_USE_TLS = "useTls"
         const val KEY_PORT = "port"
         const val KEY_TOKEN = "accessToken"
+        const val KEY_DEVICE_ID = "deviceId"
         const val KEY_DEVICE_NAME = "deviceName"
         const val KEY_KEY_ID = "keyId"
         const val KEY_RECEIVE_TOPIC = "receiveTopic"
+        const val KEY_CONTROL_TOPIC = "controlTopic"
         const val KEY_UNIFIED_PUSH_ENDPOINT = "unifiedPushEndpoint"
         const val KEY_SEND_ENABLED = "sendEnabled"
         const val KEY_SMS_DIRECT_RECEIVE = "smsDirectReceive"
@@ -111,17 +137,26 @@ class ConfigRepository(
 private const val RANDOM_SUFFIX_LENGTH = 16
 private const val TOPIC_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"
 
+/** 推測困難な topic 末尾のランダム文字列を生成する（§8）。 */
+private fun randomTopicSuffix(): String = buildString {
+    repeat(RANDOM_SUFFIX_LENGTH) {
+        append(TOPIC_ALPHABET[CryptographyRandom.Default.nextInt(TOPIC_ALPHABET.length)])
+    }
+}
+
 /** Desktop 受信端末のエンドポイント topic を採番する（§8）。 */
 fun generateReceiveTopic(deviceName: String): String {
-    val suffix = buildString {
-        repeat(RANDOM_SUFFIX_LENGTH) {
-            append(TOPIC_ALPHABET[CryptographyRandom.Default.nextInt(TOPIC_ALPHABET.length)])
-        }
-    }
     val safeName = deviceName.lowercase()
         .map { if (it.isLetterOrDigit()) it else '-' }
         .joinToString("")
         .trim('-')
         .ifEmpty { "device" }
-    return "peranta-dev-$safeName-$suffix"
+    return "peranta-dev-$safeName-${randomTopicSuffix()}"
 }
+
+/** 全端末共有の control topic を採番する（§8）。 */
+fun generateControlTopic(): String = "peranta-control-${randomTopicSuffix()}"
+
+/** 端末の安定 ID（ランダム UUID）を生成する。 */
+@OptIn(ExperimentalUuidApi::class)
+fun generateDeviceId(): String = Uuid.random().toString()

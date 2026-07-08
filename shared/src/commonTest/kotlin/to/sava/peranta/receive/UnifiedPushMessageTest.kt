@@ -27,7 +27,7 @@ import kotlin.test.assertTrue
 class UnifiedPushMessageTest {
 
     private val now = 10_000L
-    private val deviceName = "tablet"
+    private val deviceId = "tablet"
     private val keyBytes = generateKey()
     private val cipher = MessageCipher(keyBytes, "k1")
 
@@ -39,7 +39,7 @@ class UnifiedPushMessageTest {
             ntfy = null,
             cipher = cipher,
             store = store,
-            deviceName = deviceName,
+            deviceId = deviceId,
             now = { now },
             onItemAppended = { shown.add(it) },
         )

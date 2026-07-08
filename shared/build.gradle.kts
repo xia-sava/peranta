@@ -96,6 +96,7 @@ kover {
                     "to.sava.peranta.receive",
                     "to.sava.peranta.filter",
                     "to.sava.peranta.send",
+                    "to.sava.peranta.roster",
                     "to.sava.peranta.pairing",
                     "to.sava.peranta.toast",
                     "to.sava.peranta.update",

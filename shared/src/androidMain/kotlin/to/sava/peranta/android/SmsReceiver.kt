@@ -42,10 +42,11 @@ class SmsReceiver : BroadcastReceiver() {
             log.w { "send enabled but not configured; skipping sms" }
             return
         }
-        val deviceName = config.deviceName ?: run {
+        if (config.deviceName == null) {
             log.w { "device name missing; skipping sms" }
             return
         }
+        val deviceId = androidConfigRepository(context).ensureDeviceId()
 
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)?.filterNotNull().orEmpty()
         if (messages.isEmpty()) return
@@ -59,10 +60,10 @@ class SmsReceiver : BroadcastReceiver() {
         val payload = buildSmsPayload(
             senderNumber = senderNumber,
             text = body,
-            deviceName = deviceName,
+            deviceId = deviceId,
             now = now,
         )
-        dispatchAsync(context, payload, config)
+        dispatchAsync(context, payload, config.copy(deviceId = deviceId))
     }
 
     private fun dispatchAsync(context: Context, payload: Payload, config: PerantaConfig) {

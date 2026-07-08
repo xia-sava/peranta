@@ -27,6 +27,7 @@ private const val PARAM_KEY_ID: String = "keyId"
 private const val PARAM_KEY: String = "key"
 private const val PARAM_TLS: String = "tls"
 private const val PARAM_PORT: String = "port"
+private const val PARAM_CONTROL_TOPIC: String = "ctl"
 
 /**
  * ペアリング URI の符号化・復号（§6）。QR に載る中身そのもの。
@@ -47,6 +48,7 @@ object PairingUri {
             add(PARAM_KEY to base64.encode(data.key))
             add(PARAM_TLS to data.tls.toString())
             data.port?.let { add(PARAM_PORT to it.toString()) }
+            data.controlTopic?.let { add(PARAM_CONTROL_TOPIC to it) }
         }
         val query = params.joinToString("&") { (name, value) ->
             "$name=${value.encodeURLQueryComponent(encodeFull = true)}"
@@ -104,8 +106,18 @@ object PairingUri {
             parsed
         }
 
+        val controlTopic = params.requiredOrNull(PARAM_CONTROL_TOPIC)
+
         return PairingResult.Success(
-            PairingData(host = host, token = token, keyId = keyId, key = key, tls = tls, port = port),
+            PairingData(
+                host = host,
+                token = token,
+                keyId = keyId,
+                key = key,
+                tls = tls,
+                port = port,
+                controlTopic = controlTopic,
+            ),
         )
     }
 

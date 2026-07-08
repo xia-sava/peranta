@@ -30,6 +30,14 @@ class PerantaUnifiedPushReceiver : MessagingReceiver() {
         log.i { "new endpoint received (instance=$instance)" }
         val repo = androidConfigRepository(appContext)
         repo.save(repo.load().copy(unifiedPushEndpoint = endpoint.url))
+        val pendingResult = goAsync()
+        scope.launch {
+            try {
+                announcePresence(appContext)
+            } finally {
+                pendingResult.finish()
+            }
+        }
     }
 
     /**

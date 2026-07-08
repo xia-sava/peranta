@@ -3,10 +3,12 @@ package to.sava.peranta.net
 import co.touchlab.kermit.Logger
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
 import io.ktor.websocket.Frame
@@ -61,6 +63,21 @@ class KtorNtfyClient(
             throw NtfyPublishException(response.status.value, "publish failed: ${response.status}")
         }
         log.d { "published to $topic (${body.length} bytes)" }
+    }
+
+    override suspend fun fetchHistory(topic: String, since: String): List<NtfyEvent> {
+        val response: HttpResponse = httpClient.get(historyUrl(topic, since)) {
+            config.accessToken?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+        }
+        if (!response.status.isSuccess()) {
+            throw NtfyHistoryException(response.status.value, "history fetch failed: ${response.status}")
+        }
+        return response.bodyAsText()
+            .lineSequence()
+            .filter { it.isNotBlank() }
+            .mapNotNull { parseFrame(it)?.toEventOrNull() }
+            .toList()
+            .also { log.d { "fetched ${it.size} history events from $topic (since=$since)" } }
     }
 
     override fun subscribe(topic: String): Flow<NtfyEvent> = channelFlow {
@@ -121,6 +138,10 @@ class KtorNtfyClient(
 
     private fun httpUrl(topic: String): String = "${config.httpBaseUrl()}/$topic"
 
+    /** ntfy の JSON ポーリング取得 URL（`?poll=1&since=<since>`）。 */
+    private fun historyUrl(topic: String, since: String): String =
+        "${config.httpBaseUrl()}/$topic/json?poll=1&since=$since"
+
     private fun authority(): String =
         config.port?.let { "${config.host}:$it" } ?: config.host
 }
@@ -145,3 +166,6 @@ internal suspend fun <T> receiveWithin(timeout: Duration, block: suspend () -> T
 
 /** publish が 2xx 以外で返ったことを示す。 */
 class NtfyPublishException(val status: Int, message: String) : Exception(message)
+
+/** 履歴ポーリング取得が 2xx 以外で返ったことを示す。 */
+class NtfyHistoryException(val status: Int, message: String) : Exception(message)

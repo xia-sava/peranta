@@ -99,7 +99,7 @@ fun buildNotificationPayload(
     input: NotificationInput,
     mode: FilterMode,
     rules: List<FilterRule>,
-    deviceName: String,
+    deviceId: String,
     now: Long,
     otpSenderPackages: List<String> = emptyList(),
     idGen: () -> String = ::newPayloadId,
@@ -119,7 +119,7 @@ fun buildNotificationPayload(
 
     return NotificationPayload(
         id = idGen(),
-        from = deviceName,
+        from = deviceId,
         to = BROADCAST_TARGET,
         sentAtEpochMillis = now,
         packageName = input.packageName,
@@ -141,13 +141,13 @@ fun buildNotificationPayload(
 fun buildSmsPayload(
     senderNumber: String,
     text: String,
-    deviceName: String,
+    deviceId: String,
     now: Long,
     senderName: String? = null,
     idGen: () -> String = ::newPayloadId,
 ): SmsPayload = SmsPayload(
     id = idGen(),
-    from = deviceName,
+    from = deviceId,
     to = BROADCAST_TARGET,
     sentAtEpochMillis = now,
     senderNumber = senderNumber,

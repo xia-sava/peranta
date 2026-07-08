@@ -14,6 +14,8 @@ import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.platform.ioDispatcher
+import to.sava.peranta.roster.RosterStore
+import to.sava.peranta.roster.resolveDeliveryTopics
 import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.send.SmsDedupeTracker
 import to.sava.peranta.send.NotificationUpdateTracker
@@ -88,14 +90,12 @@ object PerantaSend {
             return false
         }
         return try {
-            val pipeline = SendPipeline(
-                cipher = perantaCipher(config),
-                ntfy = KtorNtfyClient(config, httpClient),
-                store = timelineStore,
-            )
+            val cipher = perantaCipher(config)
+            val ntfy = KtorNtfyClient(config, httpClient)
+            val pipeline = SendPipeline(cipher = cipher, ntfy = ntfy, store = timelineStore)
             pipeline.dispatch(
                 payload = payload,
-                topics = config.deliveryTopics,
+                topics = resolveTopics(config, cipher, ntfy),
                 persistSensitive = config.persistSensitiveHistory,
                 publishTimeoutMillis = publishTimeoutMillis,
             ) { body, topics, cacheSeconds, meta ->
@@ -107,5 +107,22 @@ object PerantaSend {
             log.w(error) { "send dispatch setup failed for id=${payload.id}" }
             false
         }
+    }
+
+    /**
+     * `to: "*"` の配送先 topic を解決する（§8）。
+     * control topic があればロスターから自分以外のエンドポイントへ fan-out し、
+     * ロスターが取得できて空・未設定なら静的な配送先 topic へ退避する。
+     * ロスター取得自体が失敗したときは解決不能とみなし、静的フォールバックへは流さず空を返す
+     * （[SendPipeline] 側で送信済み扱いにせずリトライへ回す）。
+     */
+    private suspend fun resolveTopics(
+        config: PerantaConfig,
+        cipher: MessageCipher,
+        ntfy: KtorNtfyClient,
+    ): List<String> {
+        val controlTopic = config.controlTopic ?: return config.deliveryTopics
+        val result = RosterStore(ntfy, cipher, controlTopic).fetch()
+        return resolveDeliveryTopics(result, config.deviceId, config.deliveryTopics)
     }
 }

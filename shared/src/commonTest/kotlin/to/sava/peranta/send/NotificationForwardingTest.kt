@@ -32,7 +32,7 @@ class NotificationForwardingTest {
             input(),
             mode = FilterMode.DENYLIST,
             rules = emptyList(),
-            deviceName = "phone",
+            deviceId = "phone",
             now = 2000,
             idGen = { "id-1" },
         )!!
@@ -49,7 +49,7 @@ class NotificationForwardingTest {
             input(packageName = "com.android.systemui", text = "90% まで充電します"),
             mode = FilterMode.DENYLIST,
             rules = emptyList(),
-            deviceName = "phone",
+            deviceId = "phone",
             now = 2000,
         )
         assertNull(payload)
@@ -62,7 +62,7 @@ class NotificationForwardingTest {
             input(),
             mode = FilterMode.DENYLIST,
             rules = emptyList(),
-            deviceName = "phone",
+            deviceId = "phone",
             now = 2000,
         )!!
         assertEquals(Priority.HIGH, payload.priority)
@@ -76,7 +76,7 @@ class NotificationForwardingTest {
             input(title = "お知らせ", text = "こんにちは"),
             mode = FilterMode.DENYLIST,
             rules = emptyList(),
-            deviceName = "phone",
+            deviceId = "phone",
             now = 2000,
         )!!
         assertNull(payload.expiresAtEpochMillis)
@@ -91,7 +91,7 @@ class NotificationForwardingTest {
             input(text = "秘密のコード 123456", title = "code"),
             mode = FilterMode.ALLOWLIST,
             rules = rules,
-            deviceName = "phone",
+            deviceId = "phone",
             now = 2000,
         )!!
         assertEquals(REDACTED_PLACEHOLDER, payload.title)
@@ -105,7 +105,7 @@ class NotificationForwardingTest {
         val payload = buildSmsPayload(
             senderNumber = "09011112222",
             text = "確認コード 987654",
-            deviceName = "phone",
+            deviceId = "phone",
             now = 3000,
             idGen = { "sms-1" },
         )

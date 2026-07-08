@@ -35,4 +35,12 @@ interface NtfyClient {
      * 切断時は指数バックオフで自動再接続し、Flow は明示キャンセルまで完了しない。
      */
     fun subscribe(topic: String): Flow<NtfyEvent>
+
+    /**
+     * [topic] のキャッシュ済みメッセージ履歴を HTTP ポーリングで取得する（ロスター構築用、§3.5）。
+     * [since] は ntfy の since クエリ値（既定 "all" で全キャッシュ）。本文イベントのみを返す。
+     * 永続接続を持たない送信端末でも control topic からロスターを組めるようにする。
+     * 既定では空を返し、履歴取得を要する実装（[KtorNtfyClient]）が上書きする。
+     */
+    suspend fun fetchHistory(topic: String, since: String = "all"): List<NtfyEvent> = emptyList()
 }
