@@ -4,9 +4,12 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.crypto.generateKey
+import to.sava.peranta.model.CommandPayload
+import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.Envelope
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
+import to.sava.peranta.model.PresencePayload
 import to.sava.peranta.model.encodeEnvelope
 import to.sava.peranta.net.FakeNtfyClient
 import to.sava.peranta.net.NtfyEvent
@@ -153,6 +156,38 @@ class ReceivePipelineTest {
         val p = ReceivePipeline(ntfy, cipher, store, deviceName, now = { now })
         p.start("my-topic")
         assertEquals(1, p.items.value.size)
+    }
+
+    /** 自分宛の CommandPayload は M3 では表示対象外なのでタイムラインに追加されない。 */
+    @Test
+    fun commandPayloadIsNotAppended() = runTest {
+        val p = pipeline()
+        val command = CommandPayload(
+            id = "cmd1",
+            from = "phone",
+            to = deviceName,
+            sentAtEpochMillis = now - 100,
+            command = CommandType.DISMISS,
+            targetNotificationKey = "0|com.example|1|null|10",
+        )
+        p.handleEvent(eventFor(command))
+        assertTrue(p.items.value.isEmpty())
+    }
+
+    /** ブロードキャストの PresencePayload は M3 では表示対象外なのでタイムラインに追加されない。 */
+    @Test
+    fun presencePayloadIsNotAppended() = runTest {
+        val p = pipeline()
+        val presence = PresencePayload(
+            id = "pre1",
+            from = "phone",
+            to = "*",
+            sentAtEpochMillis = now - 100,
+            deviceName = "Pixel",
+            endpoint = "e",
+        )
+        p.handleEvent(eventFor(presence))
+        assertTrue(p.items.value.isEmpty())
     }
 
     /** start() は subscribe の Flow を購読し、流れたイベントを取り込む。 */

@@ -33,6 +33,60 @@ class JsonlTimelineStoreTest {
         ),
     )
 
+    private fun sent(id: String, timestamp: Long): SentNotification = SentNotification(
+        id = id,
+        timestampEpochMillis = timestamp,
+        expiresAtEpochMillis = null,
+        payload = NotificationPayload(
+            id = id,
+            from = "desk",
+            to = "phone",
+            sentAtEpochMillis = timestamp,
+            packageName = "com.example",
+            appName = "Example",
+            title = "T $id",
+            text = "body $id",
+            notificationKey = "0|com.example|$id|null|10",
+            postedAtEpochMillis = timestamp,
+        ),
+    )
+
+    /** SentNotification も append/loadAll で同じ値に往復する。 */
+    @Test
+    fun sentNotificationRoundTrips() = runTest {
+        val store = JsonlTimelineStore(FakeTimelineFile())
+        val item = sent("s1", 100)
+        store.append(item)
+        assertEquals(listOf<TimelineItem>(item), store.loadAll())
+    }
+
+    /** prune の件数がちょうど上限のときは全件残る。 */
+    @Test
+    fun pruneKeepsAllWhenExactlyAtLimit() = runTest {
+        val store = JsonlTimelineStore(FakeTimelineFile())
+        (1..3).forEach { store.append(received("n$it", it.toLong())) }
+        store.prune(maxItems = 3, now = 0)
+        assertEquals(listOf("n1", "n2", "n3"), store.loadAll().map { it.id })
+    }
+
+    /** 全件が失効している場合、prune 後は空になる。 */
+    @Test
+    fun pruneRemovesEverythingWhenAllExpired() = runTest {
+        val store = JsonlTimelineStore(FakeTimelineFile())
+        store.append(received("a", 100, expiresAt = 10))
+        store.append(received("b", 200, expiresAt = 20))
+        store.prune(now = 1_000)
+        assertTrue(store.loadAll().isEmpty())
+    }
+
+    /** 空のストアに対する prune は空のまま何も壊さない。 */
+    @Test
+    fun pruneOnEmptyStoreStaysEmpty() = runTest {
+        val store = JsonlTimelineStore(FakeTimelineFile())
+        store.prune(now = 1_000)
+        assertTrue(store.loadAll().isEmpty())
+    }
+
     /** append した順に loadAll で同じ値が読み戻せる。 */
     @Test
     fun appendThenLoadAllRoundTrips() = runTest {
