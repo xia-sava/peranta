@@ -31,9 +31,13 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.cryptography.provider.jdk)
+            implementation(libs.ktor.client.okhttp)
+            implementation(libs.multiplatform.settings.noArg)
         }
         jvmMain.dependencies {
             implementation(libs.cryptography.provider.jdk)
+            implementation(libs.ktor.client.cio)
+            implementation(libs.multiplatform.settings.noArg)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -46,10 +50,18 @@ kotlin {
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.cryptography.core)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.websockets)
+            implementation(libs.multiplatform.settings)
+            implementation(libs.kermit)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.multiplatform.settings.test)
+        }
+        jvmTest.dependencies {
+            implementation(libs.ktor.client.cio)
         }
     }
 }
