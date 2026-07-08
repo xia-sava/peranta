@@ -31,13 +31,14 @@ fun App(
     onInstallUpdate: ((String) -> Unit)? = null,
     receiveEndpoint: String? = null,
     onOpenSettings: (() -> Unit)? = null,
+    onOpenPairing: (() -> Unit)? = null,
 ) {
     PerantaTheme {
         Column(modifier = Modifier.fillMaxSize()) {
             if (updateController != null && onInstallUpdate != null) {
                 UpdateBanner(updateController, onInstallUpdate)
             }
-            if (receiveEndpoint != null || onOpenSettings != null) {
+            if (receiveEndpoint != null || onOpenSettings != null || onOpenPairing != null) {
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -49,6 +50,9 @@ fun App(
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.weight(1f),
                         )
+                        if (onOpenPairing != null) {
+                            TextButton(onClick = onOpenPairing) { Text(text = "QR で設定を取り込む") }
+                        }
                         if (onOpenSettings != null) {
                             TextButton(onClick = onOpenSettings) { Text(text = "設定") }
                         }
@@ -87,6 +91,7 @@ fun SendRoleApp(
     sendEnabled: Boolean,
     updateController: UpdateController? = null,
     onInstallUpdate: ((String) -> Unit)? = null,
+    onOpenPairing: (() -> Unit)? = null,
 ) {
     PerantaTheme {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -94,11 +99,20 @@ fun SendRoleApp(
                 UpdateBanner(updateController, onInstallUpdate)
             }
             Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-                Text(
-                    text = if (sendEnabled) "通知を送信する: 有効" else "通知を送信する: 無効",
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = if (sendEnabled) "通知を送信する: 有効" else "通知を送信する: 無効",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (onOpenPairing != null) {
+                        TextButton(onClick = onOpenPairing) { Text(text = "QR で設定を取り込む") }
+                    }
+                }
             }
             Box(modifier = Modifier.weight(1f)) {
                 MessageScreen(

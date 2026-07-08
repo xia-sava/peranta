@@ -37,6 +37,13 @@ data class PerantaConfig(
     val otpSenderPackages: List<String> = emptyList(),
     val revokedDeviceIds: Set<String> = emptySet(),
 ) {
+    /**
+     * ペアリング済みか（共有鍵と keyId が揃っているか）。
+     * 未ペアリングなら QR 取り込み画面（§10.3）へ誘導する判定に使う。
+     */
+    val hasSharedKey: Boolean
+        get() = !sharedKeyBase64.isNullOrBlank() && !keyId.isNullOrBlank()
+
     /** 受信パイプラインを開始できるだけの設定が揃っているか。 */
     val isReadyForReceive: Boolean
         get() = host.isNotBlank() &&
