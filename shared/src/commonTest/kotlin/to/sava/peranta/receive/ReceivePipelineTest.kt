@@ -175,6 +175,25 @@ class ReceivePipelineTest {
         assertTrue(p.items.value.isEmpty())
     }
 
+    /** 失効済み（expiresAt < now）の CommandPayload は期限切れゲートで破棄される（遅延操作の誤実行防止）。 */
+    @Test
+    fun expiredCommandIsDropped() = runTest {
+        val store = store()
+        val p = pipeline(store)
+        val command = CommandPayload(
+            id = "cmd-expired",
+            from = "phone",
+            to = deviceName,
+            sentAtEpochMillis = now - 100,
+            command = CommandType.DISMISS,
+            targetNotificationKey = "0|com.example|1|null|10",
+            expiresAtEpochMillis = now - 1,
+        )
+        p.handleEvent(eventFor(command))
+        assertTrue(p.items.value.isEmpty())
+        assertTrue(store.loadAll().isEmpty())
+    }
+
     /** ブロードキャストの PresencePayload は M3 では表示対象外なのでタイムラインに追加されない。 */
     @Test
     fun presencePayloadIsNotAppended() = runTest {

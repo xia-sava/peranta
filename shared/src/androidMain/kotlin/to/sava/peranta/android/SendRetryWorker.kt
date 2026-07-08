@@ -28,6 +28,7 @@ import to.sava.peranta.send.SEND_RETRY_GAVE_UP_MESSAGE
 import to.sava.peranta.send.decodeRetryDisplayMeta
 import to.sava.peranta.send.encodeRetryDisplayMeta
 import to.sava.peranta.send.isRetriablePublishError
+import to.sava.peranta.send.resolveSendTopics
 import to.sava.peranta.send.toSentNotification
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
@@ -37,7 +38,8 @@ import java.util.concurrent.TimeUnit
  * 即時送信に失敗した封筒を再送する WorkManager ジョブ（§3.1）。
  * ワイヤへ出す入力は暗号化済み Envelope JSON のみとし、平文を WorkManager DB に残さない。
  * 表示メタ（本文を含まない）は端末内の WorkManager DB に閉じ、再送成功時のタイムライン記録に使う。
- * cipher / パイプラインには依存せず、ntfy クライアントとタイムラインストアだけで構成する。
+ * 投入時に配送先が未解決（ロスター取得失敗）で topics が空だった封筒は、再送時にロスターを
+ * 引き直して宛先を解決する。まだ解決できなければ回復不能な失敗とはせず、再送上限まで再試行する。
  */
 class SendRetryWorker(
     context: Context,
@@ -51,11 +53,7 @@ class SendRetryWorker(
             log.w { "retry input has no body; giving up" }
             return Result.failure()
         }
-        val topics = inputData.getStringArray(KEY_TOPICS)?.toList().orEmpty()
-        if (topics.isEmpty()) {
-            log.w { "retry input has no topics; giving up" }
-            return Result.failure()
-        }
+        val storedTopics = inputData.getStringArray(KEY_TOPICS)?.toList().orEmpty()
         val cacheSeconds = inputData.getInt(KEY_CACHE_SECONDS, NO_CACHE).takeIf { it != NO_CACHE }
 
         if (runAttemptCount >= MAX_RETRY_ATTEMPTS) {
@@ -68,10 +66,16 @@ class SendRetryWorker(
         val httpClient = createNtfyHttpClient()
         val ntfy = KtorNtfyClient(config, httpClient)
         return try {
-            topics.forEach { topic -> ntfy.publish(topic, body, cacheSeconds) }
-            log.i { "retry publish succeeded (${topics.size} topics)" }
-            recordSentFromMeta(config.deviceName)
-            Result.success()
+            val topics = storedTopics.ifEmpty { resolveSendTopics(config, perantaCipher(config), ntfy) }
+            if (topics.isEmpty()) {
+                log.w { "delivery topics unresolved (attempt ${runAttemptCount + 1}/$MAX_RETRY_ATTEMPTS); retrying" }
+                Result.retry()
+            } else {
+                topics.forEach { topic -> ntfy.publish(topic, body, cacheSeconds) }
+                log.i { "retry publish succeeded (${topics.size} topics)" }
+                recordSentFromMeta(config.deviceName)
+                Result.success()
+            }
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: NtfyPublishException) {

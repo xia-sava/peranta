@@ -39,6 +39,7 @@ class ConfigRepository(
             filterRules = decodeFilterRules(settings.getStringOrNull(KEY_FILTER_RULES)),
             persistSensitiveHistory = settings.getBoolean(KEY_PERSIST_SENSITIVE, false),
             otpSenderPackages = loadCsvList(KEY_OTP_SENDERS),
+            revokedDeviceIds = loadCsvList(KEY_REVOKED_DEVICE_IDS).toSet(),
         )
     }
 
@@ -60,6 +61,7 @@ class ConfigRepository(
         settings.putString(KEY_FILTER_RULES, encodeFilterRules(config.filterRules))
         settings.putBoolean(KEY_PERSIST_SENSITIVE, config.persistSensitiveHistory)
         settings.putString(KEY_OTP_SENDERS, config.otpSenderPackages.joinToString(TOPIC_SEPARATOR))
+        settings.putString(KEY_REVOKED_DEVICE_IDS, config.revokedDeviceIds.joinToString(TOPIC_SEPARATOR))
         config.sharedKeyBase64
             ?.let { keyStore.storeKey(Base64.decode(it)) }
             ?: keyStore.clearKey()
@@ -128,6 +130,7 @@ class ConfigRepository(
         const val KEY_FILTER_RULES = "filterRules"
         const val KEY_PERSIST_SENSITIVE = "persistSensitiveHistory"
         const val KEY_OTP_SENDERS = "otpSenderPackages"
+        const val KEY_REVOKED_DEVICE_IDS = "revokedDeviceIds"
 
         /** 配送先 topic を settings に 1 文字列で保持する際の区切り。 */
         private const val TOPIC_SEPARATOR = "\n"

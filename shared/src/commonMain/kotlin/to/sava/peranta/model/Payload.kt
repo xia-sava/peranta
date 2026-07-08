@@ -95,6 +95,7 @@ data class CommandPayload(
     val actionIndex: Int? = null,
     val replyText: String? = null,
     val packageName: String? = null,
+    val expiresAtEpochMillis: Long? = null,
 ) : Payload()
 
 /** 端末の存在通知と能力の告知。 */

@@ -118,6 +118,17 @@ class ConfigRepositoryTest {
         assertFalse(loaded.isReadyForSend)
     }
 
+    /** 失効させた deviceId 集合は save/load で往復し、未設定なら空集合に戻る（§9）。 */
+    @Test
+    fun revokedDeviceIdsRoundTrip() {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        repo.save(PerantaConfig(revokedDeviceIds = setOf("dev-lost", "dev-old")))
+        assertEquals(setOf("dev-lost", "dev-old"), repo.load().revokedDeviceIds)
+        repo.save(PerantaConfig())
+        assertTrue(repo.load().revokedDeviceIds.isEmpty())
+    }
+
     /** 共有鍵未設定の config を保存すると鍵はクリアされ、load で null になる。 */
     @Test
     fun savingWithoutKeyClearsStoredKey() {

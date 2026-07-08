@@ -41,16 +41,24 @@ fun buildRoster(presences: List<PresencePayload>): List<RosterEntry> =
 fun topicOf(endpoint: String): String = endpoint.trimEnd('/').substringAfterLast('/')
 
 /**
+ * 失効させた（ローカル denylist の）deviceId のエントリをロスターから除外する（§9）。
+ * 失効はローカル判断で、control topic への broadcast は行わない。
+ */
+fun excludeRevoked(roster: List<RosterEntry>, revokedDeviceIds: Set<String>): List<RosterEntry> =
+    if (revokedDeviceIds.isEmpty()) roster else roster.filterNot { it.deviceId in revokedDeviceIds }
+
+/**
  * `to: "*"` の fan-out 宛先を解決する（§8）。
- * ロスターの自分以外の全端末のエンドポイント topic を返す。
+ * ロスターの自分以外・失効させていない全端末のエンドポイント topic を返す。
  * ロスターから宛先が得られない場合は [fallback]（静的な配送先 topic）へ退避する。
  */
 fun resolveDeliveryTargets(
     roster: List<RosterEntry>,
     selfDeviceId: String?,
     fallback: List<String>,
+    revokedDeviceIds: Set<String> = emptySet(),
 ): List<String> =
-    roster
+    excludeRevoked(roster, revokedDeviceIds)
         .filter { it.deviceId != selfDeviceId }
         .map { topicOf(it.endpoint) }
         .filter { it.isNotBlank() }
@@ -59,15 +67,18 @@ fun resolveDeliveryTargets(
 
 /**
  * [RosterStore.fetch] の結果から配送先 topic を解決する（§8）。
- * 取得に成功していれば [resolveDeliveryTargets] と同じ規則（自分以外・空なら [fallback]）で解決する。
- * 取得自体が失敗した場合は「解決不能」として扱い、[fallback] へは退避せず空を返す。
+ * 取得に成功していれば [resolveDeliveryTargets] と同じ規則（自分以外・失効を除外・空なら [fallback]）で
+ * 解決する。取得自体が失敗した場合は「解決不能」として扱い、[fallback] へは退避せず空を返す。
  * fetch 失敗を空ロスターと同一視して静的フォールバックへ無自覚に流れ込むことを避けるため。
  */
 fun resolveDeliveryTopics(
     result: RosterFetchResult,
     selfDeviceId: String?,
     fallback: List<String>,
+    revokedDeviceIds: Set<String> = emptySet(),
 ): List<String> = when (result) {
-    is RosterFetchResult.Fetched -> resolveDeliveryTargets(result.entries, selfDeviceId, fallback)
+    is RosterFetchResult.Fetched ->
+        resolveDeliveryTargets(result.entries, selfDeviceId, fallback, revokedDeviceIds)
+
     RosterFetchResult.FetchFailed -> emptyList()
 }

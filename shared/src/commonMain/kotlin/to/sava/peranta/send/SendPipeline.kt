@@ -5,6 +5,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.filter.payloadForPersistence
+import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.Envelope
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
@@ -223,6 +224,7 @@ fun priorityOf(payload: Payload): Priority = when (payload) {
 fun expiresOf(payload: Payload): Long? = when (payload) {
     is NotificationPayload -> payload.expiresAtEpochMillis
     is SmsPayload -> payload.expiresAtEpochMillis
+    is CommandPayload -> payload.expiresAtEpochMillis
     else -> null
 }
 
