@@ -1,0 +1,26 @@
+# ntfy サーバ設定（開発・本番共通）
+# 環境依存の値（base-url 等）は環境変数 NTFY_* で上書きする。
+# - 開発: server/docker-compose.yml が NTFY_BASE_URL=http://localhost:8090 を設定
+# - 本番: FreeBSD の rc.d 側で NTFY_BASE_URL=https://peranta.sava.to を設定
+
+base-url: "https://peranta.sava.to"
+listen-http: ":80"
+
+# 認証: 認証なしのアクセスは一切許可しない（トークン必須）
+auth-file: "/var/lib/ntfy/user.db"
+auth-default-access: "deny-all"
+
+# メッセージキャッシュ
+# 配送 topic の保持は publish 時の Cache ヘッダで個別に短縮する。
+# control topic（ロスター）はこのグローバル保持期間に依存する。
+cache-file: "/var/cache/ntfy/cache.db"
+cache-duration: "24h"
+
+# 添付ファイルは使わない
+attachment-cache-dir: ""
+
+# 前段に TLS 終端のリバースプロキシを置く
+behind-proxy: true
+
+# 通知本文をログに出さないため info 以下で運用する
+log-level: "info"

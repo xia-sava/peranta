@@ -1,0 +1,19 @@
+# 開発用ローカル ntfy（本番と同じ server.yml を使う）
+# 起動:      docker compose up -d
+# ユーザー:   docker compose exec -e NTFY_PASSWORD=<pw> ntfy ntfy user add peranta
+# ACL:       docker compose exec ntfy ntfy access peranta "peranta-*" rw
+# トークン:   docker compose exec ntfy ntfy token add peranta
+# 発行したトークン等は server/.local/ に保存する（gitignore 済み）
+services:
+  ntfy:
+    image: binwiederhier/ntfy:v2.11.0
+    command: serve
+    ports:
+      - "8090:80"
+    volumes:
+      - ./server.yml:/etc/ntfy/server.yml:ro
+      - ./.local/data:/var/lib/ntfy
+      - ./.local/cache:/var/cache/ntfy
+    environment:
+      NTFY_BASE_URL: "http://localhost:8090"
+    restart: unless-stopped
