@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
                     onInstallUpdate = { url -> updater.install(url) },
                     receiveEndpoint = config.unifiedPushEndpoint,
                     onOpenPairing = { showPairing = true },
+                    timelineActions = PerantaReceive.timelineActions(this@MainActivity),
                 )
 
                 else -> SendRoleApp(

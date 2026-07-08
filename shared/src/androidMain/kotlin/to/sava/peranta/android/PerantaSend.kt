@@ -14,6 +14,8 @@ import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.platform.ioDispatcher
+import to.sava.peranta.send.CommandSender
+import to.sava.peranta.send.ForwardedKeyTracker
 import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.send.resolveSendTopics
 import to.sava.peranta.send.SmsDedupeTracker
@@ -45,6 +47,9 @@ object PerantaSend {
 
     /** 同一通知の連続更新の抑止（§3.1）。 */
     val updates = NotificationUpdateTracker()
+
+    /** 自端末が転送した通知の key を覚え、元通知の削除検知で既読同期の要否を判定する（§3.4）。 */
+    val forwarded = ForwardedKeyTracker()
 
     private val httpClient by lazy { createNtfyHttpClient() }
 
@@ -104,6 +109,29 @@ object PerantaSend {
             throw cancellation
         } catch (error: Exception) {
             log.w(error) { "send dispatch setup failed for id=${payload.id}" }
+            false
+        }
+    }
+
+    /**
+     * 元通知が消えたときの既読同期（§3.4）として、dismiss を全端末へブロードキャストする。
+     * [config] は deviceId を確定した状態で渡すこと（コマンドの from に使う）。
+     * 送信できた topic があれば true。設定不足・失敗時は false を返し例外を漏らさない。
+     */
+    suspend fun sendDismissBroadcast(notificationKey: String, config: PerantaConfig): Boolean {
+        if (!config.isReadyForSend) {
+            log.w { "send not configured; cannot broadcast dismiss" }
+            return false
+        }
+        return try {
+            val cipher = perantaCipher(config)
+            val ntfy = KtorNtfyClient(config, httpClient)
+            val sender = CommandSender(config, cipher, ntfy, SendPipeline(cipher = cipher, ntfy = ntfy, store = timelineStore))
+            sender.dismiss(notificationKey)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            log.w(error) { "failed to broadcast dismiss" }
             false
         }
     }

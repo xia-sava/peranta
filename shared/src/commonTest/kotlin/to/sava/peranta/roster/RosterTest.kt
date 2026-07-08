@@ -4,6 +4,7 @@ import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.PresencePayload
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class RosterTest {
 
@@ -138,5 +139,34 @@ class RosterTest {
             fallback = listOf("static-a"),
         )
         assertEquals(emptyList(), topics)
+    }
+
+    /** 一点指定コマンド（§3.4）の宛先解決は、対象 deviceId のエンドポイント topic を引く。 */
+    @Test
+    fun resolveTargetTopicFindsSingleDeviceEndpoint() {
+        val roster = buildRoster(
+            listOf(
+                presence("phone", "Phone", "https://h/phone-topic", sentAt = 100),
+                presence("tablet", "Tablet", "https://h/tablet-topic", sentAt = 100),
+            ),
+        )
+        assertEquals("phone-topic", resolveTargetTopic(roster, "phone"))
+    }
+
+    /** 対象 deviceId がロスターに居なければ null（宛先が引けずコマンドは送れない）。 */
+    @Test
+    fun resolveTargetTopicReturnsNullForUnknownDevice() {
+        val roster = buildRoster(listOf(presence("phone", "Phone", "https://h/phone-topic", sentAt = 100)))
+        assertNull(resolveTargetTopic(roster, "tablet"))
+    }
+
+    /** fetch 結果からの一点指定解決: 取得成功なら引け、取得失敗なら null。 */
+    @Test
+    fun resolveTargetTopicFromFetchResult() {
+        val fetched = RosterFetchResult.Fetched(
+            buildRoster(listOf(presence("phone", "Phone", "https://h/phone-topic", sentAt = 100))),
+        )
+        assertEquals("phone-topic", resolveTargetTopic(fetched, "phone"))
+        assertNull(resolveTargetTopic(RosterFetchResult.FetchFailed, "phone"))
     }
 }

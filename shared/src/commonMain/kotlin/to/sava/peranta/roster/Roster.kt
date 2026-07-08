@@ -41,6 +41,25 @@ fun buildRoster(presences: List<PresencePayload>): List<RosterEntry> =
 fun topicOf(endpoint: String): String = endpoint.trimEnd('/').substringAfterLast('/')
 
 /**
+ * 特定 deviceId 1 件の配送先 topic を引く（§3.4 の一点指定コマンド用）。
+ * ロスターに [targetDeviceId] のエントリが無い・エンドポイントが空なら null。
+ */
+fun resolveTargetTopic(roster: List<RosterEntry>, targetDeviceId: String): String? =
+    roster.firstOrNull { it.deviceId == targetDeviceId }
+        ?.let { topicOf(it.endpoint) }
+        ?.takeIf { it.isNotBlank() }
+
+/**
+ * [RosterStore.fetch] の結果から一点指定の配送先 topic を引く（§3.4）。
+ * 取得自体が失敗した（[RosterFetchResult.FetchFailed]）ときと、取得できたが対象が居ないときは
+ * どちらも null を返す。宛先が引けなければコマンドは送れない。
+ */
+fun resolveTargetTopic(result: RosterFetchResult, targetDeviceId: String): String? = when (result) {
+    is RosterFetchResult.Fetched -> resolveTargetTopic(result.entries, targetDeviceId)
+    RosterFetchResult.FetchFailed -> null
+}
+
+/**
  * 失効させた（ローカル denylist の）deviceId のエントリをロスターから除外する（§9）。
  * 失効はローカル判断で、control topic への broadcast は行わない。
  */

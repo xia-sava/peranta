@@ -20,7 +20,10 @@ import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.net.httpBaseUrl
 import to.sava.peranta.pairing.SettingsController
 import to.sava.peranta.platform.ioDispatcher
+import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
+import to.sava.peranta.send.CommandSender
+import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.roster.CAPABILITY_COMMAND
 import to.sava.peranta.roster.CAPABILITY_DISPLAY
 import to.sava.peranta.roster.buildPresencePayload
@@ -34,6 +37,7 @@ import to.sava.peranta.toast.ToastResult
 import to.sava.peranta.toast.Toaster
 import to.sava.peranta.toast.createDesktopToaster
 import to.sava.peranta.toast.toastContentFor
+import to.sava.peranta.ui.TimelineActions
 import kotlin.io.encoding.Base64
 
 /**
@@ -73,17 +77,27 @@ class DesktopReceiver(
     private val cipher = MessageCipher(Base64.decode(config.sharedKeyBase64!!), config.keyId!!)
     private val ntfy = KtorNtfyClient(config, httpClient, Logger.withTag("NtfyClient"))
     private val toastScope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val commandSender = CommandSender(config, cipher, ntfy, SendPipeline(cipher, ntfy, store))
+
+    // 受信専用端末では dismiss のみ意味を持つ executor を注入する。他 command 種別は no-op（§3.4）。
+    private val dismissExecutor = LocalDismissCommandExecutor(
+        items = ::currentItems,
+        dismissLocal = { payloadId -> toaster.close(payloadId) },
+    )
     private val pipeline = ReceivePipeline(
         ntfy = ntfy,
         cipher = cipher,
         store = store,
         deviceId = config.deviceId!!,
+        commandExecutor = dismissExecutor,
         persistSensitiveHistory = config.persistSensitiveHistory,
         onItemAppended = ::handleAppended,
     )
 
     /** UI が購読するタイムライン。 */
     val items: StateFlow<List<TimelineItem>> = pipeline.items
+
+    private fun currentItems(): List<TimelineItem> = pipeline.items.value
 
     /** 起動時剪定と presence 告知を行い、受信 topic の購読を開始する。キャンセルまで戻らない。 */
     suspend fun run() {
@@ -145,12 +159,42 @@ class DesktopReceiver(
     }
 
     /**
-     * 「消す」押下時に既読同期（§3.4）の dismiss を送出するためのフック。
-     * command 送出は M8 のスコープであり、ここでは対象通知の記録までを担う。
+     * トーストの「消す」押下時に既読同期（§3.4）の dismiss を全端末へブロードキャストする。
+     * SMS など notificationKey を持たない通知は取り下げ対象にならないためログのみとする。
      */
     private fun requestDismiss(payload: Payload) {
-        val notificationKey = (payload as? NotificationPayload)?.notificationKey
-        log.i { "dismiss requested from toast: payload=${payload.id} key=$notificationKey" }
+        val notificationKey = (payload as? NotificationPayload)?.notificationKey ?: run {
+            log.i { "dismiss ignored (no notification key) payload=${payload.id}" }
+            return
+        }
+        toastScope.launch { commandSender.dismiss(notificationKey) }
+    }
+
+    /**
+     * タイムライン UI 用の操作束を作る（§10.1）。アクション発火・非表示は送信元へ一点指定、
+     * 「消す」は既読同期のため全端末へブロードキャストしつつ、表示済みトーストも取り下げる。
+     */
+    fun timelineActions(): TimelineActions = TimelineActions(
+        invokeAction = { payload, index ->
+            toastScope.launch {
+                commandSender.invokeAction(payload.from, payload.notificationKey, index)
+            }
+        },
+        dismiss = { item -> dismissFromTimeline(item) },
+        muteApp = { payload ->
+            toastScope.launch { commandSender.muteApp(payload.from, payload.packageName) }
+        },
+    )
+
+    private fun dismissFromTimeline(item: ReceivedNotification) {
+        toastScope.launch {
+            toaster.close(item.payload.id)
+            val notificationKey = (item.payload as? NotificationPayload)?.notificationKey ?: run {
+                log.i { "dismiss ignored (no notification key) payload=${item.payload.id}" }
+                return@launch
+            }
+            commandSender.dismiss(notificationKey)
+        }
     }
 
     /** 保持するリソース（トーストコルーチンと HTTP クライアント）を閉じる。 */

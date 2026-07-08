@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.StateFlow
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.ui.PerantaTheme
+import to.sava.peranta.ui.TimelineActions
 import to.sava.peranta.ui.TimelineScreen
 import to.sava.peranta.ui.UpdateBanner
 import to.sava.peranta.update.UpdateController
@@ -32,6 +33,7 @@ fun App(
     receiveEndpoint: String? = null,
     onOpenSettings: (() -> Unit)? = null,
     onOpenPairing: (() -> Unit)? = null,
+    timelineActions: TimelineActions? = null,
 ) {
     PerantaTheme {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -60,7 +62,7 @@ fun App(
                 }
             }
             Box(modifier = Modifier.weight(1f)) {
-                TimelineScreen(items)
+                TimelineScreen(items, actions = timelineActions)
             }
         }
     }

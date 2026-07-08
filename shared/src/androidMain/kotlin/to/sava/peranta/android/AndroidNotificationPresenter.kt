@@ -74,6 +74,17 @@ class AndroidNotificationPresenter(
         notify(notificationId, notification)
     }
 
+    /**
+     * 表示済みの受信通知を取り下げる（既読同期、§3.4）。
+     * payload.id から割り当て済みローカル通知 ID を引いて [NotificationManager] から消す。
+     * 対応 ID が無い（未表示）場合も cancel は無害に空振りする。
+     */
+    fun cancel(payloadId: String) {
+        val notificationId = idAllocator.idFor(payloadId)
+        manager.cancel(notificationId)
+        log.i { "notification cancelled id=$notificationId" }
+    }
+
     /** 受信・復号エラーをローカル通知でも知らせる（§10.1）。 */
     fun showError(item: ErrorItem) {
         val notification = Notification.Builder(context, CHANNEL_ERROR)

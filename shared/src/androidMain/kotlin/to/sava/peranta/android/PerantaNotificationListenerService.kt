@@ -190,11 +190,43 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             return
         }
         val sendConfig = config.copy(deviceId = deviceId)
+        // 転送対象にした通知の key を覚え、元通知が消えたときの既読同期（§3.4）で参照する。
+        PerantaSend.forwarded.remember(payload.notificationKey)
         scope.launch {
             if (PerantaSend.dispatch(applicationContext, payload, sendConfig)) {
                 log.i { "notification sent id=${payload.id}" }
             } else {
                 log.d { "notification queued for retry or dropped id=${payload.id}" }
+            }
+        }
+    }
+
+    /**
+     * 元通知が消えたら既読同期の dismiss を全受信端末へブロードキャストする（§3.4）。
+     * 自端末が転送対象にした通知（[PerantaSend.forwarded] に記録済み）に限定し、
+     * 他アプリの無関係な通知削除まで拾わない。
+     */
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        try {
+            handleRemoved(sbn)
+        } catch (error: Exception) {
+            log.w(error) { "onNotificationRemoved failed" }
+        }
+    }
+
+    private fun handleRemoved(sbn: StatusBarNotification) {
+        val config = androidConfigRepository().load()
+        if (!config.sendEnabled || !config.isReadyForSend) return
+        if (!PerantaSend.forwarded.consume(sbn.key)) {
+            log.d { "removed notification was not forwarded; ignoring key=${sbn.key}" }
+            return
+        }
+        val sendConfig = config.copy(deviceId = androidConfigRepository().ensureDeviceId())
+        scope.launch {
+            if (PerantaSend.sendDismissBroadcast(sbn.key, sendConfig)) {
+                log.i { "dismiss broadcast for removed notification key=${sbn.key}" }
+            } else {
+                log.d { "dismiss broadcast not sent for key=${sbn.key}" }
             }
         }
     }

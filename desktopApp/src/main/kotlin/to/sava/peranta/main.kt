@@ -152,6 +152,7 @@ fun main() {
                     updateController = updater.controller,
                     onInstallUpdate = { url -> updater.install(url) },
                     onOpenSettings = { showSettings = true },
+                    timelineActions = receiver.timelineActions(),
                 )
                 else -> App()
             }
