@@ -42,6 +42,22 @@ data class FilterRule(
 )
 
 /**
+ * [packageName] を転送対象から除外するようフィルタルール一覧を更新する（muteApp コマンド、§7）。
+ * 既存ルールがあれば action を EXCLUDE へ差し替え、無ければ EXCLUDE ルールを追加する。
+ * 既に除外済みなら変更せず同じインスタンスを返す（不要な保存を避けられるよう参照同一性で示す）。
+ */
+fun mutePackage(rules: List<FilterRule>, packageName: String): List<FilterRule> {
+    val existing = rules.firstOrNull { it.packageName == packageName }
+    return when {
+        existing == null -> rules + FilterRule(packageName, RuleAction.EXCLUDE)
+        existing.action == RuleAction.EXCLUDE -> rules
+        else -> rules.map {
+            if (it.packageName == packageName) it.copy(action = RuleAction.EXCLUDE) else it
+        }
+    }
+}
+
+/**
  * 暗黙に除外するシステム系パッケージ（§7）。
  * denylist モードでルールが無い場合、これらは転送しない。個別 INCLUDE ルールで復帰できる。
  */

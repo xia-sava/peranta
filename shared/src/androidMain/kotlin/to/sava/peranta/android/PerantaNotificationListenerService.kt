@@ -1,6 +1,9 @@
 package to.sava.peranta.android
 
 import android.app.Notification
+import android.app.PendingIntent
+import android.app.RemoteInput
+import android.content.Intent
 import android.os.Bundle
 import android.provider.Telephony
 import android.service.notification.NotificationListenerService
@@ -14,17 +17,104 @@ import kotlinx.coroutines.launch
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.nowEpochMillis
+import to.sava.peranta.receive.CommandExecutionException
 import to.sava.peranta.send.NotificationInput
 import to.sava.peranta.send.buildNotificationPayload
 
 /**
  * 通知を捕捉して送信パイプラインへ渡す NotificationListenerService（§3.1、§5）。
  * 送信ロールが有効で送信設定が揃っているときだけ処理する。
+ * 併せて、逆方向コマンド（§3.4）の実行窓口として自身の生存インスタンスを companion に公開し、
+ * 対象通知の取り下げ・アクション発火・インライン返信を [NotificationListenerService] の API で行う。
  */
 class PerantaNotificationListenerService : NotificationListenerService() {
 
     private val log = Logger.withTag("NLS")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        instance = this
+        log.i { "notification listener connected" }
+    }
+
+    override fun onListenerDisconnected() {
+        if (instance === this) instance = null
+        log.i { "notification listener disconnected" }
+        super.onListenerDisconnected()
+    }
+
+    /**
+     * 対象通知を取り下げる（§3.4）。既に存在しない場合は、既に消えているとみなしてログのみとし
+     * 致命的エラーにはしない（他端末による削除・ユーザー操作と競合し得るため）。
+     */
+    fun dismissByKey(key: String) = runNlsAction {
+        if (findActiveNotification(key) == null) {
+            log.i { "dismiss target not present (already dismissed?) key=$key" }
+            return@runNlsAction
+        }
+        cancelNotification(key)
+        log.i { "notification dismissed key=$key" }
+    }
+
+    /** 対象通知の [actionIndex] 番のアクションボタンを発火する（§3.4）。 */
+    fun invokeActionByKey(key: String, actionIndex: Int) = runNlsAction {
+        val action = actionAt(requireActiveNotification(key), actionIndex)
+        try {
+            action.actionIntent.send()
+        } catch (e: PendingIntent.CanceledException) {
+            throw CommandExecutionException("アクションの発火に失敗しました key=$key index=$actionIndex", e)
+        }
+        log.i { "action invoked key=$key index=$actionIndex" }
+    }
+
+    /** 対象アクションの [RemoteInput] に [text] を詰めて発火し、インライン返信する（§3.4）。 */
+    fun replyByKey(key: String, actionIndex: Int, text: String) = runNlsAction {
+        val action = actionAt(requireActiveNotification(key), actionIndex)
+        val remoteInputs = action.remoteInputs
+        if (remoteInputs.isNullOrEmpty()) {
+            throw CommandExecutionException("返信できる入力欄がありません key=$key index=$actionIndex")
+        }
+        val intent = Intent()
+        val results = Bundle()
+        remoteInputs.forEach { results.putCharSequence(it.resultKey, text) }
+        RemoteInput.addResultsToIntent(remoteInputs, intent, results)
+        try {
+            action.actionIntent.send(applicationContext, 0, intent)
+        } catch (e: PendingIntent.CanceledException) {
+            throw CommandExecutionException("返信の送信に失敗しました key=$key index=$actionIndex", e)
+        }
+        log.i { "reply sent key=$key index=$actionIndex" }
+    }
+
+    /**
+     * NLS の実行系 API 呼び出しを包み、切断レース等で投げられる [SecurityException] 等の
+     * システム例外も [CommandExecutionException] へ写して呼び出し元のエラー処理に一貫させる。
+     */
+    private inline fun runNlsAction(block: () -> Unit) {
+        try {
+            block()
+        } catch (e: CommandExecutionException) {
+            throw e
+        } catch (e: SecurityException) {
+            throw CommandExecutionException("通知リスナーが切断されました", e)
+        }
+    }
+
+    private fun findActiveNotification(key: String): StatusBarNotification? =
+        activeNotifications?.firstOrNull { it.key == key }
+
+    private fun requireActiveNotification(key: String): StatusBarNotification =
+        findActiveNotification(key)
+            ?: throw CommandExecutionException("対象の通知が見つかりません key=$key")
+
+    private fun actionAt(sbn: StatusBarNotification, index: Int): Notification.Action {
+        val actions = sbn.notification.actions
+        if (actions == null || index !in actions.indices) {
+            throw CommandExecutionException("アクションが見つかりません key=${sbn.key} index=$index")
+        }
+        return actions[index]
+    }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         try {
@@ -135,6 +225,7 @@ class PerantaNotificationListenerService : NotificationListenerService() {
     }.getOrDefault(packageName)
 
     override fun onDestroy() {
+        if (instance === this) instance = null
         scope.cancel()
         super.onDestroy()
     }
@@ -144,4 +235,16 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         val text: String?,
         val actions: List<String>,
     )
+
+    companion object {
+        @Volatile
+        private var instance: PerantaNotificationListenerService? = null
+
+        /**
+         * 現在 OS に bind・接続されているサービスインスタンス。逆方向コマンドの実行窓口（§3.4）。
+         * 未接続（権限未付与・OS 未 bind）なら null。
+         */
+        val activeInstance: PerantaNotificationListenerService?
+            get() = instance
+    }
 }

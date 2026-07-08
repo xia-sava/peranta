@@ -55,6 +55,9 @@ enum class ErrorKind {
     @SerialName("unknownType")
     UNKNOWN_TYPE,
 
+    @SerialName("commandExecution")
+    COMMAND_EXECUTION,
+
     @SerialName("other")
     OTHER,
 }

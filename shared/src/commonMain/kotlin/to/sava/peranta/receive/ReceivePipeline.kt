@@ -13,6 +13,7 @@ import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.filter.payloadForPersistence
 import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.CommandPayload
+import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.SmsPayload
@@ -43,12 +44,16 @@ private const val DEDUPE_CAPACITY = 1000
  *
  * [persistSensitiveHistory] が false（既定）のとき、OTP・SMS の本文は履歴保存時に伏せる（§11）。
  * 表示用の [items] と [onItemAppended] には伏せ字前の本文を渡し、永続のみを伏せる。
+ *
+ * [commandExecutor] を渡した端末では、自分宛で未失効の command ペイロードを実行する（§3.4）。
+ * null の端末（コマンド実行に対応しない受信専用端末など）は command を無視する。
  */
 class ReceivePipeline(
     private val ntfy: NtfyClient?,
     private val cipher: MessageCipher,
     private val store: TimelineStore,
     private val deviceId: String,
+    private val commandExecutor: CommandExecutor? = null,
     private val persistSensitiveHistory: Boolean = false,
     private val log: Logger = Logger.withTag("Receive"),
     private val now: () -> Long = ::nowEpochMillis,
@@ -133,9 +138,64 @@ class ReceivePipeline(
                 appendReceived(payload)
             }
 
-            else -> log.d { "ignoring payload id=${payload.id} type=${payload::class.simpleName} (not displayed in M3)" }
+            is CommandPayload -> executeCommand(payload)
+
+            else -> log.d { "ignoring payload id=${payload.id} type=${payload::class.simpleName} (not displayed)" }
         }
     }
+
+    /**
+     * 自分宛で未失効の command を実行する（§3.4）。[commandExecutor] が無ければ何もしない。
+     * 同一 id の再送で操作を二重発火しないよう、実行前に重複排除する。
+     * 実行失敗（[CommandExecutionException]）はタイムラインへエラーとして記録する。
+     */
+    private suspend fun executeCommand(payload: CommandPayload) {
+        val executor = commandExecutor ?: run {
+            log.d { "no command executor; ignoring command id=${payload.id}" }
+            return
+        }
+        if (!rememberId(payload.id)) {
+            log.d { "dropping duplicate command id=${payload.id}" }
+            return
+        }
+        try {
+            dispatchCommand(executor, payload)
+            log.i { "command executed id=${payload.id} command=${payload.command}" }
+        } catch (e: CommandExecutionException) {
+            recordError(ErrorKind.COMMAND_EXECUTION, e.message ?: "コマンドの実行に失敗しました", cause = e)
+        }
+    }
+
+    /** command 種別ごとに必須フィールドを検証し、[executor] の対応メソッドへ委ねる。 */
+    private suspend fun dispatchCommand(executor: CommandExecutor, payload: CommandPayload) {
+        when (payload.command) {
+            CommandType.DISMISS -> executor.dismiss(requireKey(payload))
+
+            CommandType.INVOKE_ACTION ->
+                executor.invokeAction(requireKey(payload), requireActionIndex(payload))
+
+            CommandType.REPLY ->
+                executor.reply(requireKey(payload), requireActionIndex(payload), requireReplyText(payload))
+
+            CommandType.MUTE_APP -> executor.muteApp(requirePackageName(payload))
+        }
+    }
+
+    private fun requireKey(payload: CommandPayload): String =
+        payload.targetNotificationKey
+            ?: throw CommandExecutionException("${payload.command} コマンドに対象通知キーがありません")
+
+    private fun requireActionIndex(payload: CommandPayload): Int =
+        payload.actionIndex
+            ?: throw CommandExecutionException("${payload.command} コマンドにアクション番号がありません")
+
+    private fun requireReplyText(payload: CommandPayload): String =
+        payload.replyText
+            ?: throw CommandExecutionException("${payload.command} コマンドに返信本文がありません")
+
+    private fun requirePackageName(payload: CommandPayload): String =
+        payload.packageName
+            ?: throw CommandExecutionException("${payload.command} コマンドにパッケージ名がありません")
 
     private fun isForMe(payload: Payload): Boolean =
         payload.to == BROADCAST_TARGET || payload.to == deviceId

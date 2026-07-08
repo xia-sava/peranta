@@ -117,11 +117,14 @@ object PerantaReceive {
     ): ReceivePipeline {
         pipeline?.let { return it }
         val presenter = AndroidNotificationPresenter(appContext)
+        // コマンド実行は NLS を持つ送信ロール端末（スマホ）でのみ行う（§3.4）。
+        // 受信専用端末では executor を持たず、届いた command は無視する。
         val created = ReceivePipeline(
             ntfy = null,
             cipher = perantaCipher(config),
             store = PerantaSend.timelineStore,
             deviceId = androidConfigRepository(appContext).ensureDeviceId(),
+            commandExecutor = if (config.sendEnabled) AndroidCommandExecutor(appContext) else null,
             persistSensitiveHistory = config.persistSensitiveHistory,
             onItemAppended = { item -> onAppended(presenter, item) },
         )

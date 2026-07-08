@@ -73,10 +73,13 @@ class MainActivity : ComponentActivity() {
         updater.checkAtStartup()
 
         val importController = PairingImportController(androidConfigRepository())
+        // コマンド受信のための UnifiedPush 登録は役割を問わない（送信ロールのスマホも受け口を持つ、§3.4）。
+        if (config.isReadyForUnifiedPushReceive) {
+            PerantaUnifiedPush.register(this)
+        }
         val receiveRole = !config.sendEnabled && config.isReadyForUnifiedPushReceive
         if (receiveRole) {
             requestNotificationsPermissionIfNeeded()
-            PerantaUnifiedPush.register(this)
             lifecycleScope.launch { PerantaReceive.prime(this@MainActivity) }
         }
 
