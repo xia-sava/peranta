@@ -18,6 +18,7 @@ import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.FakeTimelineFile
 import to.sava.peranta.timeline.JsonlTimelineStore
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.timeline.TimelineStore
 import kotlin.io.encoding.Base64
 import kotlin.test.Test
@@ -188,6 +189,23 @@ class ReceivePipelineTest {
         )
         p.handleEvent(eventFor(presence))
         assertTrue(p.items.value.isEmpty())
+    }
+
+    /** onItemAppended フックは記録された各アイテム（受信通知・エラー）ごとに呼ばれる。 */
+    @Test
+    fun onItemAppendedHookFiresForEachRecordedItem() = runTest {
+        val seen = mutableListOf<TimelineItem>()
+        val store = store()
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, store, deviceName,
+            now = { now },
+            onItemAppended = { seen.add(it) },
+        )
+        p.handleEvent(eventFor(notification()))
+        p.handleEvent(NtfyEvent("e", now, "t", "not-json-at-all"))
+        assertEquals(2, seen.size)
+        assertTrue(seen[0] is ReceivedNotification)
+        assertTrue(seen[1] is ErrorItem)
     }
 
     /** start() は subscribe の Flow を購読し、流れたイベントを取り込む。 */

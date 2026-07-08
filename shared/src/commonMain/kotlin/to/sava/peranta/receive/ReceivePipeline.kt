@@ -43,6 +43,7 @@ class ReceivePipeline(
     private val deviceName: String,
     private val log: Logger = Logger.withTag("Receive"),
     private val now: () -> Long = ::nowEpochMillis,
+    private val onItemAppended: (TimelineItem) -> Unit = {},
 ) {
 
     private val _items = MutableStateFlow<List<TimelineItem>>(emptyList())
@@ -178,5 +179,6 @@ class ReceivePipeline(
             log.e { "failed to persist timeline item id=${item.id} (${e::class.simpleName})" }
         }
         _items.update { it + item }
+        onItemAppended(item)
     }
 }

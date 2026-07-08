@@ -94,11 +94,19 @@ kover {
                     "to.sava.peranta.receive",
                     "to.sava.peranta.filter",
                     "to.sava.peranta.send",
+                    "to.sava.peranta.toast",
                 )
             }
             excludes {
                 // net パッケージ内の HTTP クライアント生成配線（実 ntfy 接続が必要）。
                 classes("to.sava.peranta.net.JvmNtfyHttpKt")
+                // toast パッケージのうち SnoreToast プロセス起動・exe 展開・OS 判定・データ定義の配線
+                // （実行に Windows と同梱 exe が要る。純粋ロジックは SnoreToastCommand / ToastContentKt）。
+                classes("to.sava.peranta.toast.SnoreToastToaster")
+                classes("to.sava.peranta.toast.SnoreToastResolverKt")
+                classes("to.sava.peranta.toast.NoOpToaster")
+                classes("to.sava.peranta.toast.ReceivedNotificationToast")
+                classes("to.sava.peranta.toast.ToastResult")
                 // @Preview 関数と Compose 生成コード。
                 annotatedBy("androidx.compose.ui.tooling.preview.Preview")
                 annotatedBy("androidx.compose.runtime.Composable")

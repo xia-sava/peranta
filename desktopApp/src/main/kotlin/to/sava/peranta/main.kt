@@ -16,6 +16,10 @@ import androidx.compose.ui.window.application
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import to.sava.peranta.platform.initLogging
+import java.awt.EventQueue
+import java.awt.Frame
+import java.awt.Window as AwtWindow
+import java.util.concurrent.atomic.AtomicReference
 
 /** トレイ・ウィンドウ用の簡易アイコン。 */
 private val perantaIcon: Painter = object : Painter() {
@@ -26,11 +30,32 @@ private val perantaIcon: Painter = object : Painter() {
     }
 }
 
+/** メインウィンドウをアクティブ化し、最前面に出す（トーストクリック導線で使う）。EDT 上で実行する。 */
+private fun bringWindowToFront(window: AwtWindow) {
+    EventQueue.invokeLater {
+        if (window is Frame && window.extendedState and Frame.ICONIFIED != 0) {
+            window.extendedState = window.extendedState and Frame.ICONIFIED.inv()
+        }
+        window.isVisible = true
+        window.toFront()
+        window.requestFocus()
+    }
+}
+
 fun main() {
     initLogging()
     val log = Logger.withTag("Main")
     val config = loadDesktopConfig()
-    val receiver = if (config.isReadyForReceive) DesktopReceiver(config) else null
+
+    val mainWindow = AtomicReference<AwtWindow?>(null)
+    val receiver = if (config.isReadyForReceive) {
+        DesktopReceiver(
+            config,
+            onToastClicked = { mainWindow.get()?.let(::bringWindowToFront) },
+        )
+    } else {
+        null
+    }
 
     application {
         val closeAndExit = {
@@ -65,9 +90,10 @@ fun main() {
             icon = perantaIcon,
             title = "Peranta",
         ) {
+            LaunchedEffect(window) { mainWindow.set(window) }
             when {
                 errorMessage != null -> App(errorMessage!!)
-                receiver != null -> App(receiver.items)
+                receiver != null -> App(items = receiver.items)
                 else -> App()
             }
         }
