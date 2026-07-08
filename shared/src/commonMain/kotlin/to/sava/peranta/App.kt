@@ -3,12 +3,14 @@ package to.sava.peranta
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,19 +30,29 @@ fun App(
     updateController: UpdateController? = null,
     onInstallUpdate: ((String) -> Unit)? = null,
     receiveEndpoint: String? = null,
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     PerantaTheme {
         Column(modifier = Modifier.fillMaxSize()) {
             if (updateController != null && onInstallUpdate != null) {
                 UpdateBanner(updateController, onInstallUpdate)
             }
-            if (receiveEndpoint != null) {
+            if (receiveEndpoint != null || onOpenSettings != null) {
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-                    Text(
-                        text = "受信エンドポイント: $receiveEndpoint",
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = receiveEndpoint?.let { "受信エンドポイント: $it" }.orEmpty(),
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (onOpenSettings != null) {
+                            TextButton(onClick = onOpenSettings) { Text(text = "設定") }
+                        }
+                    }
                 }
             }
             Box(modifier = Modifier.weight(1f)) {

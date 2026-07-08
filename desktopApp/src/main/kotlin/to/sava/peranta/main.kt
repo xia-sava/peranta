@@ -1,21 +1,30 @@
 package to.sava.peranta
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
+import to.sava.peranta.pairing.pairingQrMatrix
 import to.sava.peranta.platform.initLogging
+import to.sava.peranta.ui.PerantaTheme
+import to.sava.peranta.ui.SettingsScreen
 import to.sava.peranta.update.DesktopUpdater
 import java.awt.EventQueue
 import java.awt.Frame
@@ -28,6 +37,27 @@ private val perantaIcon: Painter = object : Painter() {
     override fun DrawScope.onDraw() {
         drawRoundRect(color = Color(0xFF4C6EF5), cornerRadius = CornerRadius(14f, 14f))
         drawCircle(color = Color.White, radius = size.minDimension / 4f)
+    }
+}
+
+/** ペアリング URI を QR として描画する。commonMain の設定画面へスロットとして注入する。 */
+@Composable
+private fun DesktopQrCode(uri: String, modifier: Modifier = Modifier) {
+    val matrix = remember(uri) { pairingQrMatrix(uri) }
+    Canvas(modifier = modifier.size(240.dp)) {
+        val moduleSize = size.minDimension / matrix.size
+        drawRect(color = Color.White, size = Size(matrix.size * moduleSize, matrix.size * moduleSize))
+        for (y in 0 until matrix.size) {
+            for (x in 0 until matrix.size) {
+                if (matrix.isDark(x, y)) {
+                    drawRect(
+                        color = Color.Black,
+                        topLeft = Offset(x * moduleSize, y * moduleSize),
+                        size = Size(moduleSize, moduleSize),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -46,7 +76,9 @@ private fun bringWindowToFront(window: AwtWindow) {
 fun main() {
     initLogging()
     val log = Logger.withTag("Main")
-    val config = loadDesktopConfig()
+    val desktopSettings = DesktopSettings()
+    val config = desktopSettings.config
+    val settingsController = desktopSettings.controller
 
     val mainWindow = AtomicReference<AwtWindow?>(null)
     val receiver = if (config.isReadyForReceive) {
@@ -68,10 +100,16 @@ fun main() {
             exitApplication()
         }
 
+        var showSettings by remember { mutableStateOf(receiver == null) }
+
         Tray(
             icon = perantaIcon,
             tooltip = "Peranta",
             menu = {
+                Item("設定", onClick = {
+                    showSettings = true
+                    mainWindow.get()?.let(::bringWindowToFront)
+                })
                 Item("終了", onClick = closeAndExit)
             },
         )
@@ -97,11 +135,23 @@ fun main() {
         ) {
             LaunchedEffect(window) { mainWindow.set(window) }
             when {
+                showSettings -> PerantaTheme {
+                    SettingsScreen(
+                        controller = settingsController,
+                        qrContent = { uri -> DesktopQrCode(uri) },
+                        onOpenTimeline = if (receiver != null) {
+                            { showSettings = false }
+                        } else {
+                            null
+                        },
+                    )
+                }
                 errorMessage != null -> App(errorMessage!!)
                 receiver != null -> App(
                     items = receiver.items,
                     updateController = updater.controller,
                     onInstallUpdate = { url -> updater.install(url) },
+                    onOpenSettings = { showSettings = true },
                 )
                 else -> App()
             }

@@ -18,6 +18,7 @@ import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.net.httpBaseUrl
+import to.sava.peranta.pairing.SettingsController
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.receive.ReceivePipeline
 import to.sava.peranta.roster.CAPABILITY_COMMAND
@@ -46,6 +47,15 @@ fun loadDesktopConfig(settings: Settings = Settings()): PerantaConfig {
     val deviceId = repo.ensureDeviceId()
     val topic = config.receiveTopic ?: repo.ensureReceiveTopic(deviceName)
     return config.copy(deviceId = deviceId, receiveTopic = topic)
+}
+
+/**
+ * Desktop 起動時の設定読み込みと、設定画面コントローラを同一の settings 実体から作る。
+ * これにより desktopApp 側は multiplatform-settings の型に依存せず設定 UI を配線できる。
+ */
+class DesktopSettings(settings: Settings = Settings()) {
+    val config: PerantaConfig = loadDesktopConfig(settings)
+    val controller: SettingsController = SettingsController(ConfigRepository(settings))
 }
 
 /**

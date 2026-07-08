@@ -72,6 +72,8 @@ kotlin {
             implementation(libs.ktor.server.core)
             implementation(libs.ktor.server.cio)
             implementation(libs.ktor.server.websockets)
+            implementation(compose.desktop.uiTestJUnit4)
+            implementation(compose.desktop.currentOs)
         }
     }
 }
