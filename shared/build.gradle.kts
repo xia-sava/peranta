@@ -36,6 +36,7 @@ kotlin {
             implementation(libs.cryptography.provider.jdk)
             implementation(libs.ktor.client.okhttp)
             implementation(libs.multiplatform.settings.noArg)
+            implementation(libs.androidx.work.runtime)
         }
         jvmMain.dependencies {
             implementation(libs.cryptography.provider.jdk)
@@ -91,6 +92,8 @@ kover {
                     "to.sava.peranta.config",
                     "to.sava.peranta.timeline",
                     "to.sava.peranta.receive",
+                    "to.sava.peranta.filter",
+                    "to.sava.peranta.send",
                 )
             }
             excludes {

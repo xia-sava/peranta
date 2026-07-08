@@ -1,0 +1,82 @@
+package to.sava.peranta.android
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.provider.Telephony
+import co.touchlab.kermit.Logger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import to.sava.peranta.config.PerantaConfig
+import to.sava.peranta.model.Payload
+import to.sava.peranta.model.nowEpochMillis
+import to.sava.peranta.send.buildSmsPayload
+
+/** 即時送信を打ち切る時間枠。超過分は WorkManager 再送へ委ねる（§3.1）。 */
+private const val SMS_PUBLISH_TIMEOUT_MILLIS: Long = 8_000L
+
+/**
+ * SMS を直接受信して送信パイプラインへ渡す（§3.1）。
+ * 送信ロールと「SMS を直接受信する」が有効なときだけ処理する。分割 SMS は送信元ごとに連結する。
+ */
+class SmsReceiver : BroadcastReceiver() {
+
+    private val log = Logger.withTag("SmsReceiver")
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun onReceive(context: Context, intent: Intent) {
+        try {
+            handleReceive(context.applicationContext, intent)
+        } catch (error: Exception) {
+            log.w(error) { "onReceive failed" }
+        }
+    }
+
+    private fun handleReceive(context: Context, intent: Intent) {
+        if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
+        val config = androidConfigRepository(context).load()
+        if (!config.sendEnabled || !config.smsDirectReceive) return
+        if (!config.isReadyForSend) {
+            log.w { "send enabled but not configured; skipping sms" }
+            return
+        }
+        val deviceName = config.deviceName ?: run {
+            log.w { "device name missing; skipping sms" }
+            return
+        }
+
+        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)?.filterNotNull().orEmpty()
+        if (messages.isEmpty()) return
+        val first = messages.first()
+        val senderNumber = first.displayOriginatingAddress ?: first.originatingAddress.orEmpty()
+        val body = messages.joinToString(separator = "") { it.displayMessageBody.orEmpty() }
+        if (body.isBlank()) return
+
+        val now = nowEpochMillis()
+        PerantaSend.dedupe.recordSms(body, now)
+        val payload = buildSmsPayload(
+            senderNumber = senderNumber,
+            text = body,
+            deviceName = deviceName,
+            now = now,
+        )
+        dispatchAsync(context, payload, config)
+    }
+
+    private fun dispatchAsync(context: Context, payload: Payload, config: PerantaConfig) {
+        val pendingResult = goAsync()
+        scope.launch {
+            try {
+                if (PerantaSend.dispatch(context, payload, config, publishTimeoutMillis = SMS_PUBLISH_TIMEOUT_MILLIS)) {
+                    log.i { "sms sent id=${payload.id}" }
+                } else {
+                    log.d { "sms queued for retry or dropped id=${payload.id}" }
+                }
+            } finally {
+                pendingResult.finish()
+            }
+        }
+    }
+}

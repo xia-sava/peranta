@@ -2,6 +2,9 @@ package to.sava.peranta.config
 
 import com.russhwolf.settings.Settings
 import dev.whyoleg.cryptography.random.CryptographyRandom
+import to.sava.peranta.filter.FilterMode
+import to.sava.peranta.filter.decodeFilterRules
+import to.sava.peranta.filter.encodeFilterRules
 import kotlin.io.encoding.Base64
 
 /**
@@ -24,6 +27,13 @@ class ConfigRepository(
             sharedKeyBase64 = sharedKeyBase64,
             keyId = settings.getStringOrNull(KEY_KEY_ID),
             receiveTopic = settings.getStringOrNull(KEY_RECEIVE_TOPIC),
+            sendEnabled = settings.getBoolean(KEY_SEND_ENABLED, false),
+            smsDirectReceive = settings.getBoolean(KEY_SMS_DIRECT_RECEIVE, true),
+            filterMode = loadFilterMode(),
+            deliveryTopics = loadDeliveryTopics(),
+            filterRules = decodeFilterRules(settings.getStringOrNull(KEY_FILTER_RULES)),
+            persistSensitiveHistory = settings.getBoolean(KEY_PERSIST_SENSITIVE, false),
+            otpSenderPackages = loadCsvList(KEY_OTP_SENDERS),
         )
     }
 
@@ -35,10 +45,32 @@ class ConfigRepository(
         putOrRemove(KEY_DEVICE_NAME, config.deviceName)
         putOrRemove(KEY_KEY_ID, config.keyId)
         putOrRemove(KEY_RECEIVE_TOPIC, config.receiveTopic)
+        settings.putBoolean(KEY_SEND_ENABLED, config.sendEnabled)
+        settings.putBoolean(KEY_SMS_DIRECT_RECEIVE, config.smsDirectReceive)
+        settings.putString(KEY_FILTER_MODE, config.filterMode.name)
+        settings.putString(KEY_DELIVERY_TOPICS, config.deliveryTopics.joinToString(TOPIC_SEPARATOR))
+        settings.putString(KEY_FILTER_RULES, encodeFilterRules(config.filterRules))
+        settings.putBoolean(KEY_PERSIST_SENSITIVE, config.persistSensitiveHistory)
+        settings.putString(KEY_OTP_SENDERS, config.otpSenderPackages.joinToString(TOPIC_SEPARATOR))
         config.sharedKeyBase64
             ?.let { keyStore.storeKey(Base64.decode(it)) }
             ?: keyStore.clearKey()
     }
+
+    private fun loadFilterMode(): FilterMode =
+        settings.getStringOrNull(KEY_FILTER_MODE)
+            ?.let { name -> FilterMode.entries.firstOrNull { it.name == name } }
+            ?: FilterMode.DENYLIST
+
+    private fun loadDeliveryTopics(): List<String> = loadCsvList(KEY_DELIVERY_TOPICS)
+
+    /** [key] に区切り文字連結で保存された文字列一覧を読み出す。 */
+    private fun loadCsvList(key: String): List<String> =
+        settings.getStringOrNull(key)
+            ?.split(TOPIC_SEPARATOR)
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?: emptyList()
 
     /**
      * 自分の受信 topic を返す。未設定なら端末名から生成して永続化する。
@@ -60,6 +92,16 @@ class ConfigRepository(
         const val KEY_DEVICE_NAME = "deviceName"
         const val KEY_KEY_ID = "keyId"
         const val KEY_RECEIVE_TOPIC = "receiveTopic"
+        const val KEY_SEND_ENABLED = "sendEnabled"
+        const val KEY_SMS_DIRECT_RECEIVE = "smsDirectReceive"
+        const val KEY_FILTER_MODE = "filterMode"
+        const val KEY_DELIVERY_TOPICS = "deliveryTopics"
+        const val KEY_FILTER_RULES = "filterRules"
+        const val KEY_PERSIST_SENSITIVE = "persistSensitiveHistory"
+        const val KEY_OTP_SENDERS = "otpSenderPackages"
+
+        /** 配送先 topic を settings に 1 文字列で保持する際の区切り。 */
+        private const val TOPIC_SEPARATOR = "\n"
     }
 }
 

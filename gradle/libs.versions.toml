@@ -9,6 +9,7 @@ androidx-core = "1.19.0"
 androidx-espresso = "3.7.0"
 androidx-lifecycle = "2.11.0-beta01"
 androidx-testExt = "1.3.0"
+androidx-work = "2.10.0"
 composeMultiplatform = "1.11.1"
 cryptography = "0.4.0"
 junit = "4.13.2"
@@ -56,6 +57,7 @@ multiplatform-settings = { module = "com.russhwolf:multiplatform-settings", vers
 multiplatform-settings-noArg = { module = "com.russhwolf:multiplatform-settings-no-arg", version.ref = "multiplatformSettings" }
 multiplatform-settings-test = { module = "com.russhwolf:multiplatform-settings-test", version.ref = "multiplatformSettings" }
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
+androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "androidx-work" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
