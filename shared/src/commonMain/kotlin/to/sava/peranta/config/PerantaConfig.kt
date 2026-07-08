@@ -20,6 +20,7 @@ data class PerantaConfig(
     val sharedKeyBase64: String? = null,
     val keyId: String? = null,
     val receiveTopic: String? = null,
+    val unifiedPushEndpoint: String? = null,
     val sendEnabled: Boolean = false,
     val smsDirectReceive: Boolean = true,
     val filterMode: FilterMode = FilterMode.DENYLIST,
@@ -36,6 +37,16 @@ data class PerantaConfig(
             !sharedKeyBase64.isNullOrBlank() &&
             !keyId.isNullOrBlank() &&
             !receiveTopic.isNullOrBlank()
+
+    /**
+     * UnifiedPush 経由で受信・復号できるだけの設定が揃っているか。
+     * 復号（共有鍵・keyId）と宛先検証（端末名）に必要な項目のみを見る。
+     * ntfy への接続はディストリビュータ（ntfy アプリ）が担うため host/token/topic は要件に含めない。
+     */
+    val isReadyForUnifiedPushReceive: Boolean
+        get() = !deviceName.isNullOrBlank() &&
+            !sharedKeyBase64.isNullOrBlank() &&
+            !keyId.isNullOrBlank()
 
     /** 送信パイプラインを開始できるだけの設定が揃っているか（配送先を含む）。 */
     val isReadyForSend: Boolean

@@ -33,11 +33,14 @@ private const val KEY_MISMATCH_MESSAGE =
 private const val DEDUPE_CAPACITY = 1000
 
 /**
- * ntfy 購読 → Envelope デコード → 復号 → 宛先/失効検証 → タイムライン反映までの受信パイプライン。
+ * Envelope デコード → 復号 → 宛先/失効検証 → タイムライン反映までの受信中核。
+ * Envelope の入手経路は問わない。Desktop は [ntfy] の WebSocket 購読（[start]）で、
+ * Android は UnifiedPush のコールバックから [loadHistory] + [handleEvent] を直接呼んで駆動する。
+ * UnifiedPush 駆動時は購読しないため [ntfy] は null でよい。
  * 各段階を kermit で構造化ログに残す。本文は info に出さず debug のみとする（§16）。
  */
 class ReceivePipeline(
-    private val ntfy: NtfyClient,
+    private val ntfy: NtfyClient?,
     private val cipher: MessageCipher,
     private val store: TimelineStore,
     private val deviceName: String,
@@ -54,13 +57,23 @@ class ReceivePipeline(
     /** 受信済み payload.id の集合。FIFO で [DEDUPE_CAPACITY] に丸める。 */
     private val seenIds = LinkedHashSet<String>()
 
-    /** 保存済み履歴を読み込み、[topic] の購読を開始する。呼び出しはキャンセルまで戻らない。 */
-    suspend fun start(topic: String) {
+    /**
+     * 保存済み履歴を読み込み、タイムラインと重複排除の初期状態を作る。購読は行わない。
+     * UnifiedPush 駆動時はメッセージ処理の前にこれを呼び、履歴に対する重複排除を効かせる。
+     */
+    suspend fun loadHistory() {
         val history = store.loadAll()
         _items.value = history
         history.forEach { rememberId(it.id) }
-        log.i { "receive pipeline started: topic=$topic, history=${history.size}" }
-        ntfy.subscribe(topic).collect { handleEvent(it) }
+        log.i { "receive pipeline primed: history=${history.size}" }
+    }
+
+    /** 保存済み履歴を読み込み、[topic] の購読を開始する。呼び出しはキャンセルまで戻らない。 */
+    suspend fun start(topic: String) {
+        val client = ntfy ?: error("ntfy client is required to subscribe")
+        loadHistory()
+        log.i { "receive pipeline started: topic=$topic" }
+        client.subscribe(topic).collect { handleEvent(it) }
     }
 
     /** 1 件の受信イベントを処理する（テストからも直接呼ぶ）。 */

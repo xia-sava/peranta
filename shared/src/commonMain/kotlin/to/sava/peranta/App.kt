@@ -27,11 +27,21 @@ fun App(
     items: StateFlow<List<TimelineItem>>,
     updateController: UpdateController? = null,
     onInstallUpdate: ((String) -> Unit)? = null,
+    receiveEndpoint: String? = null,
 ) {
     PerantaTheme {
         Column(modifier = Modifier.fillMaxSize()) {
             if (updateController != null && onInstallUpdate != null) {
                 UpdateBanner(updateController, onInstallUpdate)
+            }
+            if (receiveEndpoint != null) {
+                Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Text(
+                        text = "受信エンドポイント: $receiveEndpoint",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
             }
             Box(modifier = Modifier.weight(1f)) {
                 TimelineScreen(items)

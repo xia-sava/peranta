@@ -37,6 +37,7 @@ kotlin {
             implementation(libs.ktor.client.okhttp)
             implementation(libs.multiplatform.settings.noArg)
             implementation(libs.androidx.work.runtime)
+            implementation(libs.unifiedpush.connector)
         }
         jvmMain.dependencies {
             implementation(libs.cryptography.provider.jdk)

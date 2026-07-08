@@ -27,6 +27,7 @@ class ConfigRepository(
             sharedKeyBase64 = sharedKeyBase64,
             keyId = settings.getStringOrNull(KEY_KEY_ID),
             receiveTopic = settings.getStringOrNull(KEY_RECEIVE_TOPIC),
+            unifiedPushEndpoint = settings.getStringOrNull(KEY_UNIFIED_PUSH_ENDPOINT),
             sendEnabled = settings.getBoolean(KEY_SEND_ENABLED, false),
             smsDirectReceive = settings.getBoolean(KEY_SMS_DIRECT_RECEIVE, true),
             filterMode = loadFilterMode(),
@@ -45,6 +46,7 @@ class ConfigRepository(
         putOrRemove(KEY_DEVICE_NAME, config.deviceName)
         putOrRemove(KEY_KEY_ID, config.keyId)
         putOrRemove(KEY_RECEIVE_TOPIC, config.receiveTopic)
+        putOrRemove(KEY_UNIFIED_PUSH_ENDPOINT, config.unifiedPushEndpoint)
         settings.putBoolean(KEY_SEND_ENABLED, config.sendEnabled)
         settings.putBoolean(KEY_SMS_DIRECT_RECEIVE, config.smsDirectReceive)
         settings.putString(KEY_FILTER_MODE, config.filterMode.name)
@@ -92,6 +94,7 @@ class ConfigRepository(
         const val KEY_DEVICE_NAME = "deviceName"
         const val KEY_KEY_ID = "keyId"
         const val KEY_RECEIVE_TOPIC = "receiveTopic"
+        const val KEY_UNIFIED_PUSH_ENDPOINT = "unifiedPushEndpoint"
         const val KEY_SEND_ENABLED = "sendEnabled"
         const val KEY_SMS_DIRECT_RECEIVE = "smsDirectReceive"
         const val KEY_FILTER_MODE = "filterMode"
