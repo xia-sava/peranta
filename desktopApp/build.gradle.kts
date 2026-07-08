@@ -9,6 +9,7 @@ import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.WriteProperties
 import org.gradle.language.jvm.tasks.ProcessResources
 import org.gradle.process.ExecOperations
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
@@ -218,13 +219,33 @@ val buildSnoreToast = tasks.register<BuildSnoreToastTask>("buildSnoreToast") {
 // 生成した snoretoast.exe をリソースに載せ、run / jpackage 成果物へ同梱する。
 sourceSets["main"].resources.srcDir(snoreToastOutputDir)
 
+// 版数の単一ソース（gradle プロパティ）。配布時は -Pperanta.versionCode / -Pperanta.versionName で上書きする。
+val perantaVersionCode = providers.gradleProperty("peranta.versionCode").getOrElse("1")
+val perantaVersionName = providers.gradleProperty("peranta.versionName").getOrElse("0.0.0")
+val versionResourceDir = layout.buildDirectory.dir("generated/version")
+
+// versionCode / versionName を生成リソースへ書き出す。run と jpackage 成果物の双方の classpath に載る。
+val generateVersionProperties = tasks.register<WriteProperties>("generateVersionProperties") {
+    destinationFile = versionResourceDir.map { it.file("peranta-version.properties") }
+    property("versionCode", perantaVersionCode)
+    property("versionName", perantaVersionName)
+}
+
+sourceSets["main"].resources.srcDir(versionResourceDir)
+
 tasks.named<ProcessResources>("processResources") {
-    dependsOn(buildSnoreToast)
+    dependsOn(buildSnoreToast, generateVersionProperties)
 }
 
 compose.desktop {
     application {
         mainClass = "to.sava.peranta.MainKt"
+
+        // 生成リソースを読めない実行経路（IDE の直接 run 等）でも版数が効くよう -D でも渡す。
+        jvmArgs += listOf(
+            "-Dperanta.versionCode=$perantaVersionCode",
+            "-Dperanta.versionName=$perantaVersionName",
+        )
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)

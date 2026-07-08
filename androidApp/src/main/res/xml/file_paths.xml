@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- AndroidUpdateInstaller のダウンロード先（cacheDir/updates）を FileProvider で共有する。 -->
+    <cache-path
+            name="updates"
+            path="updates/"/>
+</paths>

@@ -17,3 +17,15 @@ services:
     environment:
       NTFY_BASE_URL: "http://localhost:8090"
     restart: unless-stopped
+
+  # 自己更新（M5）の検証用の静的配信。ntfy(8090) とはポートを分ける。
+  # 本番では peranta.sava.to の前段 TLS プロキシが同じ /dist/ を配信する（§12）。
+  # server/dist/ を /dist にマウントするので http://localhost:8091/dist/latest.json で引ける。
+  # UpdateChecker のホスト設定を localhost:8091(http) にすると Available を確認できる。
+  dist:
+    image: nginx:alpine
+    ports:
+      - "8091:80"
+    volumes:
+      - ./dist:/usr/share/nginx/html/dist:ro
+    restart: unless-stopped

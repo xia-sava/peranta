@@ -119,10 +119,7 @@ class KtorNtfyClient(
             .onFailure { log.w { "failed to parse ntfy frame (${it::class.simpleName})" } }
             .getOrNull()
 
-    private fun httpUrl(topic: String): String {
-        val scheme = if (config.useTls) "https" else "http"
-        return "$scheme://${authority()}/$topic"
-    }
+    private fun httpUrl(topic: String): String = "${config.httpBaseUrl()}/$topic"
 
     private fun authority(): String =
         config.port?.let { "${config.host}:$it" } ?: config.host

@@ -16,6 +16,7 @@ import androidx.compose.ui.window.application
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import to.sava.peranta.platform.initLogging
+import to.sava.peranta.update.DesktopUpdater
 import java.awt.EventQueue
 import java.awt.Frame
 import java.awt.Window as AwtWindow
@@ -57,9 +58,13 @@ fun main() {
         null
     }
 
+    val updater = DesktopUpdater(config, DesktopVersion.versionCode)
+    updater.checkAtStartup()
+
     application {
         val closeAndExit = {
             receiver?.close()
+            updater.close()
             exitApplication()
         }
 
@@ -93,7 +98,11 @@ fun main() {
             LaunchedEffect(window) { mainWindow.set(window) }
             when {
                 errorMessage != null -> App(errorMessage!!)
-                receiver != null -> App(items = receiver.items)
+                receiver != null -> App(
+                    items = receiver.items,
+                    updateController = updater.controller,
+                    onInstallUpdate = { url -> updater.install(url) },
+                )
                 else -> App()
             }
         }

@@ -95,6 +95,7 @@ kover {
                     "to.sava.peranta.filter",
                     "to.sava.peranta.send",
                     "to.sava.peranta.toast",
+                    "to.sava.peranta.update",
                 )
             }
             excludes {
@@ -107,6 +108,11 @@ kover {
                 classes("to.sava.peranta.toast.NoOpToaster")
                 classes("to.sava.peranta.toast.ReceivedNotificationToast")
                 classes("to.sava.peranta.toast.ToastResult")
+                // 自己更新のプラットフォーム別インストーラ・配線（OS のインストーラ/ブラウザ起動・実 HTTP が必要）。
+                classes("to.sava.peranta.update.AndroidUpdateInstaller")
+                classes("to.sava.peranta.update.DesktopUpdateInstaller")
+                classes("to.sava.peranta.update.AndroidUpdater")
+                classes("to.sava.peranta.update.DesktopUpdater")
                 // @Preview 関数と Compose 生成コード。
                 annotatedBy("androidx.compose.ui.tooling.preview.Preview")
                 annotatedBy("androidx.compose.runtime.Composable")

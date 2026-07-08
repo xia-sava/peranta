@@ -18,12 +18,25 @@ import kotlinx.coroutines.flow.StateFlow
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.TimelineScreen
+import to.sava.peranta.ui.UpdateBanner
+import to.sava.peranta.update.UpdateController
 
-/** タイムラインを表示するアプリ本体。 */
+/** タイムラインを表示するアプリ本体。更新導線が渡されたときは上部にバナーを出す。 */
 @Composable
-fun App(items: StateFlow<List<TimelineItem>>) {
+fun App(
+    items: StateFlow<List<TimelineItem>>,
+    updateController: UpdateController? = null,
+    onInstallUpdate: ((String) -> Unit)? = null,
+) {
     PerantaTheme {
-        TimelineScreen(items)
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (updateController != null && onInstallUpdate != null) {
+                UpdateBanner(updateController, onInstallUpdate)
+            }
+            Box(modifier = Modifier.weight(1f)) {
+                TimelineScreen(items)
+            }
+        }
     }
 }
 
@@ -48,9 +61,16 @@ fun App(errorMessage: String) {
 
 /** 送信ロールの状態を簡易表示する（本格 UI は後続マイルストーン）。 */
 @Composable
-fun SendRoleApp(sendEnabled: Boolean) {
+fun SendRoleApp(
+    sendEnabled: Boolean,
+    updateController: UpdateController? = null,
+    onInstallUpdate: ((String) -> Unit)? = null,
+) {
     PerantaTheme {
         Column(modifier = Modifier.fillMaxSize()) {
+            if (updateController != null && onInstallUpdate != null) {
+                UpdateBanner(updateController, onInstallUpdate)
+            }
             Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
                 Text(
                     text = if (sendEnabled) "通知を送信する: 有効" else "通知を送信する: 無効",
