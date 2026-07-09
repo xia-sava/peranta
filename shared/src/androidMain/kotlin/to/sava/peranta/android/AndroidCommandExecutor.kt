@@ -3,6 +3,7 @@ package to.sava.peranta.android
 import android.content.Context
 import co.touchlab.kermit.Logger
 import to.sava.peranta.filter.mutePackage
+import to.sava.peranta.filter.unmutePackage
 import to.sava.peranta.receive.CommandExecutionException
 import to.sava.peranta.receive.CommandExecutor
 
@@ -13,7 +14,7 @@ private const val NLS_NOT_CONNECTED_MESSAGE =
 /**
  * 送信ロール端末（スマホ）でのコマンド実行（§3.4）。
  * 通知操作（dismiss / invokeAction / reply）は生存中の [PerantaNotificationListenerService] へ委ね、
- * muteApp は [androidConfigRepository] 経由で denylist（フィルタルール）へ反映する（§7）。
+ * muteApp / unmuteApp は [androidConfigRepository] のフィルタルール部分更新で denylist へ反映する（§7）。
  */
 class AndroidCommandExecutor(
     context: Context,
@@ -35,15 +36,13 @@ class AndroidCommandExecutor(
     }
 
     override suspend fun muteApp(packageName: String) {
-        val repo = androidConfigRepository(appContext)
-        val config = repo.load()
-        val updatedRules = mutePackage(config.filterRules, packageName)
-        if (updatedRules === config.filterRules) {
-            log.i { "package already muted: $packageName" }
-            return
-        }
-        repo.save(config.copy(filterRules = updatedRules))
+        androidConfigRepository(appContext).updateFilterRules { rules -> mutePackage(rules, packageName) }
         log.i { "muted package: $packageName" }
+    }
+
+    override suspend fun unmuteApp(packageName: String) {
+        androidConfigRepository(appContext).updateFilterRules { rules -> unmutePackage(rules, packageName) }
+        log.i { "unmuted package: $packageName" }
     }
 
     private fun listenerService(): PerantaNotificationListenerService =

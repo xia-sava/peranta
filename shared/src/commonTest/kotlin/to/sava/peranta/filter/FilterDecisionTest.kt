@@ -55,6 +55,34 @@ class FilterDecisionTest {
         assertEquals(Priority.HIGH, decision.priority)
     }
 
+    /** 注入した暗黙システム判定で、既定リスト外のパッケージも denylist の暗黙除外にできる。 */
+    @Test
+    fun injectedSystemPredicateExcludesPackage() {
+        val decision = decideFilter(
+            normalPkg,
+            Priority.NORMAL,
+            isOtp = false,
+            FilterMode.DENYLIST,
+            rules = emptyList(),
+            isImplicitlySystemPackage = { it == normalPkg },
+        )
+        assertFalse(decision.forward)
+    }
+
+    /** 注入した判定が false を返すパッケージは、既定リストのシステム系でも転送する。 */
+    @Test
+    fun injectedSystemPredicateForwardsWhenNotSystem() {
+        val decision = decideFilter(
+            systemPkg,
+            Priority.NORMAL,
+            isOtp = false,
+            FilterMode.DENYLIST,
+            rules = emptyList(),
+            isImplicitlySystemPackage = { false },
+        )
+        assertTrue(decision.forward)
+    }
+
     /** redaction フラグが判定結果に反映される。 */
     @Test
     fun redactFlagPropagates() {

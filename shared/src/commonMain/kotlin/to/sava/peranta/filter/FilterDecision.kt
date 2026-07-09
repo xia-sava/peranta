@@ -20,6 +20,9 @@ data class FilterDecision(
  * - allowlist: INCLUDE ルールに載ったパッケージだけ転送。
  * - 優先度は [basePriority] を [FilterRule.priorityOverride] で上書きし、
  *   [isOtp] が true なら HIGH へ昇格する。
+ *
+ * denylist の暗黙除外は [isImplicitlySystemPackage] で判定する。既定は静的な [DEFAULT_SYSTEM_PACKAGES]
+ * のみを見るが、送信側はランチャー有無を加味した動的判定（[isImplicitlySystemPackage] 純関数）を注入する。
  */
 fun decideFilter(
     packageName: String,
@@ -27,14 +30,14 @@ fun decideFilter(
     isOtp: Boolean,
     mode: FilterMode,
     rules: List<FilterRule>,
-    systemPackages: Set<String> = DEFAULT_SYSTEM_PACKAGES,
+    isImplicitlySystemPackage: (String) -> Boolean = { it in DEFAULT_SYSTEM_PACKAGES },
 ): FilterDecision {
     val rule = rules.firstOrNull { it.packageName == packageName }
     val forward = when (mode) {
         FilterMode.DENYLIST -> when (rule?.action) {
             RuleAction.EXCLUDE -> false
             RuleAction.INCLUDE -> true
-            null -> packageName !in systemPackages
+            null -> !isImplicitlySystemPackage(packageName)
         }
 
         FilterMode.ALLOWLIST -> rule?.action == RuleAction.INCLUDE

@@ -23,6 +23,9 @@ interface CommandExecutor {
 
     /** [packageName] を転送対象から除外する（denylist へ追加、§7）。 */
     suspend fun muteApp(packageName: String)
+
+    /** [packageName] を転送対象へ戻す（denylist の除外ルールを取り除く、§7）。 */
+    suspend fun unmuteApp(packageName: String)
 }
 
 /** コマンド実行が失敗したことを、タイムライン表示用の理由付きで表す例外。 */

@@ -2,7 +2,11 @@ package to.sava.peranta.config
 
 import com.russhwolf.settings.Settings
 import dev.whyoleg.cryptography.random.CryptographyRandom
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import to.sava.peranta.filter.FilterMode
+import to.sava.peranta.filter.FilterRule
 import to.sava.peranta.filter.decodeFilterRules
 import to.sava.peranta.filter.encodeFilterRules
 import kotlin.io.encoding.Base64
@@ -43,7 +47,16 @@ class ConfigRepository(
         )
     }
 
-    fun save(config: PerantaConfig) {
+    /**
+     * 設定を全キー書き戻しで保存する。[updateFilterRules] と同じ排他ロックを取り、
+     * 端末内で並行する load→変更→save と updateFilterRules（mute/unmute）の書き込みが
+     * 互いを破壊しないようにする（詳細は [configMutex] を参照）。
+     */
+    fun save(config: PerantaConfig): Unit = runBlocking {
+        configMutex.withLock { saveLocked(config) }
+    }
+
+    private fun saveLocked(config: PerantaConfig) {
         settings.putString(KEY_HOST, config.host)
         settings.putBoolean(KEY_USE_TLS, config.useTls)
         config.port?.let { settings.putInt(KEY_PORT, it) } ?: settings.remove(KEY_PORT)
@@ -65,6 +78,24 @@ class ConfigRepository(
         config.sharedKeyBase64
             ?.let { keyStore.storeKey(Base64.decode(it)) }
             ?: keyStore.clearKey()
+    }
+
+    /**
+     * フィルタルールだけを排他的に読み書き更新する（§7 のアプリフィルタ操作向け）。
+     * [save] と違い共有鍵の再保存など他項目には触れないため、チェックボックス操作のたびに呼んでも軽い。
+     * [transform] が入力と同じインスタンスを返したときは変化なしとみなし、書き込みを省く。
+     * 更新後のルール一覧を返す。排他制御は [save] と共通のロックで行い、
+     * 端末内で並行する load→変更→save の競合を避ける（詳細は [configMutex] を参照）。
+     */
+    suspend fun updateFilterRules(
+        transform: (List<FilterRule>) -> List<FilterRule>,
+    ): List<FilterRule> = configMutex.withLock {
+        val current = decodeFilterRules(settings.getStringOrNull(KEY_FILTER_RULES))
+        val updated = transform(current)
+        if (updated !== current) {
+            settings.putString(KEY_FILTER_RULES, encodeFilterRules(updated))
+        }
+        updated
     }
 
     private fun loadFilterMode(): FilterMode =
@@ -134,6 +165,15 @@ class ConfigRepository(
 
         /** 配送先 topic を settings に 1 文字列で保持する際の区切り。 */
         private const val TOPIC_SEPARATOR = "\n"
+
+        /**
+         * [save] と [updateFilterRules] の書き込みを直列化するロック。
+         * [ConfigRepository] は同じ設定ストアに対して都度生成されるため、インスタンス間で共有できるよう
+         * companion に置く。両者の内部処理はいずれも中断を挟まない同期処理のみで、互いを再帰的に
+         * 呼び出すこともないため、非再入ロックのままデッドロックは起きない。この前提を崩さないよう、
+         * [save]・[updateFilterRules] の実装からは互いを呼び出さないこと。
+         */
+        private val configMutex = Mutex()
     }
 }
 

@@ -36,6 +36,9 @@ enum class CommandType {
 
     @SerialName("muteApp")
     MUTE_APP,
+
+    @SerialName("unmuteApp")
+    UNMUTE_APP,
 }
 
 /** 端末間で転送されるメッセージ本体。type フィールドで種別を判別する。 */

@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.app.RemoteInput
 import android.content.Intent
 import android.os.Bundle
+import android.os.Process
 import android.provider.Telephony
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -174,10 +175,16 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             postedAtEpochMillis = sbn.postTime,
             priority = resolvePriority(sbn.notification),
         )
-        forward(input, deviceId, config)
+        val isCrossProfile = sbn.user != Process.myUserHandle()
+        forward(input, deviceId, config, isCrossProfile)
     }
 
-    private fun forward(input: NotificationInput, deviceId: String, config: PerantaConfig) {
+    private fun forward(
+        input: NotificationInput,
+        deviceId: String,
+        config: PerantaConfig,
+        isCrossProfilePackage: Boolean,
+    ) {
         val payload = buildNotificationPayload(
             input = input,
             mode = config.filterMode,
@@ -185,6 +192,10 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             deviceId = deviceId,
             now = nowEpochMillis(),
             otpSenderPackages = config.otpSenderPackages,
+            isImplicitlySystemPackage = packageManagerSystemPackagePredicate(
+                applicationContext.packageManager,
+                isCrossProfilePackage = isCrossProfilePackage,
+            ),
         ) ?: run {
             log.d { "filtered out notification from ${input.packageName}" }
             return

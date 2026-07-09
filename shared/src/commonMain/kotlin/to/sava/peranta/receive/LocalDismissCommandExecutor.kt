@@ -42,4 +42,8 @@ class LocalDismissCommandExecutor(
     override suspend fun muteApp(packageName: String) {
         log.d { "muteApp ignored on display-only device package=$packageName" }
     }
+
+    override suspend fun unmuteApp(packageName: String) {
+        log.d { "unmuteApp ignored on display-only device package=$packageName" }
+    }
 }

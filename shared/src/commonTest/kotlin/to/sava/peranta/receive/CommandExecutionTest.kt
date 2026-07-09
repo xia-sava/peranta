@@ -35,6 +35,7 @@ class CommandExecutionTest {
         var invoked: Pair<String, Int>? = null
         var replied: Triple<String, Int, String>? = null
         var mutedPackage: String? = null
+        var unmutedPackage: String? = null
 
         override suspend fun dismiss(notificationKey: String) {
             failWith?.let { throw it }
@@ -58,6 +59,12 @@ class CommandExecutionTest {
             failWith?.let { throw it }
             mutedPackage = packageName
             calls.add("muteApp")
+        }
+
+        override suspend fun unmuteApp(packageName: String) {
+            failWith?.let { throw it }
+            unmutedPackage = packageName
+            calls.add("unmuteApp")
         }
     }
 
@@ -133,6 +140,15 @@ class CommandExecutionTest {
         assertEquals("com.spam", executor.mutedPackage)
     }
 
+    /** unmuteApp コマンドは executor.unmuteApp をパッケージ名で呼ぶ。 */
+    @Test
+    fun unmuteAppIsDispatched() = runTest {
+        val executor = FakeCommandExecutor()
+        pipeline(executor).handleEvent(eventFor(command(CommandType.UNMUTE_APP, packageName = "com.spam")))
+        assertEquals(listOf("unmuteApp"), executor.calls)
+        assertEquals("com.spam", executor.unmutedPackage)
+    }
+
     /** 失効済みコマンドは実行されない（遅延した操作の誤発火を防ぐ）。 */
     @Test
     fun expiredCommandIsNotExecuted() = runTest {
@@ -169,6 +185,7 @@ class CommandExecutionTest {
             command(CommandType.INVOKE_ACTION, actionIndex = null),
             command(CommandType.REPLY, replyText = null),
             command(CommandType.MUTE_APP, packageName = null),
+            command(CommandType.UNMUTE_APP, packageName = null),
         )
         cases.forEachIndexed { index, payload ->
             val executor = FakeCommandExecutor()

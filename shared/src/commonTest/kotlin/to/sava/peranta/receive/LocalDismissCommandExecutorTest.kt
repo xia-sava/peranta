@@ -69,7 +69,7 @@ class LocalDismissCommandExecutorTest {
         assertTrue(dismissed.isEmpty())
     }
 
-    /** invokeAction / reply / muteApp は表示専用端末では no-op（例外も取り下げも起こさない）。 */
+    /** invokeAction / reply / muteApp / unmuteApp は表示専用端末では no-op（例外も取り下げも起こさない）。 */
     @Test
     fun otherCommandsAreNoOps() = runTest {
         val dismissed = mutableListOf<String>()
@@ -77,6 +77,7 @@ class LocalDismissCommandExecutorTest {
         executor.invokeAction("0|k", 0)
         executor.reply("0|k", 0, "text")
         executor.muteApp("com.example")
+        executor.unmuteApp("com.example")
         assertTrue(dismissed.isEmpty())
     }
 }

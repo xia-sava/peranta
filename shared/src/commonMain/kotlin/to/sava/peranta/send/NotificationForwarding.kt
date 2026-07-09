@@ -1,6 +1,7 @@
 package to.sava.peranta.send
 
 import co.touchlab.kermit.Logger
+import to.sava.peranta.filter.DEFAULT_SYSTEM_PACKAGES
 import to.sava.peranta.filter.FilterMode
 import to.sava.peranta.filter.FilterRule
 import to.sava.peranta.filter.decideFilter
@@ -94,6 +95,8 @@ data class NotificationInput(
  * 捕捉した通知をフィルタ判定し、転送対象なら [NotificationPayload] を組み立てる（§7）。
  * 転送しない場合は null を返す。OTP 検出はタイトルと本文の連結に対して行う。
  * タイトル・本文は上限長で切り詰める（切り詰めは debug ログに残し、本文自体は出さない）。
+ * [isImplicitlySystemPackage] で denylist の暗黙除外を判定する。送信側はランチャー有無を加味した
+ * 動的判定を注入し、既定は静的な [DEFAULT_SYSTEM_PACKAGES] のみを見る。
  */
 fun buildNotificationPayload(
     input: NotificationInput,
@@ -102,11 +105,12 @@ fun buildNotificationPayload(
     deviceId: String,
     now: Long,
     otpSenderPackages: List<String> = emptyList(),
+    isImplicitlySystemPackage: (String) -> Boolean = { it in DEFAULT_SYSTEM_PACKAGES },
     idGen: () -> String = ::newPayloadId,
     log: Logger = Logger.withTag("Forward"),
 ): NotificationPayload? {
     val isOtp = isOtpNotification("${input.title} ${input.text}", input.packageName, otpSenderPackages)
-    val decision = decideFilter(input.packageName, input.priority, isOtp, mode, rules)
+    val decision = decideFilter(input.packageName, input.priority, isOtp, mode, rules, isImplicitlySystemPackage)
     if (!decision.forward) return null
 
     val rawTitle = if (decision.redact) REDACTED_PLACEHOLDER else input.title

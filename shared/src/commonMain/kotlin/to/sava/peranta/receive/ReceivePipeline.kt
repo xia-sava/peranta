@@ -178,6 +178,8 @@ class ReceivePipeline(
                 executor.reply(requireKey(payload), requireActionIndex(payload), requireReplyText(payload))
 
             CommandType.MUTE_APP -> executor.muteApp(requirePackageName(payload))
+
+            CommandType.UNMUTE_APP -> executor.unmuteApp(requirePackageName(payload))
         }
     }
 

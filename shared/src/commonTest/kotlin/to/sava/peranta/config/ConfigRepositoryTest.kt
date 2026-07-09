@@ -1,16 +1,22 @@
 package to.sava.peranta.config
 
 import com.russhwolf.settings.MapSettings
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runTest
 import to.sava.peranta.crypto.generateKey
 import to.sava.peranta.filter.FilterMode
 import to.sava.peranta.filter.FilterRule
 import to.sava.peranta.filter.RuleAction
+import to.sava.peranta.filter.mutePackage
 import to.sava.peranta.model.Priority
 import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class ConfigRepositoryTest {
@@ -127,6 +133,59 @@ class ConfigRepositoryTest {
         assertEquals(setOf("dev-lost", "dev-old"), repo.load().revokedDeviceIds)
         repo.save(PerantaConfig())
         assertTrue(repo.load().revokedDeviceIds.isEmpty())
+    }
+
+    /** updateFilterRules は変換結果を filterRules だけへ反映し、他項目は保つ。 */
+    @Test
+    fun updateFilterRulesAppliesTransformAndKeepsOtherFields() = runTest {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        repo.save(PerantaConfig(deviceName = "phone", sendEnabled = true))
+        val updated = repo.updateFilterRules { rules -> mutePackage(rules, "com.spam") }
+        assertEquals(listOf(FilterRule("com.spam", RuleAction.EXCLUDE)), updated)
+        val loaded = repo.load()
+        assertEquals(listOf(FilterRule("com.spam", RuleAction.EXCLUDE)), loaded.filterRules)
+        assertEquals("phone", loaded.deviceName)
+        assertTrue(loaded.sendEnabled)
+    }
+
+    /** 変換が同じインスタンスを返したときは書き込まず、その一覧をそのまま返す。 */
+    @Test
+    fun updateFilterRulesSkipsWriteWhenUnchanged() = runTest {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        repo.save(PerantaConfig(filterRules = listOf(FilterRule("com.spam", RuleAction.EXCLUDE))))
+        var received: List<FilterRule>? = null
+        val result = repo.updateFilterRules { rules ->
+            received = rules
+            rules
+        }
+        assertSame(received, result)
+        assertEquals(listOf(FilterRule("com.spam", RuleAction.EXCLUDE)), repo.load().filterRules)
+    }
+
+    /**
+     * save と updateFilterRules を実スレッドで並行に呼び出しても、共有ロックにより書き込みが直列化され、
+     * 例外や壊れた（デコード不能な）状態にならない。
+     */
+    @Test
+    fun saveAndUpdateFilterRulesShareExclusionUnderConcurrency() = runTest {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val iterations = 200
+
+        coroutineScope {
+            launch(Dispatchers.Default) {
+                repeat(iterations) { i -> repo.save(PerantaConfig(deviceName = "phone-$i")) }
+            }
+            launch(Dispatchers.Default) {
+                repeat(iterations) { i -> repo.updateFilterRules { rules -> mutePackage(rules, "com.spam$i") } }
+            }
+        }
+
+        val loaded = repo.load()
+        assertTrue(loaded.deviceName?.startsWith("phone-") == true)
+        assertTrue(loaded.filterRules.all { it.action == RuleAction.EXCLUDE })
     }
 
     /** 共有鍵未設定の config を保存すると鍵はクリアされ、load で null になる。 */

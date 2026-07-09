@@ -34,6 +34,16 @@ private const val NOTIFICATIONS_DENIED_MESSAGE =
 private const val CAMERA_DENIED_MESSAGE =
     "カメラの権限が許可されていません。ペアリング文字列を貼り付けて取り込んでください"
 
+/**
+ * MainActivity が表示する画面（§10）。
+ * [Main] はロール（受信/送信）に応じて本体を出し、[Pairing] は QR 取り込み画面を出す。
+ * アプリフィルタ（§10.4）・健康診断（§10.5）の画面は後続フェーズでここへ加える。
+ */
+private sealed interface Screen {
+    data object Main : Screen
+    data object Pairing : Screen
+}
+
 class MainActivity : ComponentActivity() {
 
     private var updater: AndroidUpdater? = null
@@ -84,35 +94,39 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            var showPairing by remember { mutableStateOf(!config.hasSharedKey) }
-            when {
-                showPairing -> PerantaTheme {
+            var screen: Screen by remember {
+                mutableStateOf(if (config.hasSharedKey) Screen.Main else Screen.Pairing)
+            }
+            when (screen) {
+                Screen.Pairing -> PerantaTheme {
                     PairingScanScreen(
                         controller = importController,
                         onRequestScan = { onResult -> requestScan(onResult) },
                         onBack = if (config.hasSharedKey) {
-                            { showPairing = false }
+                            { screen = Screen.Main }
                         } else {
                             null
                         },
                     )
                 }
 
-                receiveRole -> App(
-                    items = PerantaReceive.items,
-                    updateController = updater.controller,
-                    onInstallUpdate = { url -> updater.install(url) },
-                    receiveEndpoint = config.unifiedPushEndpoint,
-                    onOpenPairing = { showPairing = true },
-                    timelineActions = PerantaReceive.timelineActions(this@MainActivity),
-                )
-
-                else -> SendRoleApp(
-                    sendEnabled = config.sendEnabled,
-                    updateController = updater.controller,
-                    onInstallUpdate = { url -> updater.install(url) },
-                    onOpenPairing = { showPairing = true },
-                )
+                Screen.Main -> if (receiveRole) {
+                    App(
+                        items = PerantaReceive.items,
+                        updateController = updater.controller,
+                        onInstallUpdate = { url -> updater.install(url) },
+                        receiveEndpoint = config.unifiedPushEndpoint,
+                        onOpenPairing = { screen = Screen.Pairing },
+                        timelineActions = PerantaReceive.timelineActions(this@MainActivity),
+                    )
+                } else {
+                    SendRoleApp(
+                        sendEnabled = config.sendEnabled,
+                        updateController = updater.controller,
+                        onInstallUpdate = { url -> updater.install(url) },
+                        onOpenPairing = { screen = Screen.Pairing },
+                    )
+                }
             }
         }
     }

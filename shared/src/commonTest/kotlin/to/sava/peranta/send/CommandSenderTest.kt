@@ -148,6 +148,18 @@ class CommandSenderTest {
         assertEquals("com.spam", command.packageName)
     }
 
+    /** unmuteApp は送信元 deviceId へパッケージ名つきで一点指定する。 */
+    @Test
+    fun unmuteAppTargetsSourceDevice() = runTest {
+        val ntfy = RecordingControlNtfy(history = listOf(event(presence("phone", "https://h/phone-topic"))))
+        val ok = sender(ntfy).unmuteApp(targetDeviceId = "phone", packageName = "com.spam")
+        assertTrue(ok)
+        val command = openCommand(ntfy.published.single().body)
+        assertEquals(CommandType.UNMUTE_APP, command.command)
+        assertEquals("phone", command.to)
+        assertEquals("com.spam", command.packageName)
+    }
+
     /** 一点指定コマンドで対象 deviceId がロスターに居なければ何も送らない。 */
     @Test
     fun singleTargetWithUnknownDeviceSendsNothing() = runTest {

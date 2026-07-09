@@ -55,6 +55,34 @@ class NotificationForwardingTest {
         assertNull(payload)
     }
 
+    /** 注入した暗黙システム判定でランチャーを持つプリインアプリを転送対象に含められる。 */
+    @Test
+    fun injectedSystemPredicateForwardsLauncherApp() {
+        val payload = buildNotificationPayload(
+            input(packageName = "com.android.systemui", title = "お知らせ", text = "こんにちは"),
+            mode = FilterMode.DENYLIST,
+            rules = emptyList(),
+            deviceId = "phone",
+            now = 2000,
+            isImplicitlySystemPackage = { false },
+        )
+        assertTrue(payload != null)
+    }
+
+    /** 注入した暗黙システム判定でランチャーを持たない通常アプリを暗黙除外できる。 */
+    @Test
+    fun injectedSystemPredicateDropsLauncherlessApp() {
+        val payload = buildNotificationPayload(
+            input(packageName = "com.example.background", title = "お知らせ", text = "こんにちは"),
+            mode = FilterMode.DENYLIST,
+            rules = emptyList(),
+            deviceId = "phone",
+            now = 2000,
+            isImplicitlySystemPackage = { true },
+        )
+        assertNull(payload)
+    }
+
     /** OTP 通知は priority HIGH へ昇格し、失効時刻が付く。 */
     @Test
     fun otpNotificationGetsHighPriorityAndExpiry() {

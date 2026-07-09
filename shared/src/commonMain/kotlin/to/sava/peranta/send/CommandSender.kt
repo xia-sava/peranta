@@ -82,6 +82,15 @@ class CommandSender(
             packageName = packageName,
         )
 
+    /** [targetDeviceId] のスマホへアプリ非表示解除（denylist から除去）コマンドを送る（§3.4 / §7）。 */
+    suspend fun unmuteApp(targetDeviceId: String, packageName: String): Boolean =
+        publish(
+            command = CommandType.UNMUTE_APP,
+            to = targetDeviceId,
+            topics = singleTargetTopics(targetDeviceId),
+            packageName = packageName,
+        )
+
     /**
      * 一点指定コマンドの宛先 topic を解決する。ロスター（control topic）から [targetDeviceId] の
      * エンドポイントを引く。control topic 未設定・取得失敗・対象不在なら空を返す。
