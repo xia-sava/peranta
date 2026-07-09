@@ -21,9 +21,13 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
+import to.sava.peranta.autostart.AutoStartManager
+import to.sava.peranta.autostart.DesktopHealthChecker
+import to.sava.peranta.autostart.WindowsRunRegistry
 import to.sava.peranta.pairing.pairingQrMatrix
 import to.sava.peranta.platform.initLogging
 import to.sava.peranta.ui.AppFilterScreen
+import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.SettingsScreen
 import to.sava.peranta.update.DesktopUpdater
@@ -74,19 +78,30 @@ private fun bringWindowToFront(window: AwtWindow) {
     }
 }
 
-fun main() {
+fun main(args: Array<String>) {
     initLogging()
     val log = Logger.withTag("Main")
     val desktopSettings = DesktopSettings()
     val config = desktopSettings.config
     val settingsController = desktopSettings.controller
 
+    // ログオン自動起動から --minimized で起動された場合はウィンドウを出さずトレイ常駐で開始する（§3.3）。
+    val startMinimized = args.contains(AutoStartManager.MINIMIZED_ARGUMENT)
+    // jpackage.app-path が無い開発実行では自動起動を扱わない（java 起動コマンドの誤登録を防ぐ）。
+    val autoStart = AutoStartManager(WindowsRunRegistry(), System.getProperty("jpackage.app-path"))
+    autoStart.reconcile()
+
     val mainWindow = AtomicReference<AwtWindow?>(null)
+    val showWindowRequest = AtomicReference<() -> Unit>({})
+    val bringToFront: () -> Unit = {
+        showWindowRequest.get().invoke()
+        mainWindow.get()?.let(::bringWindowToFront)
+    }
     val receiver = if (config.isReadyForReceive) {
         DesktopReceiver(
             config,
             repository = desktopSettings.repository,
-            onToastClicked = { mainWindow.get()?.let(::bringWindowToFront) },
+            onToastClicked = bringToFront,
         )
     } else {
         null
@@ -102,16 +117,26 @@ fun main() {
             exitApplication()
         }
 
+        var windowVisible by remember { mutableStateOf(!startMinimized) }
         var showSettings by remember { mutableStateOf(receiver == null) }
         var showAppFilter by remember { mutableStateOf(false) }
+        var showHealthCheck by remember { mutableStateOf(false) }
+
+        // トースト経由など Compose 外からの「ウィンドウを出す」要求を可視状態へ橋渡しする。
+        LaunchedEffect(Unit) { showWindowRequest.set { windowVisible = true } }
 
         Tray(
             icon = perantaIcon,
             tooltip = "Peranta",
+            onAction = bringToFront,
             menu = {
                 Item("設定", onClick = {
                     showSettings = true
-                    mainWindow.get()?.let(::bringWindowToFront)
+                    bringToFront()
+                })
+                Item("健康診断", onClick = {
+                    showHealthCheck = true
+                    bringToFront()
                 })
                 Item("終了", onClick = closeAndExit)
             },
@@ -133,11 +158,18 @@ fun main() {
 
         Window(
             onCloseRequest = closeAndExit,
+            visible = windowVisible,
             icon = perantaIcon,
             title = "Peranta",
         ) {
             LaunchedEffect(window) { mainWindow.set(window) }
             when {
+                showHealthCheck -> PerantaTheme {
+                    HealthCheckScreen(
+                        checker = DesktopHealthChecker(autoStart),
+                        onBack = { showHealthCheck = false },
+                    )
+                }
                 showSettings -> PerantaTheme {
                     SettingsScreen(
                         controller = settingsController,
@@ -164,6 +196,7 @@ fun main() {
                     onInstallUpdate = { url -> updater.install(url) },
                     onOpenSettings = { showSettings = true },
                     onOpenAppFilter = { showAppFilter = true },
+                    onOpenHealthCheck = { showHealthCheck = true },
                     timelineActions = receiver.timelineActions(),
                 )
                 else -> App()

@@ -34,6 +34,7 @@ fun App(
     onOpenSettings: (() -> Unit)? = null,
     onOpenPairing: (() -> Unit)? = null,
     onOpenAppFilter: (() -> Unit)? = null,
+    onOpenHealthCheck: (() -> Unit)? = null,
     timelineActions: TimelineActions? = null,
 ) {
     PerantaTheme {
@@ -41,7 +42,9 @@ fun App(
             if (updateController != null && onInstallUpdate != null) {
                 UpdateBanner(updateController, onInstallUpdate)
             }
-            if (receiveEndpoint != null || onOpenSettings != null || onOpenPairing != null || onOpenAppFilter != null) {
+            if (receiveEndpoint != null || onOpenSettings != null || onOpenPairing != null ||
+                onOpenAppFilter != null || onOpenHealthCheck != null
+            ) {
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -53,6 +56,9 @@ fun App(
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.weight(1f),
                         )
+                        if (onOpenHealthCheck != null) {
+                            TextButton(onClick = onOpenHealthCheck) { Text(text = "健康診断") }
+                        }
                         if (onOpenAppFilter != null) {
                             TextButton(onClick = onOpenAppFilter) { Text(text = "アプリフィルタ") }
                         }
@@ -99,6 +105,7 @@ fun SendRoleApp(
     onInstallUpdate: ((String) -> Unit)? = null,
     onOpenPairing: (() -> Unit)? = null,
     onOpenAppFilter: (() -> Unit)? = null,
+    onOpenHealthCheck: (() -> Unit)? = null,
 ) {
     PerantaTheme {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -116,6 +123,9 @@ fun SendRoleApp(
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.weight(1f),
                     )
+                    if (onOpenHealthCheck != null) {
+                        TextButton(onClick = onOpenHealthCheck) { Text(text = "健康診断") }
+                    }
                     if (onOpenAppFilter != null) {
                         TextButton(onClick = onOpenAppFilter) { Text(text = "アプリフィルタ") }
                     }

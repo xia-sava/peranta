@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,6 +19,7 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import to.sava.peranta.android.AndroidHealthChecker
 import to.sava.peranta.android.AndroidInstalledAppsProvider
 import to.sava.peranta.android.PerantaReceive
 import to.sava.peranta.android.PerantaUnifiedPush
@@ -25,6 +27,8 @@ import to.sava.peranta.android.androidConfigRepository
 import to.sava.peranta.pairing.PairingImportController
 import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.AppFilterScreen
+import to.sava.peranta.ui.HealthCheckScreen
+import to.sava.peranta.ui.healthCheckNeedsAttention
 import to.sava.peranta.ui.PairingScanScreen
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.update.AndroidUpdater
@@ -40,17 +44,24 @@ private const val CAMERA_DENIED_MESSAGE =
 /**
  * MainActivity が表示する画面（§10）。
  * [Main] はロール（受信/送信）に応じて本体を出し、[Pairing] は QR 取り込み画面、
- * [AppFilter] はアプリフィルタ画面（§10.4）を出す。健康診断（§10.5）の画面は後続フェーズでここへ加える。
+ * [AppFilter] はアプリフィルタ画面（§10.4）、[HealthCheck] は健康診断画面（§10.5）を出す。
  */
 private sealed interface Screen {
     data object Main : Screen
     data object Pairing : Screen
     data object AppFilter : Screen
+    data object HealthCheck : Screen
 }
 
 class MainActivity : ComponentActivity() {
 
     private var updater: AndroidUpdater? = null
+
+    /**
+     * 画面復帰（ON_RESUME）ごとに進めるカウンタ。健康診断画面はこれを再チェックの契機にし、
+     * システム設定から戻った直後の権限・設定状態を反映する（§10.5）。
+     */
+    private var resumeTick by mutableStateOf(0)
 
     /** スキャン結果の受け取り先。スキャン開始のたびに差し替える（キャンセル時は null が渡る）。 */
     private var pendingScanResult: ((String?) -> Unit)? = null
@@ -97,10 +108,23 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch { PerantaReceive.prime(this@MainActivity) }
         }
 
+        val healthChecker = AndroidHealthChecker(this)
+
         setContent {
             var screen: Screen by remember {
                 mutableStateOf(if (config.hasSharedKey) Screen.Main else Screen.Pairing)
             }
+
+            // 起動時にペアリング済みなら健康診断を実行し、対処の要る未達があれば診断画面へ誘導する（§10.5）。
+            // ペアリング未完了（Pairing）が最優先のため、Main のときだけ遷移する。強制ブロックはしない。
+            LaunchedEffect(Unit) {
+                if (config.hasSharedKey && screen == Screen.Main &&
+                    healthCheckNeedsAttention(healthChecker.check())
+                ) {
+                    screen = Screen.HealthCheck
+                }
+            }
+
             when (screen) {
                 Screen.Pairing -> PerantaTheme {
                     PairingScanScreen(
@@ -122,6 +146,7 @@ class MainActivity : ComponentActivity() {
                         receiveEndpoint = config.unifiedPushEndpoint,
                         onOpenPairing = { screen = Screen.Pairing },
                         onOpenAppFilter = { screen = Screen.AppFilter },
+                        onOpenHealthCheck = { screen = Screen.HealthCheck },
                         timelineActions = PerantaReceive.timelineActions(this@MainActivity),
                     )
                 } else {
@@ -131,6 +156,7 @@ class MainActivity : ComponentActivity() {
                         onInstallUpdate = { url -> updater.install(url) },
                         onOpenPairing = { screen = Screen.Pairing },
                         onOpenAppFilter = { screen = Screen.AppFilter },
+                        onOpenHealthCheck = { screen = Screen.HealthCheck },
                     )
                 }
 
@@ -149,8 +175,21 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+
+                Screen.HealthCheck -> PerantaTheme {
+                    HealthCheckScreen(
+                        checker = healthChecker,
+                        onBack = { screen = Screen.Main },
+                        externalRefreshKey = resumeTick,
+                    )
+                }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        resumeTick++
     }
 
     /** カメラ権限を確かめてから QR スキャナを起動する（§10.5: 起動時ではなく必要時に要求）。 */
