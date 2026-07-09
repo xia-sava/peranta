@@ -252,6 +252,10 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "to.sava.peranta"
             packageVersion = "1.0.0"
+
+            windows {
+                iconFile.set(project.file("icons/peranta.ico"))
+            }
         }
     }
 }
