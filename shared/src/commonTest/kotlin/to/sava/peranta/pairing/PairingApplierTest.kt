@@ -49,7 +49,7 @@ class PairingApplierTest {
     @Test
     fun applyPersistsKeyThroughKeyStoreSeam() {
         val settings = MapSettings()
-        PairingApplier(ConfigRepository(settings)).apply(
+        PairingApplier(ConfigRepository(settings), devMode = true).apply(
             PairingData("h", "tk", "k1", key(), tls = false, port = null),
         )
 
@@ -57,5 +57,27 @@ class PairingApplierTest {
         assertEquals(Base64.encode(key()), reloaded.sharedKeyBase64)
         assertEquals(false, reloaded.useTls)
         assertEquals(null, reloaded.port)
+    }
+
+    /** devMode でないときは QR が tls=false でも TLS を有効に強制する（§16）。 */
+    @Test
+    fun forcesTlsWhenNotDevMode() {
+        val settings = MapSettings()
+        PairingApplier(ConfigRepository(settings)).apply(
+            PairingData("h", "tk", "k1", key(), tls = false, port = null),
+        )
+
+        assertEquals(true, ConfigRepository(settings).load().useTls)
+    }
+
+    /** devMode のときは QR の tls フラグをそのまま反映する。 */
+    @Test
+    fun keepsTlsFlagWhenDevMode() {
+        val settings = MapSettings()
+        PairingApplier(ConfigRepository(settings), devMode = true).apply(
+            PairingData("h", "tk", "k1", key(), tls = false, port = null),
+        )
+
+        assertEquals(false, ConfigRepository(settings).load().useTls)
     }
 }

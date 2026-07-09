@@ -8,8 +8,14 @@ import kotlin.io.encoding.Base64
  * 共有鍵は [ConfigRepository] を介して KeyStore シームに保存し、他項目は settings に保存する。
  * 端末名は QR に含まれないため、既存設定を引き継ぐ。共有鍵・keyId が揃うため、
  * 端末名が設定済みなら適用後に受信ロールが有効になる（[to.sava.peranta.config.PerantaConfig.isReadyForUnifiedPushReceive]）。
+ *
+ * [devMode] が偽のときは QR の [PairingData.tls] が false でも TLS を有効に強制する（§16）。
+ * Android には開発用オーバーライド機構が無いため常に偽で運用する。
  */
-class PairingApplier(private val configRepository: ConfigRepository) {
+class PairingApplier(
+    private val configRepository: ConfigRepository,
+    private val devMode: Boolean = false,
+) {
 
     fun apply(data: PairingData) {
         val current = configRepository.load()
@@ -19,7 +25,7 @@ class PairingApplier(private val configRepository: ConfigRepository) {
                 accessToken = data.token,
                 keyId = data.keyId,
                 sharedKeyBase64 = Base64.encode(data.key),
-                useTls = data.tls,
+                useTls = if (devMode) data.tls else true,
                 port = data.port,
                 controlTopic = data.controlTopic ?: current.controlTopic,
             ),

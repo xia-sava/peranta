@@ -48,6 +48,7 @@ private const val RESTART_NOTICE: String =
  * 設定画面（§10.2）とペアリング（§10.3）を 1 画面にまとめたもの。
  * 接続情報の入力・保存、共有鍵の作成、QR による新端末追加を行う。
  * QR の描画はプラットフォーム依存のため [qrContent] スロットで注入する。
+ * [devMode] が偽のときは TLS を常に有効とし、切替チェックボックスを隠す（§16）。
  */
 @Composable
 fun SettingsScreen(
@@ -56,12 +57,13 @@ fun SettingsScreen(
     qrContent: @Composable (uri: String) -> Unit = {},
     onOpenTimeline: (() -> Unit)? = null,
     qrVisibleMillis: Long = DEFAULT_QR_VISIBLE_MILLIS,
+    devMode: Boolean = false,
 ) {
     val initial = remember { controller.load() }
     var host by remember { mutableStateOf(initial.host) }
     var accessToken by remember { mutableStateOf(initial.accessToken.orEmpty()) }
     var deviceName by remember { mutableStateOf(initial.deviceName.orEmpty()) }
-    var useTls by remember { mutableStateOf(initial.useTls) }
+    var useTls by remember { mutableStateOf(if (devMode) initial.useTls else true) }
     var port by remember { mutableStateOf(initial.port?.toString().orEmpty()) }
     var keyId by remember { mutableStateOf(initial.keyId) }
     var hasKey by remember { mutableStateOf(!initial.sharedKeyBase64.isNullOrBlank()) }
@@ -121,13 +123,15 @@ fun SettingsScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().testTag(TAG_DEVICE_NAME),
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = useTls,
-                    onCheckedChange = { useTls = it },
-                    modifier = Modifier.testTag(TAG_TLS),
-                )
-                Text(text = "TLS を使う")
+            if (devMode) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = useTls,
+                        onCheckedChange = { useTls = it },
+                        modifier = Modifier.testTag(TAG_TLS),
+                    )
+                    Text(text = "TLS を使う")
+                }
             }
             OutlinedTextField(
                 value = port,

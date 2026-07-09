@@ -5,6 +5,7 @@ import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Internal
+import org.gradle.api.tasks.JavaExec
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
@@ -252,5 +253,14 @@ compose.desktop {
             packageName = "to.sava.peranta"
             packageVersion = "1.0.0"
         }
+    }
+}
+
+// 開発用の設定上書き（PERANTA_* / withDevOverrides）と TLS ダウングレードを有効にするフラグ（§16）。
+// compose が afterEvaluate で登録する `run`（開発起動）にだけ載せ、
+// runDistributable や配布物のランチャー設定（jvmArgs）には載せない。
+tasks.withType<JavaExec>().configureEach {
+    if (name == "run") {
+        systemProperty("peranta.devMode", "true")
     }
 }

@@ -144,6 +144,7 @@ fun main() {
                         } else {
                             null
                         },
+                        devMode = desktopSettings.devMode,
                     )
                 }
                 errorMessage != null -> App(errorMessage!!)

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
+import to.sava.peranta.config.isDevMode
 import to.sava.peranta.config.withDevOverrides
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.model.NotificationPayload
@@ -41,12 +42,17 @@ import to.sava.peranta.ui.TimelineActions
 import kotlin.io.encoding.Base64
 
 /**
- * Desktop の設定を settings + 開発用オーバーライドから読む。
+ * Desktop の設定を settings から読む。
+ * [devMode] が真のときだけ開発用オーバーライド（[withDevOverrides]）を適用する。
+ * 偽のとき（配布物）はオーバーライドを一切適用せず、TLS を常に有効化する（§16）。
  * 端末名があれば安定 deviceId を確定し、受信 topic 未設定なら topic を採番・永続化する。
  */
-fun loadDesktopConfig(settings: Settings = Settings()): PerantaConfig {
+fun loadDesktopConfig(
+    settings: Settings = Settings(),
+    devMode: Boolean = isDevMode(),
+): PerantaConfig {
     val repo = ConfigRepository(settings)
-    val config = repo.load().withDevOverrides()
+    val config = if (devMode) repo.load().withDevOverrides() else repo.load().copy(useTls = true)
     val deviceName = config.deviceName ?: return config
     val deviceId = repo.ensureDeviceId()
     val topic = config.receiveTopic ?: repo.ensureReceiveTopic(deviceName)
@@ -56,9 +62,13 @@ fun loadDesktopConfig(settings: Settings = Settings()): PerantaConfig {
 /**
  * Desktop 起動時の設定読み込みと、設定画面コントローラを同一の settings 実体から作る。
  * これにより desktopApp 側は multiplatform-settings の型に依存せず設定 UI を配線できる。
+ * [devMode] は設定画面の TLS 切替可否など UI 側の分岐にも渡す。
  */
-class DesktopSettings(settings: Settings = Settings()) {
-    val config: PerantaConfig = loadDesktopConfig(settings)
+class DesktopSettings(
+    settings: Settings = Settings(),
+    val devMode: Boolean = isDevMode(),
+) {
+    val config: PerantaConfig = loadDesktopConfig(settings, devMode)
     val controller: SettingsController = SettingsController(ConfigRepository(settings))
 }
 

@@ -98,6 +98,41 @@ class SettingsScreenTest {
         onNodeWithTag(QR_SLOT_TAG).assertIsDisplayed()
     }
 
+    /** devMode でないときは TLS 切替チェックボックスを表示しない（§16）。 */
+    @Test
+    fun tlsCheckboxHiddenWhenNotDevMode() = runComposeUiTest {
+        val controller = SettingsController(ConfigRepository(MapSettings()))
+
+        setContent { SettingsScreen(controller, devMode = false) }
+
+        onNodeWithTag(TAG_TLS).assertDoesNotExist()
+    }
+
+    /** devMode のときは TLS 切替チェックボックスを表示する。 */
+    @Test
+    fun tlsCheckboxShownWhenDevMode() = runComposeUiTest {
+        val controller = SettingsController(ConfigRepository(MapSettings()))
+
+        setContent { SettingsScreen(controller, devMode = true) }
+
+        onNodeWithTag(TAG_TLS).assertIsDisplayed()
+    }
+
+    /** devMode でなければ、保存済み設定が TLS 無効でも保存時に TLS 有効を書き込む（§16）。 */
+    @Test
+    fun saveForcesTlsWhenNotDevMode() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(PerantaConfig(useTls = false))
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller, devMode = false) }
+
+        onNodeWithTag(TAG_DEVICE_NAME).performTextReplacement("desktop-1")
+        onNodeWithTag(TAG_SAVE).performClick()
+
+        assertEquals(true, repo.load().useTls)
+    }
+
     private companion object {
         const val QR_SLOT_TAG = "qr-slot"
     }
