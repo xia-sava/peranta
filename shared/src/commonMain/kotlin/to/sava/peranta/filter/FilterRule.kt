@@ -43,31 +43,25 @@ data class FilterRule(
 
 /**
  * [packageName] を転送対象から除外するようフィルタルール一覧を更新する（muteApp コマンド、§7）。
- * 既存ルールがあれば action を EXCLUDE へ差し替え、無ければ EXCLUDE ルールを追加する。
- * 既に除外済みなら変更せず同じインスタンスを返す（不要な保存を避けられるよう参照同一性で示す）。
+ * 既存ルールがあれば action を EXCLUDE へ差し替え（優先度上書き・伏せ字は保つ）、無ければ EXCLUDE ルールを
+ * 追加する。既に除外済みなら変更せず同じインスタンスを返す（不要な保存を避けられるよう参照同一性で示す）。
  */
-fun mutePackage(rules: List<FilterRule>, packageName: String): List<FilterRule> {
-    val existing = rules.firstOrNull { it.packageName == packageName }
-    return when {
-        existing == null -> rules + FilterRule(packageName, RuleAction.EXCLUDE)
-        existing.action == RuleAction.EXCLUDE -> rules
-        else -> rules.map {
-            if (it.packageName == packageName) it.copy(action = RuleAction.EXCLUDE) else it
-        }
-    }
-}
+fun mutePackage(rules: List<FilterRule>, packageName: String): List<FilterRule> =
+    setPackageForwarded(rules, packageName, forward = false, FilterMode.DENYLIST, isSystemPackage = false)
 
 /**
- * [packageName] の除外（EXCLUDE）ルールを取り除いて転送対象へ戻す（unmuteApp コマンド、§7）。
- * 除外ルールが無ければ変更せず同じインスタンスを返す（不要な保存を避けられるよう参照同一性で示す）。
- * INCLUDE ルール（システム暗黙除外からの復帰指定）には触れない。
+ * [packageName] を denylist の除外から転送対象へ戻す（unmuteApp コマンド、§7）。
+ * 除外ルールに優先度上書き・伏せ字が設定されていれば、その設定を保つため action だけを INCLUDE へ戻す。
+ * どちらも無ければ除外ルール自体を取り除く。除外ルールが無ければ変更せず同じインスタンスを返す
+ * （不要な保存を避けられるよう参照同一性で示す）。INCLUDE ルールには触れない。
  */
 fun unmutePackage(rules: List<FilterRule>, packageName: String): List<FilterRule> {
-    val existing = rules.firstOrNull { it.packageName == packageName }
-    return if (existing != null && existing.action == RuleAction.EXCLUDE) {
-        rules.filterNot { it === existing }
+    val existing = rules.firstOrNull { it.packageName == packageName && it.action == RuleAction.EXCLUDE }
+        ?: return rules
+    return if (existing.priorityOverride != null || existing.redact) {
+        rules.map { if (it === existing) it.copy(action = RuleAction.INCLUDE) else it }
     } else {
-        rules
+        rules.filterNot { it === existing }
     }
 }
 

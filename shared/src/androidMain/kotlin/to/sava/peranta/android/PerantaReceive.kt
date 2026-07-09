@@ -27,6 +27,7 @@ import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineItem
+import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.TimelineActions
 
 /** イベントに詰める固定 topic ラベル。エンドポイント URL は秘匿するため運搬に含めない（§16）。 */
@@ -178,16 +179,46 @@ object PerantaReceive {
     /**
      * タイムライン UI 用の操作束を作る（§10.1）。アクション発火・非表示は送信元へ一点指定、
      * 「消す」は既読同期のため全端末へブロードキャストしつつ、表示済みローカル通知も取り下げる。
+     * mute はアプリフィルタ画面（§10.4-1）と同じ経路（[appFilterController]）でローカルミラーへも反映する。
      */
     fun timelineActions(context: Context): TimelineActions {
         val appContext = context.applicationContext
+        val filterController = appFilterController(appContext)
         return TimelineActions(
             invokeAction = { payload, index ->
                 launchCommand(appContext) { it.invokeAction(payload.from, payload.notificationKey, index) }
             },
             dismiss = { item -> dismissFromTimeline(appContext, item) },
             muteApp = { payload ->
-                launchCommand(appContext) { it.muteApp(payload.from, payload.packageName) }
+                filterController.setMirroredMute(payload.packageName, payload.from, mute = true)
+            },
+        )
+    }
+
+    /**
+     * 受信専用端末のアプリフィルタ画面（§10.4-1）向けコントローラを組む。
+     * チェック操作は自端末のローカルミラー（filterRules）へ反映すると同時に、送信元スマホへ
+     * mute/unmute コマンドを送る。宛先はタイムライン履歴に記録された送信元 deviceId を使う。
+     */
+    fun appFilterController(context: Context): AppFilterController {
+        val appContext = context.applicationContext
+        return AppFilterController(
+            repository = androidConfigRepository(appContext),
+            commandScope = commandScope,
+            sendMuteCommand = { packageName, senderDeviceId, mute ->
+                try {
+                    commandSender(appContext)?.let { sender ->
+                        if (mute) {
+                            sender.muteApp(senderDeviceId, packageName)
+                        } else {
+                            sender.unmuteApp(senderDeviceId, packageName)
+                        }
+                    }
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (error: Exception) {
+                    log.w(error) { "failed to send mute command for $packageName" }
+                }
             },
         )
     }

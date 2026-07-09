@@ -18,10 +18,13 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import to.sava.peranta.android.AndroidInstalledAppsProvider
 import to.sava.peranta.android.PerantaReceive
 import to.sava.peranta.android.PerantaUnifiedPush
 import to.sava.peranta.android.androidConfigRepository
 import to.sava.peranta.pairing.PairingImportController
+import to.sava.peranta.ui.AppFilterController
+import to.sava.peranta.ui.AppFilterScreen
 import to.sava.peranta.ui.PairingScanScreen
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.update.AndroidUpdater
@@ -36,12 +39,13 @@ private const val CAMERA_DENIED_MESSAGE =
 
 /**
  * MainActivity が表示する画面（§10）。
- * [Main] はロール（受信/送信）に応じて本体を出し、[Pairing] は QR 取り込み画面を出す。
- * アプリフィルタ（§10.4）・健康診断（§10.5）の画面は後続フェーズでここへ加える。
+ * [Main] はロール（受信/送信）に応じて本体を出し、[Pairing] は QR 取り込み画面、
+ * [AppFilter] はアプリフィルタ画面（§10.4）を出す。健康診断（§10.5）の画面は後続フェーズでここへ加える。
  */
 private sealed interface Screen {
     data object Main : Screen
     data object Pairing : Screen
+    data object AppFilter : Screen
 }
 
 class MainActivity : ComponentActivity() {
@@ -117,6 +121,7 @@ class MainActivity : ComponentActivity() {
                         onInstallUpdate = { url -> updater.install(url) },
                         receiveEndpoint = config.unifiedPushEndpoint,
                         onOpenPairing = { screen = Screen.Pairing },
+                        onOpenAppFilter = { screen = Screen.AppFilter },
                         timelineActions = PerantaReceive.timelineActions(this@MainActivity),
                     )
                 } else {
@@ -125,7 +130,24 @@ class MainActivity : ComponentActivity() {
                         updateController = updater.controller,
                         onInstallUpdate = { url -> updater.install(url) },
                         onOpenPairing = { screen = Screen.Pairing },
+                        onOpenAppFilter = { screen = Screen.AppFilter },
                     )
+                }
+
+                Screen.AppFilter -> PerantaTheme {
+                    if (receiveRole) {
+                        AppFilterScreen(
+                            controller = PerantaReceive.appFilterController(this@MainActivity),
+                            items = PerantaReceive.items,
+                            onBack = { screen = Screen.Main },
+                        )
+                    } else {
+                        AppFilterScreen(
+                            controller = AppFilterController(androidConfigRepository()),
+                            installedAppsProvider = AndroidInstalledAppsProvider(this@MainActivity),
+                            onBack = { screen = Screen.Main },
+                        )
+                    }
                 }
             }
         }

@@ -33,6 +33,7 @@ fun App(
     receiveEndpoint: String? = null,
     onOpenSettings: (() -> Unit)? = null,
     onOpenPairing: (() -> Unit)? = null,
+    onOpenAppFilter: (() -> Unit)? = null,
     timelineActions: TimelineActions? = null,
 ) {
     PerantaTheme {
@@ -40,7 +41,7 @@ fun App(
             if (updateController != null && onInstallUpdate != null) {
                 UpdateBanner(updateController, onInstallUpdate)
             }
-            if (receiveEndpoint != null || onOpenSettings != null || onOpenPairing != null) {
+            if (receiveEndpoint != null || onOpenSettings != null || onOpenPairing != null || onOpenAppFilter != null) {
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -52,6 +53,9 @@ fun App(
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.weight(1f),
                         )
+                        if (onOpenAppFilter != null) {
+                            TextButton(onClick = onOpenAppFilter) { Text(text = "アプリフィルタ") }
+                        }
                         if (onOpenPairing != null) {
                             TextButton(onClick = onOpenPairing) { Text(text = "QR で設定を取り込む") }
                         }
@@ -94,6 +98,7 @@ fun SendRoleApp(
     updateController: UpdateController? = null,
     onInstallUpdate: ((String) -> Unit)? = null,
     onOpenPairing: (() -> Unit)? = null,
+    onOpenAppFilter: (() -> Unit)? = null,
 ) {
     PerantaTheme {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -111,6 +116,9 @@ fun SendRoleApp(
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.weight(1f),
                     )
+                    if (onOpenAppFilter != null) {
+                        TextButton(onClick = onOpenAppFilter) { Text(text = "アプリフィルタ") }
+                    }
                     if (onOpenPairing != null) {
                         TextButton(onClick = onOpenPairing) { Text(text = "QR で設定を取り込む") }
                     }

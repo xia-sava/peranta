@@ -23,6 +23,7 @@ import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import to.sava.peranta.pairing.pairingQrMatrix
 import to.sava.peranta.platform.initLogging
+import to.sava.peranta.ui.AppFilterScreen
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.SettingsScreen
 import to.sava.peranta.update.DesktopUpdater
@@ -84,6 +85,7 @@ fun main() {
     val receiver = if (config.isReadyForReceive) {
         DesktopReceiver(
             config,
+            repository = desktopSettings.repository,
             onToastClicked = { mainWindow.get()?.let(::bringWindowToFront) },
         )
     } else {
@@ -101,6 +103,7 @@ fun main() {
         }
 
         var showSettings by remember { mutableStateOf(receiver == null) }
+        var showAppFilter by remember { mutableStateOf(false) }
 
         Tray(
             icon = perantaIcon,
@@ -147,12 +150,20 @@ fun main() {
                         devMode = desktopSettings.devMode,
                     )
                 }
+                showAppFilter && receiver != null -> PerantaTheme {
+                    AppFilterScreen(
+                        controller = receiver.appFilterController(),
+                        items = receiver.items,
+                        onBack = { showAppFilter = false },
+                    )
+                }
                 errorMessage != null -> App(errorMessage!!)
                 receiver != null -> App(
                     items = receiver.items,
                     updateController = updater.controller,
                     onInstallUpdate = { url -> updater.install(url) },
                     onOpenSettings = { showSettings = true },
+                    onOpenAppFilter = { showAppFilter = true },
                     timelineActions = receiver.timelineActions(),
                 )
                 else -> App()

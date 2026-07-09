@@ -38,6 +38,7 @@ import to.sava.peranta.toast.ToastResult
 import to.sava.peranta.toast.Toaster
 import to.sava.peranta.toast.createDesktopToaster
 import to.sava.peranta.toast.toastContentFor
+import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.TimelineActions
 import kotlin.io.encoding.Base64
 
@@ -68,16 +69,20 @@ class DesktopSettings(
     settings: Settings = Settings(),
     val devMode: Boolean = isDevMode(),
 ) {
+    /** 設定ストアに紐づくリポジトリ。設定画面・アプリフィルタ画面の永続化で共有する。 */
+    val repository: ConfigRepository = ConfigRepository(settings)
     val config: PerantaConfig = loadDesktopConfig(settings, devMode)
-    val controller: SettingsController = SettingsController(ConfigRepository(settings))
+    val controller: SettingsController = SettingsController(repository)
 }
 
 /**
  * Desktop 受信の中核を組み立てる。設定が揃っている（[PerantaConfig.isReadyForReceive]）
  * 前提で生成すること。受信通知は Windows トーストにも表示する（[toaster]）。
+ * [repository] はアプリフィルタ画面（§10.4-1）のローカルミラー永続化と共有する設定リポジトリ。
  */
 class DesktopReceiver(
     val config: PerantaConfig,
+    private val repository: ConfigRepository,
     private val toaster: Toaster = createDesktopToaster(),
     private val onToastClicked: () -> Unit = {},
     private val log: Logger = Logger.withTag("DesktopReceiver"),
@@ -183,6 +188,7 @@ class DesktopReceiver(
     /**
      * タイムライン UI 用の操作束を作る（§10.1）。アクション発火・非表示は送信元へ一点指定、
      * 「消す」は既読同期のため全端末へブロードキャストしつつ、表示済みトーストも取り下げる。
+     * mute はアプリフィルタ画面（§10.4-1）と同じ経路（[appFilterController]）でローカルミラーへも反映する。
      */
     fun timelineActions(): TimelineActions = TimelineActions(
         invokeAction = { payload, index ->
@@ -192,7 +198,30 @@ class DesktopReceiver(
         },
         dismiss = { item -> dismissFromTimeline(item) },
         muteApp = { payload ->
-            toastScope.launch { commandSender.muteApp(payload.from, payload.packageName) }
+            appFilterController().setMirroredMute(payload.packageName, payload.from, mute = true)
+        },
+    )
+
+    /**
+     * 受信専用端末のアプリフィルタ画面（§10.4-1）向けコントローラを組む。
+     * チェック操作は [repository] のローカルミラー（filterRules）へ反映すると同時に、送信元スマホへ
+     * mute/unmute コマンドを送る。宛先はタイムライン履歴に記録された送信元 deviceId を使う。
+     */
+    fun appFilterController(): AppFilterController = AppFilterController(
+        repository = repository,
+        commandScope = toastScope,
+        sendMuteCommand = { packageName, senderDeviceId, mute ->
+            try {
+                if (mute) {
+                    commandSender.muteApp(senderDeviceId, packageName)
+                } else {
+                    commandSender.unmuteApp(senderDeviceId, packageName)
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                log.w(error) { "failed to send mute command for $packageName" }
+            }
         },
     )
 
