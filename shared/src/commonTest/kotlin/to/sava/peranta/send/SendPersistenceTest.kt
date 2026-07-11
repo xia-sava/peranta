@@ -2,7 +2,11 @@ package to.sava.peranta.send
 
 import to.sava.peranta.filter.SENSITIVE_HISTORY_PLACEHOLDER
 import to.sava.peranta.filter.payloadForPersistence
+import to.sava.peranta.model.AttachmentKind
+import to.sava.peranta.model.AttachmentRef
+import to.sava.peranta.model.BlobEnc
 import to.sava.peranta.model.BROADCAST_TARGET
+import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
@@ -10,6 +14,7 @@ import to.sava.peranta.net.NtfyPublishException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class SendPersistenceTest {
@@ -36,6 +41,49 @@ class SendPersistenceTest {
         text = text,
         postedAtEpochMillis = 1000,
     )
+
+    private fun filePayload(caption: String?) = FilePayload(
+        id = "f1",
+        from = "phone",
+        to = BROADCAST_TARGET,
+        sentAtEpochMillis = 1000,
+        caption = caption,
+        attachments = listOf(
+            AttachmentRef(
+                blobId = "blob-1",
+                url = "https://ntfy.example/file/blob-1",
+                fileName = "receipt.jpg",
+                mimeType = "image/jpeg",
+                sizeBytes = 2048,
+                kind = AttachmentKind.IMAGE,
+                enc = BlobEnc(keyId = "k1", saltBase64 = "c2FsdA==", chunkSize = 1024, totalChunks = 2),
+            ),
+        ),
+        postedAtEpochMillis = 1000,
+    )
+
+    /** keepSensitive=false のときファイル転送のキャプションは伏せ、添付メタ・ファイル名は残す。 */
+    @Test
+    fun fileCaptionIsMaskedButAttachmentsKept() {
+        val stored = payloadForPersistence(filePayload("領収書 12,800 円"), keepSensitive = false) as FilePayload
+        assertEquals(SENSITIVE_HISTORY_PLACEHOLDER, stored.caption)
+        assertEquals("receipt.jpg", stored.attachments.single().fileName)
+        assertEquals("blob-1", stored.attachments.single().blobId)
+    }
+
+    /** keepSensitive=true ならファイル転送のキャプションもそのまま保存する。 */
+    @Test
+    fun fileCaptionKeptWhenSensitiveOptIn() {
+        val payload = filePayload("領収書 12,800 円")
+        assertEquals(payload, payloadForPersistence(payload, keepSensitive = true))
+    }
+
+    /** キャプションが無いファイル転送は同一インスタンスをそのまま返す（伏せる対象が無い）。 */
+    @Test
+    fun fileWithoutCaptionReturnsSameInstance() {
+        val payload = filePayload(caption = null)
+        assertSame(payload, payloadForPersistence(payload, keepSensitive = false))
+    }
 
     /** keepSensitive=true なら OTP 通知も SMS もそのまま保存する。 */
     @Test

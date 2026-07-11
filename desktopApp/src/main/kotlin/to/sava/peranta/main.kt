@@ -198,6 +198,7 @@ fun main(args: Array<String>) {
                     onOpenAppFilter = { showAppFilter = true },
                     onOpenHealthCheck = { showHealthCheck = true },
                     timelineActions = receiver.timelineActions(),
+                    attachmentUi = receiver.attachmentUi(),
                 )
                 else -> App()
             }

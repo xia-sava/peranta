@@ -17,6 +17,17 @@ object JvmPaths {
         File(appDir, "logs").also { it.mkdirs() }
     }
 
+    /**
+     * 復号済み添付のキャッシュディレクトリ（%LOCALAPPDATA%\Peranta\attachments、§4.3）。
+     * ローミングを避けるため設定・ログ（%APPDATA%）とは別に LOCALAPPDATA 配下へ置く。
+     */
+    val attachmentsDir: File by lazy {
+        val base = System.getenv("LOCALAPPDATA")
+            ?: System.getenv("APPDATA")
+            ?: System.getProperty("user.home")
+        File(File(base, "Peranta"), "attachments").also { it.mkdirs() }
+    }
+
     /** タイムライン JSONL ファイルのパス。 */
     val timelineFile: File
         get() = File(appDir, "timeline.jsonl")

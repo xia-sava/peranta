@@ -4,9 +4,13 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.crypto.generateKey
+import to.sava.peranta.model.AttachmentKind
+import to.sava.peranta.model.AttachmentRef
+import to.sava.peranta.model.BlobEnc
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.Envelope
+import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.PresencePayload
@@ -17,6 +21,7 @@ import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.FakeTimelineFile
 import to.sava.peranta.timeline.JsonlTimelineStore
+import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.timeline.TimelineStore
@@ -156,6 +161,48 @@ class ReceivePipelineTest {
         val ntfy = FakeNtfyClient(flowOf(eventFor(notification())))
         val p = ReceivePipeline(ntfy, cipher, store, deviceName, now = { now })
         p.start("my-topic")
+        assertEquals(1, p.items.value.size)
+    }
+
+    private fun filePayload(id: String = "f1", to: String = "*"): FilePayload = FilePayload(
+        id = id,
+        from = "phone",
+        to = to,
+        sentAtEpochMillis = now - 100,
+        caption = "写真です",
+        attachments = listOf(
+            AttachmentRef(
+                blobId = "blob-1",
+                url = "https://peranta.sava.to/file/abc",
+                fileName = "photo.jpg",
+                mimeType = "image/jpeg",
+                sizeBytes = 2048,
+                kind = AttachmentKind.IMAGE,
+                enc = BlobEnc(keyId = "k1", saltBase64 = "AAAAAAAAAAAAAAAAAAAAAA==", chunkSize = 1_048_576, totalChunks = 1),
+            ),
+        ),
+        postedAtEpochMillis = now - 100,
+    )
+
+    /** 自分宛の FilePayload は ReceivedFile として追加され、添付参照を保持する（自動 DL しない）。 */
+    @Test
+    fun filePayloadIsAppendedAsReceivedFile() = runTest {
+        val store = store()
+        val p = pipeline(store)
+        p.handleEvent(eventFor(filePayload()))
+        val received = p.items.value.single() as ReceivedFile
+        assertEquals("f1", received.id)
+        assertEquals(1, received.payload.attachments.size)
+        assertEquals("photo.jpg", received.payload.attachments.single().fileName)
+        assertEquals(listOf("f1"), store.loadAll().map { it.id })
+    }
+
+    /** 同一 id の FilePayload は重複排除される。 */
+    @Test
+    fun duplicateFilePayloadIsDeduped() = runTest {
+        val p = pipeline()
+        p.handleEvent(eventFor(filePayload()))
+        p.handleEvent(eventFor(filePayload()))
         assertEquals(1, p.items.value.size)
     }
 

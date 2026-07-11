@@ -24,7 +24,7 @@ class BlobTransportContractTest {
             channel.writeByteArray(body)
         }
         assertEquals(9_000, uploaded.blobExpiresAtEpochMillis)
-        val downloaded = transport.download(uploaded.url).readRemaining().readByteArray()
+        val downloaded = transport.download(uploaded.url, "blob-1").readRemaining().readByteArray()
         assertContentEquals(body, downloaded)
     }
 
@@ -46,7 +46,7 @@ class BlobTransportContractTest {
     fun downloadUnknownUrlFails() = runTest {
         val transport = FakeBlobTransport()
         assertFailsWith<IllegalStateException> {
-            transport.download("https://blob.invalid/file/nope").readRemaining().readByteArray()
+            transport.download("https://blob.invalid/file/nope", "nope").readRemaining().readByteArray()
         }
     }
 
@@ -72,7 +72,7 @@ class BlobTransportContractTest {
         }
 
         val receiver = BlobCipher(sharedKey, "k1")
-        val body = transport.download(uploaded.url).readRemaining().readByteArray()
+        val body = transport.download(uploaded.url, "blob-e2e").readRemaining().readByteArray()
         val roundTripped = drainToBytes { output ->
             receiver.decrypt("blob-e2e", blobEnc, plain.size.toLong(), ByteReadChannel(body), output)
         }

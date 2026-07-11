@@ -1,11 +1,16 @@
 package to.sava.peranta.toast
 
+import to.sava.peranta.model.AttachmentKind
+import to.sava.peranta.model.AttachmentRef
+import to.sava.peranta.model.BlobEnc
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
+import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
+import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedNotification
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -120,6 +125,50 @@ class ToastContentTest {
             ),
         )
         assertNull(toastContentFor(item))
+    }
+
+    private fun attachment(fileName: String) = AttachmentRef(
+        blobId = "blob-$fileName",
+        url = "https://ntfy.example/file/blob",
+        fileName = fileName,
+        mimeType = "image/jpeg",
+        sizeBytes = 2048,
+        kind = AttachmentKind.IMAGE,
+        enc = BlobEnc(keyId = "k1", saltBase64 = "c2FsdA==", chunkSize = 1024, totalChunks = 2),
+    )
+
+    private fun receivedFile(vararg fileNames: String) = ReceivedFile(
+        id = "rf1",
+        timestampEpochMillis = 1_000,
+        payload = FilePayload(
+            id = "rf1",
+            from = "phone",
+            to = "*",
+            sentAtEpochMillis = 900,
+            attachments = fileNames.map { attachment(it) },
+            postedAtEpochMillis = 900,
+        ),
+    )
+
+    /** 単一ファイルの受信は見出しとファイル名のトーストになる。 */
+    @Test
+    fun receivedFileShowsFileName() {
+        assertEquals(
+            ReceivedNotificationToast(id = "rf1", title = "ファイルを受信しました", body = "photo.jpg"),
+            toastContentFor(receivedFile("photo.jpg")),
+        )
+    }
+
+    /** 複数ファイルは先頭名と残り件数を本文に載せる。 */
+    @Test
+    fun receivedMultipleFilesSummarizesCount() {
+        assertEquals("photo.jpg ほか 2 件", toastContentFor(receivedFile("photo.jpg", "a.png", "b.pdf")).body)
+    }
+
+    /** ファイル名が空なら代替表示にフォールバックする。 */
+    @Test
+    fun receivedFileFallsBackWhenNameBlank() {
+        assertEquals("ファイル", toastContentFor(receivedFile("")).body)
     }
 
     /** エラーアイテムは受信エラー見出しとメッセージ本文のトーストになる。 */

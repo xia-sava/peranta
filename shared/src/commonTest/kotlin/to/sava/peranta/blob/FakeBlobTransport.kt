@@ -30,7 +30,7 @@ class FakeBlobTransport(
         return UploadedBlob(url = url, blobExpiresAtEpochMillis = blobExpiresAtEpochMillis)
     }
 
-    override suspend fun download(url: String): ByteReadChannel {
+    override suspend fun download(url: String, blobId: String): ByteReadChannel {
         val body = stored[url] ?: throw IllegalStateException("no blob stored at $url")
         return ByteReadChannel(body)
     }

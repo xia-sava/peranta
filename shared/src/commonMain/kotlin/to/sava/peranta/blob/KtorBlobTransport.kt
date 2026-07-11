@@ -69,7 +69,7 @@ class KtorBlobTransport(
         )
     }
 
-    override suspend fun download(url: String): ByteReadChannel {
+    override suspend fun download(url: String, blobId: String): ByteReadChannel {
         val requestHost = Url(url).host
         if (!requestHost.equals(config.host, ignoreCase = true)) {
             throw BlobTransportException(
@@ -83,7 +83,7 @@ class KtorBlobTransport(
         if (!response.status.isSuccess()) {
             throw BlobTransportException(response.status.value, "blob download failed: ${response.status}")
         }
-        log.d { "downloading blob from $url" }
+        log.d { "downloading blob blobId=$blobId" }
         return response.bodyAsChannel()
     }
 

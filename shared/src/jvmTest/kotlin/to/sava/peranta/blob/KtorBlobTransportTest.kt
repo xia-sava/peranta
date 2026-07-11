@@ -93,7 +93,7 @@ class KtorBlobTransportTest {
         val transport = transportFor(captured = captured) {
             respond(content = body, status = HttpStatusCode.OK)
         }
-        val downloaded = transport.download("http://localhost:8090/file/abc").readRemaining().readByteArray()
+        val downloaded = transport.download("http://localhost:8090/file/abc", "abc").readRemaining().readByteArray()
         assertContentEquals(body, downloaded)
 
         val request = captured.single()
@@ -108,7 +108,7 @@ class KtorBlobTransportTest {
             respond(content = "", status = HttpStatusCode.NotFound)
         }
         val error = assertFailsWith<BlobTransportException> {
-            transport.download("http://localhost:8090/file/missing")
+            transport.download("http://localhost:8090/file/missing", "missing")
         }
         assertEquals(404, error.status)
     }
@@ -121,7 +121,7 @@ class KtorBlobTransportTest {
             respond(content = "", status = HttpStatusCode.OK)
         }
         assertFailsWith<BlobTransportException> {
-            transport.download("http://evil.example.com:8090/file/abc")
+            transport.download("http://evil.example.com:8090/file/abc", "abc")
         }
         assertEquals(emptyList(), captured)
     }

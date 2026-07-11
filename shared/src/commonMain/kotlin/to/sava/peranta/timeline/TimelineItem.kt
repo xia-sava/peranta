@@ -2,6 +2,7 @@ package to.sava.peranta.timeline
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.Payload
 
 /**
@@ -27,6 +28,20 @@ data class ReceivedNotification(
     override val id: String,
     override val timestampEpochMillis: Long,
     val payload: Payload,
+    override val expiresAtEpochMillis: Long? = null,
+) : TimelineItem()
+
+/**
+ * 他端末から受信した画像・ファイルの転送（§4.3）。相手側の吹き出しとして扱う。
+ * 本体はまだダウンロードせず、[payload] の [FilePayload.attachments] 参照だけを保持する（判断4）。
+ * ダウンロード状態はキャッシュの有無と転送進捗から画面側が導出する。
+ */
+@Serializable
+@SerialName("receivedFile")
+data class ReceivedFile(
+    override val id: String,
+    override val timestampEpochMillis: Long,
+    val payload: FilePayload,
     override val expiresAtEpochMillis: Long? = null,
 ) : TimelineItem()
 

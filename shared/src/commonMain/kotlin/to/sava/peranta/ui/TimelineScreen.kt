@@ -37,7 +37,9 @@ import kotlinx.coroutines.flow.StateFlow
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.SmsPayload
+import to.sava.peranta.model.FilePayload
 import to.sava.peranta.timeline.ErrorItem
+import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.SentNotification
 import to.sava.peranta.timeline.TimelineItem
@@ -78,6 +80,7 @@ fun TimelineScreen(
     items: StateFlow<List<TimelineItem>>,
     modifier: Modifier = Modifier,
     actions: TimelineActions? = null,
+    attachments: AttachmentUi? = null,
 ) {
     val list by items.collectAsState()
     val locallyDismissed = remember { mutableStateListOf<String>() }
@@ -95,6 +98,7 @@ fun TimelineScreen(
                     TimelineRow(
                         item = item,
                         actions = actions,
+                        attachments = attachments,
                         onLocalDismiss = { locallyDismissed.add(item.id) },
                     )
                 }
@@ -114,13 +118,48 @@ private fun EmptyState() {
 }
 
 @Composable
-private fun TimelineRow(item: TimelineItem, actions: TimelineActions?, onLocalDismiss: () -> Unit) {
+private fun TimelineRow(
+    item: TimelineItem,
+    actions: TimelineActions?,
+    attachments: AttachmentUi?,
+    onLocalDismiss: () -> Unit,
+) {
     when (item) {
         is ReceivedNotification ->
             if (actions == null) ReceivedBubble(item) else InteractiveReceivedBubble(item, actions, onLocalDismiss)
 
+        is ReceivedFile -> ReceivedFileBubble(item, attachments)
         is SentNotification -> SentBubble(item)
         is ErrorItem -> ErrorBubble(item)
+    }
+}
+
+@Composable
+private fun ReceivedFileBubble(item: ReceivedFile, attachments: AttachmentUi?) {
+    Bubble(
+        alignment = Alignment.CenterStart,
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        time = item.timestampEpochMillis,
+    ) {
+        FilePayloadContent(item.payload, attachments)
+    }
+}
+
+@Composable
+private fun FilePayloadContent(payload: FilePayload, attachments: AttachmentUi?) {
+    payload.caption?.let {
+        Text(text = it, style = MaterialTheme.typography.bodyMedium)
+    }
+    payload.attachments.forEach { ref ->
+        if (attachments == null) {
+            Text(
+                text = "${ref.fileName} (${formatFileSize(ref.sizeBytes)})",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        } else {
+            AttachmentCard(ref, attachments)
+        }
     }
 }
 

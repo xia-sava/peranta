@@ -1,18 +1,32 @@
 package to.sava.peranta
 
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import co.touchlab.kermit.Logger
 import com.russhwolf.settings.Settings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.jetbrains.skia.Image as SkiaImage
+import to.sava.peranta.blob.DesktopAttachmentCache
+import to.sava.peranta.blob.KtorBlobTransport
+import to.sava.peranta.blob.TransferProgress
+import to.sava.peranta.blob.TransferState
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.isDevMode
 import to.sava.peranta.config.withDevOverrides
 import to.sava.peranta.crypto.MessageCipher
+import to.sava.peranta.model.AttachmentKind
+import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.nowEpochMillis
@@ -31,6 +45,7 @@ import to.sava.peranta.roster.buildPresencePayload
 import to.sava.peranta.roster.publishPresence
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.JsonlTimelineStore
+import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.timeline.defaultTimelineFile
@@ -39,7 +54,16 @@ import to.sava.peranta.toast.Toaster
 import to.sava.peranta.toast.createDesktopToaster
 import to.sava.peranta.toast.toastContentFor
 import to.sava.peranta.ui.AppFilterController
+import to.sava.peranta.ui.AttachmentDownloadState
+import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.TimelineActions
+import java.awt.Desktop
+import java.awt.FileDialog
+import java.awt.Frame
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.encoding.Base64
 
 /**
@@ -94,6 +118,17 @@ class DesktopReceiver(
     private val toastScope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val commandSender = CommandSender(config, cipher, ntfy, SendPipeline(cipher, ntfy, store))
 
+    private val attachmentCache = DesktopAttachmentCache(
+        transport = KtorBlobTransport(config, httpClient),
+        sharedKey = Base64.decode(config.sharedKeyBase64!!),
+        keyId = config.keyId!!,
+    )
+    private val attachmentStates = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+
+    // Compose UI スレッドと IO ディスパッチャの双方から並行アクセスされるためスレッドセーフにする。
+    private val downloadJobs = ConcurrentHashMap<String, Job>()
+    private val knownRefs = ConcurrentHashMap<String, AttachmentRef>()
+
     // 受信専用端末では dismiss のみ意味を持つ executor を注入する。他 command 種別は no-op（§3.4）。
     private val dismissExecutor = LocalDismissCommandExecutor(
         items = ::currentItems,
@@ -117,9 +152,29 @@ class DesktopReceiver(
     /** 起動時剪定と presence 告知を行い、受信 topic の購読を開始する。キャンセルまで戻らない。 */
     suspend fun run() {
         store.prune(now = nowEpochMillis())
+        runCatching { attachmentCache.prune() }
+            .onFailure { log.w(it) { "attachment cache prune failed" } }
         announcePresence()
+        toastScope.launch { primeCachedAttachmentStates() }
         log.i { "starting desktop receiver for device=${config.deviceName}" }
         pipeline.start(config.receiveTopic!!)
+    }
+
+    /**
+     * タイムラインに現れた受信ファイルのうち、既にキャッシュ済みの添付を「取得済み」状態に反映する（§4.3）。
+     * 履歴読み込み・新規受信の双方でカードを開く/保存できる状態にするため、items を購読して随時プライムする。
+     */
+    private suspend fun primeCachedAttachmentStates() {
+        pipeline.items.collect { items ->
+            items.filterIsInstance<ReceivedFile>().forEach { file ->
+                file.payload.attachments.forEach { ref ->
+                    knownRefs[ref.blobId] = ref
+                    if (attachmentStates.value[ref.blobId] == null) {
+                        attachmentCache.cachedFile(ref)?.let { markCached(ref) }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -152,6 +207,7 @@ class DesktopReceiver(
         when (item) {
             is ReceivedNotification -> toastScope.launch { showNotificationToast(item) }
             is ErrorItem -> toastScope.launch { showErrorToast(item) }
+            is ReceivedFile -> toastScope.launch { toaster.show(toastContentFor(item)) }
             else -> Unit
         }
     }
@@ -236,9 +292,133 @@ class DesktopReceiver(
         }
     }
 
+    /**
+     * タイムラインの添付カード用の操作束を作る（§4.3）。手動ダウンロード・キャンセル・開く・保存を配線し、
+     * 進捗は [attachmentStates] を通じて画面へ公開する。
+     */
+    fun attachmentUi(): AttachmentUi = AttachmentUi(
+        states = attachmentStates.asStateFlow(),
+        onDownload = { ref -> startDownload(ref) },
+        onCancel = { blobId -> cancelDownload(blobId) },
+        onOpen = { blobId -> openAttachment(blobId) },
+        onSave = { blobId -> saveAttachment(blobId) },
+    )
+
+    /** [ref] の添付を手動ダウンロードする。既に進行中なら二重起動しない。 */
+    private fun startDownload(ref: AttachmentRef) {
+        knownRefs[ref.blobId] = ref
+        if (downloadJobs[ref.blobId]?.isActive == true) return
+        attachmentStates.update { it + (ref.blobId to AttachmentDownloadState(progress = TransferProgress.running(ref.sizeBytes))) }
+        val job = toastScope.launch {
+            try {
+                attachmentCache.download(ref) { transferred ->
+                    attachmentStates.update {
+                        it + (ref.blobId to AttachmentDownloadState(
+                            progress = TransferProgress(transferred, ref.sizeBytes, TransferState.RUNNING),
+                        ))
+                    }
+                }
+                markCached(ref)
+                log.i { "attachment downloaded blobId=${ref.blobId}" }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                log.w(error) { "attachment download failed blobId=${ref.blobId}" }
+                attachmentStates.update {
+                    it + (ref.blobId to AttachmentDownloadState(
+                        progress = TransferProgress(0, ref.sizeBytes, TransferState.FAILED),
+                    ))
+                }
+            } finally {
+                downloadJobs.remove(ref.blobId)
+            }
+        }
+        downloadJobs[ref.blobId] = job
+    }
+
+    /** 進行中のダウンロードをキャンセルし、未取得状態へ戻す。 */
+    private fun cancelDownload(blobId: String) {
+        downloadJobs.remove(blobId)?.cancel()
+        attachmentStates.update {
+            it + (blobId to AttachmentDownloadState(
+                progress = TransferProgress(0, 0, TransferState.CANCELLED),
+            ))
+        }
+    }
+
+    /** ダウンロード済みの添付を「取得済み」状態にし、画像ならサムネイルを付ける。 */
+    private fun markCached(ref: AttachmentRef) {
+        val file = attachmentCache.cachedFile(ref) ?: return
+        val thumbnail = decodeThumbnail(ref, file)
+        attachmentStates.update {
+            it + (ref.blobId to AttachmentDownloadState(
+                progress = TransferProgress(ref.sizeBytes, ref.sizeBytes, TransferState.COMPLETED),
+                cached = true,
+                thumbnail = thumbnail,
+            ))
+        }
+    }
+
+    /** 画像添付を復号済みファイルからデコードしてサムネイルにする。失敗時は null（種別アイコンにフォールバック）。 */
+    private fun decodeThumbnail(ref: AttachmentRef, file: File): ImageBitmap? {
+        if (ref.kind != AttachmentKind.IMAGE) return null
+        if (file.length() > MAX_THUMBNAIL_DECODE_BYTES) return null
+        return try {
+            SkiaImage.makeFromEncoded(file.readBytes()).toComposeImageBitmap()
+        } catch (error: Exception) {
+            log.w(error) { "thumbnail decode failed blobId=${ref.blobId}" }
+            null
+        }
+    }
+
+    /** 復号済みファイルを OS 既定アプリで開く（§4.3）。 */
+    private fun openAttachment(blobId: String) {
+        val file = cachedFileFor(blobId) ?: return
+        if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
+            log.w { "Desktop open not supported" }
+            return
+        }
+        toastScope.launch {
+            try {
+                Desktop.getDesktop().open(file)
+            } catch (error: Exception) {
+                log.w(error) { "failed to open attachment blobId=$blobId" }
+            }
+        }
+    }
+
+    /** 復号済みファイルを保存ダイアログ経由で任意の場所へコピーする（§4.3）。 */
+    private fun saveAttachment(blobId: String) {
+        val source = cachedFileFor(blobId) ?: return
+        toastScope.launch {
+            val dialog = FileDialog(null as Frame?, "保存", FileDialog.SAVE).apply {
+                file = source.name
+                isVisible = true
+            }
+            val directory = dialog.directory ?: return@launch
+            val chosen = dialog.file ?: return@launch
+            try {
+                withContext(ioDispatcher) {
+                    Files.copy(source.toPath(), File(directory, chosen).toPath(), StandardCopyOption.REPLACE_EXISTING)
+                }
+                log.i { "attachment saved blobId=$blobId" }
+            } catch (error: Exception) {
+                log.w(error) { "failed to save attachment blobId=$blobId" }
+            }
+        }
+    }
+
+    private fun cachedFileFor(blobId: String): File? =
+        knownRefs[blobId]?.let { attachmentCache.cachedFile(it) }
+
     /** 保持するリソース（トーストコルーチンと HTTP クライアント）を閉じる。 */
     fun close() {
         toastScope.cancel()
         httpClient.close()
+    }
+
+    private companion object {
+        /** サムネイルデコードを試みる添付の上限バイト（巨大画像で OOM しないため）。 */
+        const val MAX_THUMBNAIL_DECODE_BYTES: Long = 25L * 1024 * 1024
     }
 }

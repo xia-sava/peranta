@@ -25,6 +25,7 @@ import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyEvent
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
+import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.timeline.TimelineStore
@@ -139,6 +140,14 @@ class ReceivePipeline(
                 appendReceived(payload)
             }
 
+            is FilePayload -> {
+                if (!rememberId(payload.id)) {
+                    log.d { "dropping duplicate payload id=${payload.id}" }
+                    return
+                }
+                appendReceivedFile(payload)
+            }
+
             is CommandPayload -> executeCommand(payload)
 
             else -> log.d { "ignoring payload id=${payload.id} type=${payload::class.simpleName} (not displayed)" }
@@ -239,12 +248,36 @@ class ReceivePipeline(
     }
 
     /**
+     * 受信した画像・ファイル転送（§4.3）をタイムラインへ [ReceivedFile] として追記する。
+     * 受信時点では本体をダウンロードせず、参照だけを載せる（判断4）。
+     */
+    private suspend fun appendReceivedFile(payload: FilePayload) {
+        val displayItem = ReceivedFile(
+            id = payload.id,
+            timestampEpochMillis = now(),
+            payload = payload,
+            expiresAtEpochMillis = payload.expiresAtEpochMillis,
+        )
+        record(displayItem = displayItem, persistItem = persistFileItemFor(displayItem, payload))
+        log.i { "received file appended id=${payload.id} attachments=${payload.attachments.size}" }
+    }
+
+    /**
      * 保存用アイテムを組む。[persistSensitiveHistory] が false なら本文を伏せる（§11）。
      * 伏せる必要が無ければ表示用アイテムをそのまま保存に使う。
      */
     private fun persistItemFor(displayItem: ReceivedNotification, payload: Payload): ReceivedNotification {
         val redacted = payloadForPersistence(payload, persistSensitiveHistory)
         return if (redacted === payload) displayItem else displayItem.copy(payload = redacted)
+    }
+
+    /**
+     * ファイル転送の保存用アイテムを組む。[persistSensitiveHistory] が false ならキャプションを伏せる（§11）。
+     * 添付メタ・ファイル名はダウンロードに要るため保持する。伏せる必要が無ければ表示用をそのまま保存に使う。
+     */
+    private fun persistFileItemFor(displayItem: ReceivedFile, payload: FilePayload): ReceivedFile {
+        val redacted = payloadForPersistence(payload, persistSensitiveHistory)
+        return if (redacted === payload) displayItem else displayItem.copy(payload = redacted as FilePayload)
     }
 
     private suspend fun recordError(

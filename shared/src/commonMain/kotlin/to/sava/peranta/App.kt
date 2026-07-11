@@ -18,6 +18,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.StateFlow
 import to.sava.peranta.timeline.TimelineItem
+import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.TimelineActions
 import to.sava.peranta.ui.TimelineScreen
@@ -36,6 +37,7 @@ fun App(
     onOpenAppFilter: (() -> Unit)? = null,
     onOpenHealthCheck: (() -> Unit)? = null,
     timelineActions: TimelineActions? = null,
+    attachmentUi: AttachmentUi? = null,
 ) {
     PerantaTheme {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -72,7 +74,7 @@ fun App(
                 }
             }
             Box(modifier = Modifier.weight(1f)) {
-                TimelineScreen(items, actions = timelineActions)
+                TimelineScreen(items, actions = timelineActions, attachments = attachmentUi)
             }
         }
     }

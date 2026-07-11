@@ -1,7 +1,9 @@
 package to.sava.peranta
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -21,6 +23,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import to.sava.peranta.android.AndroidHealthChecker
 import to.sava.peranta.android.AndroidInstalledAppsProvider
+import to.sava.peranta.android.AttachmentTransferService
 import to.sava.peranta.android.PerantaReceive
 import to.sava.peranta.android.PerantaUnifiedPush
 import to.sava.peranta.android.androidConfigRepository
@@ -31,6 +34,7 @@ import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.healthCheckNeedsAttention
 import to.sava.peranta.ui.PairingScanScreen
 import to.sava.peranta.ui.PerantaTheme
+import to.sava.peranta.ui.ShareScreen
 import to.sava.peranta.update.AndroidUpdater
 
 /** 通知権限が拒否されたときにタイムラインへ出す文言（§10.5）。 */
@@ -51,6 +55,7 @@ private sealed interface Screen {
     data object Pairing : Screen
     data object AppFilter : Screen
     data object HealthCheck : Screen
+    data class Share(val images: List<Uri>) : Screen
 }
 
 class MainActivity : ComponentActivity() {
@@ -109,10 +114,17 @@ class MainActivity : ComponentActivity() {
         }
 
         val healthChecker = AndroidHealthChecker(this)
+        val sharedImages = extractSharedImages(intent)
 
         setContent {
             var screen: Screen by remember {
-                mutableStateOf(if (config.hasSharedKey) Screen.Main else Screen.Pairing)
+                mutableStateOf(
+                    when {
+                        sharedImages.isNotEmpty() && config.hasSharedKey -> Screen.Share(sharedImages)
+                        config.hasSharedKey -> Screen.Main
+                        else -> Screen.Pairing
+                    },
+                )
             }
 
             // 起動時にペアリング済みなら健康診断を実行し、対処の要る未達があれば診断画面へ誘導する（§10.5）。
@@ -183,8 +195,39 @@ class MainActivity : ComponentActivity() {
                         externalRefreshKey = resumeTick,
                     )
                 }
+
+                is Screen.Share -> PerantaTheme {
+                    val images = (screen as Screen.Share).images
+                    ShareScreen(
+                        imageCount = images.size,
+                        onSend = { caption ->
+                            AttachmentTransferService.enqueueUpload(this@MainActivity, images, caption)
+                            finish()
+                        },
+                        onCancel = { finish() },
+                    )
+                }
             }
         }
+    }
+
+    /** 共有シート（ACTION_SEND）で渡された画像 Uri を取り出す。単数/複数の両方に対応する。 */
+    private fun extractSharedImages(intent: Intent?): List<Uri> {
+        if (intent?.action != Intent.ACTION_SEND && intent?.action != Intent.ACTION_SEND_MULTIPLE) return emptyList()
+        val single = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }
+        single?.let { return listOf(it) }
+        val multiple = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+        }
+        return multiple.orEmpty()
     }
 
     override fun onResume() {

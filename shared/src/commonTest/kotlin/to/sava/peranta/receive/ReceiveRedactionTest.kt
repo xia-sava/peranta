@@ -4,6 +4,10 @@ import kotlinx.coroutines.test.runTest
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.crypto.generateKey
 import to.sava.peranta.filter.SENSITIVE_HISTORY_PLACEHOLDER
+import to.sava.peranta.model.AttachmentKind
+import to.sava.peranta.model.AttachmentRef
+import to.sava.peranta.model.BlobEnc
+import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.encodeEnvelope
@@ -11,6 +15,7 @@ import to.sava.peranta.net.FakeNtfyClient
 import to.sava.peranta.net.NtfyEvent
 import to.sava.peranta.timeline.FakeTimelineFile
 import to.sava.peranta.timeline.JsonlTimelineStore
+import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineStore
 import kotlin.test.Test
@@ -45,6 +50,26 @@ class ReceiveRedactionTest {
         notificationKey = "0|com.example.bank|1|null|10",
         postedAtEpochMillis = now - 100,
         expiresAtEpochMillis = expiresAt,
+    )
+
+    private fun filePayload(caption: String?, id: String = "f1"): FilePayload = FilePayload(
+        id = id,
+        from = "phone",
+        to = "*",
+        sentAtEpochMillis = now - 100,
+        caption = caption,
+        attachments = listOf(
+            AttachmentRef(
+                blobId = "blob-1",
+                url = "https://ntfy.example/file/blob-1",
+                fileName = "receipt.jpg",
+                mimeType = "image/jpeg",
+                sizeBytes = 2048,
+                kind = AttachmentKind.IMAGE,
+                enc = BlobEnc(keyId = "k1", saltBase64 = "c2FsdA==", chunkSize = 1024, totalChunks = 2),
+            ),
+        ),
+        postedAtEpochMillis = now - 100,
     )
 
     private suspend fun eventFor(payload: Payload): NtfyEvent =
@@ -95,6 +120,33 @@ class ReceiveRedactionTest {
         pipeline.handleEvent(eventFor(otp()))
 
         assertEquals("コードは 123456 です", seenText)
+    }
+
+    /** 既定（非永続）では、受信ファイルのキャプションは永続だけ伏せ、表示・添付メタは保つ。 */
+    @Test
+    fun fileCaptionRedactedInStoreButKeptInDisplay() = runTest {
+        val store = store()
+        val pipeline = pipeline(store, persistSensitive = false)
+
+        pipeline.handleEvent(eventFor(filePayload("領収書 12,800 円")))
+
+        val displayed = pipeline.items.value.single() as ReceivedFile
+        assertEquals("領収書 12,800 円", displayed.payload.caption)
+        val stored = store.loadAll().single() as ReceivedFile
+        assertEquals(SENSITIVE_HISTORY_PLACEHOLDER, stored.payload.caption)
+        assertEquals("receipt.jpg", stored.payload.attachments.single().fileName)
+    }
+
+    /** persistSensitiveHistory を有効にすると、受信ファイルのキャプションも永続に残る。 */
+    @Test
+    fun fileCaptionKeptWhenSensitiveOptIn() = runTest {
+        val store = store()
+        val pipeline = pipeline(store, persistSensitive = true)
+
+        pipeline.handleEvent(eventFor(filePayload("領収書 12,800 円")))
+
+        val stored = store.loadAll().single() as ReceivedFile
+        assertEquals("領収書 12,800 円", stored.payload.caption)
     }
 
     /** loadHistory は失効済みエントリを表示から除外するが、剪定するまでストアには残す。 */

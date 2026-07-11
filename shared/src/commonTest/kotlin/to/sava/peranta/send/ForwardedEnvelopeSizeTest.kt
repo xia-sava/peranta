@@ -1,6 +1,7 @@
 package to.sava.peranta.send
 
 import kotlinx.coroutines.test.runTest
+import to.sava.peranta.blob.normalizeAttachmentFileName
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.crypto.generateKey
 import to.sava.peranta.filter.FilterMode
@@ -112,10 +113,10 @@ class ForwardedEnvelopeSizeTest {
      * 一般的なファイルシステムの上限（255 バイト）近辺、mimeType は実在する長めの登録 MIME、
      * enc は BlobEnc の実フィールドを使う。
      */
-    private fun worstCaseAttachmentRef() = AttachmentRef(
+    private fun worstCaseAttachmentRef(fileName: String = normalizeAttachmentFileName("あ".repeat(83) + ".jpeg")) = AttachmentRef(
         blobId = "01234567-89ab-4cde-8fed-0123456789ab",
         url = "https://peranta.sava.to/file/${"a".repeat(24)}",
-        fileName = "あ".repeat(83) + ".jpeg",
+        fileName = fileName,
         mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         sizeBytes = 1_073_741_824,
         kind = AttachmentKind.IMAGE,
@@ -129,30 +130,35 @@ class ForwardedEnvelopeSizeTest {
     )
 
     /**
-     * 添付参照 1 件を伴う通知は、タイトル・本文を切り詰め予算（300/2000 バイト）いっぱいまで使うと、
-     * UnifiedPush の実質上限（4096 バイト）を超える。§4.3 の添付付き転送は UP 経路（Android タブレット）では
-     * 現行の切り詰め予算のみでは収まらず、AttachmentRef の圧縮や fileName のさらなる切り詰めなど、
-     * 別の予算設計が必要になる。
+     * ファイル名を無害化・長さ制限（[normalizeAttachmentFileName]）で切り詰めれば、長大なファイル名でも
+     * バイト予算を [MAX_ATTACHMENT_FILENAME_BYTES] に抑えられる。拡張子は保持する（§4.3 持ち越し事項）。
      */
     @Test
-    fun notificationWithAttachmentExceedsUnifiedPushLimit() = runTest {
-        val payload = NotificationPayload(
-            id = "id-1",
-            from = "phone",
-            to = "*",
-            sentAtEpochMillis = 1000,
-            packageName = "com.example.gallery",
-            appName = "Gallery",
-            title = truncateForForwarding("写真が届きました".repeat(50), MAX_FORWARDED_TITLE_BYTES),
-            text = truncateForForwarding("3 枚の画像を共有しました".repeat(200), MAX_FORWARDED_TEXT_BYTES),
-            notificationKey = "0|com.example.gallery|1|null|10",
-            postedAtEpochMillis = 900,
+    fun longFileNameIsTruncatedKeepingExtension() {
+        val truncated = normalizeAttachmentFileName("あ".repeat(83) + ".jpeg")
+        assertTrue(truncated.endsWith(".jpeg"))
+        assertTrue(
+            truncated.encodeToByteArray().size < ("あ".repeat(83) + ".jpeg").encodeToByteArray().size,
+            "file name was not truncated",
+        )
+    }
+
+    /**
+     * 共有画像（[FilePayload]）はキャプション + 添付参照 1 件でも、切り詰め済みファイル名を使えば
+     * UnifiedPush の実質上限（4096 バイト）に収まる。これが M9b で実際に配送する経路（§4.3）。
+     */
+    @Test
+    fun filePayloadWithAttachmentFitsWithinUnifiedPushLimit() = runTest {
+        val payload = buildFilePayload(
+            deviceId = "phone",
             attachments = listOf(worstCaseAttachmentRef()),
+            now = 2000,
+            caption = "写真を共有しました",
         )
         val size = encodeEnvelope(cipher().seal(payload)).encodeToByteArray().size
         assertTrue(
-            size > unifiedPushGuaranteedLimit,
-            "envelope with a single attachment was $size bytes; expected it to exceed the " +
+            size <= unifiedPushGuaranteedLimit,
+            "FilePayload envelope with a single attachment was $size bytes; expected it to fit within the " +
                 "UnifiedPush guaranteed limit of $unifiedPushGuaranteedLimit bytes",
         )
     }

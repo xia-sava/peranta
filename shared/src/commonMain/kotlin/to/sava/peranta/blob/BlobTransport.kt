@@ -26,8 +26,11 @@ interface BlobTransport {
         writeBody: suspend (ByteWriteChannel) -> Unit,
     ): UploadedBlob
 
-    /** [url] の blob をダウンロードし、本文チャンネルを返す。呼び出し側は速やかに消費する。 */
-    suspend fun download(url: String): ByteReadChannel
+    /**
+     * [url] の blob をダウンロードし、本文チャンネルを返す。呼び出し側は速やかに消費する。
+     * [blobId] はログ・相関用（URL を出さないため。§16）。取得先の判定には [url] のみを使う。
+     */
+    suspend fun download(url: String, blobId: String): ByteReadChannel
 }
 
 /** blob のアップロード/ダウンロードが 2xx 以外で返ったことを示す。 */
