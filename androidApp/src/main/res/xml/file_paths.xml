@@ -4,4 +4,8 @@
     <cache-path
             name="updates"
             path="updates/"/>
+    <!-- 受信添付の復号済みキャッシュ（cacheDir/attachments）を開く/共有で FileProvider 経由で渡す。 -->
+    <cache-path
+            name="attachments"
+            path="attachments/"/>
 </paths>

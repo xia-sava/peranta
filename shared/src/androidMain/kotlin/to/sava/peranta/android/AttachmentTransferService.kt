@@ -27,6 +27,9 @@ import kotlinx.coroutines.launch
 import to.sava.peranta.blob.AttachmentUploadRequest
 import to.sava.peranta.blob.BlobCipher
 import to.sava.peranta.blob.KtorBlobTransport
+import to.sava.peranta.blob.attachmentKindForMimeType
+import to.sava.peranta.blob.decodeAttachmentRef
+import to.sava.peranta.blob.encodeAttachmentRef
 import to.sava.peranta.blob.uploadAttachment
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
@@ -34,7 +37,7 @@ import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.platform.ioDispatcher
-import to.sava.peranta.send.buildFilePayload
+import to.sava.peranta.send.buildFilePayloads
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import java.io.File
@@ -72,6 +75,7 @@ class AttachmentTransferService : Service() {
         when (intent?.action) {
             ACTION_CANCEL -> cancelTransfer(intent.getStringExtra(EXTRA_TRANSFER_ID))
             ACTION_UPLOAD -> startUpload(intent)
+            ACTION_DOWNLOAD -> startDownload(intent)
             else -> stopIfIdle()
         }
         return START_NOT_STICKY
@@ -89,7 +93,7 @@ class AttachmentTransferService : Service() {
             stopIfIdle()
             return
         }
-        manager.notify(notificationId, progressNotification(transferId, fileName = "", percent = 0))
+        manager.notify(notificationId, progressNotification(transferId, fileName = "", percent = 0, uploading = true))
         val job = scope.launch {
             try {
                 process(transferId, notificationId, uris, caption)
@@ -103,6 +107,78 @@ class AttachmentTransferService : Service() {
             }
         }
         registry.register(transferId, notificationId, job)
+    }
+
+    private fun startDownload(intent: Intent) {
+        val encodedRef = intent.getStringExtra(EXTRA_ATTACHMENT_REF)
+        val ref = encodedRef?.let {
+            try {
+                decodeAttachmentRef(it)
+            } catch (error: Exception) {
+                log.w(error) { "failed to decode attachment ref for download" }
+                null
+            }
+        }
+        createChannel()
+        startUmbrellaForeground()
+        if (ref == null) {
+            stopIfIdle()
+            return
+        }
+        // 同一 blob の二重ダウンロードを避ける（進行中ならボタンは既に進捗表示に切り替わっている）。
+        if (registry.contains(ref.blobId)) {
+            log.i { "download already in progress blobId=${ref.blobId}" }
+            return
+        }
+        val notificationId = notificationCounter.getAndIncrement()
+        manager.notify(notificationId, progressNotification(ref.blobId, ref.fileName, percent = 0, uploading = false))
+        val job = scope.launch {
+            try {
+                processDownload(ref, notificationId)
+            } catch (cancellation: CancellationException) {
+                log.i { "download job cancelled blobId=${ref.blobId}" }
+                AndroidAttachmentReceive.markCancelled(ref.blobId)
+            } catch (error: Exception) {
+                log.w(error) { "attachment download failed blobId=${ref.blobId}" }
+                AndroidAttachmentReceive.markFailed(ref.blobId, ref.sizeBytes)
+                recordError(DOWNLOAD_FAILED_MESSAGE)
+            } finally {
+                finishTransfer(ref.blobId)
+            }
+        }
+        registry.register(ref.blobId, notificationId, job)
+    }
+
+    private suspend fun processDownload(ref: AttachmentRef, notificationId: Int) = coroutineScope {
+        val repo = androidConfigRepository(applicationContext)
+        val config = repo.load()
+        if (!config.hasSharedKey) {
+            AndroidAttachmentReceive.markFailed(ref.blobId, ref.sizeBytes)
+            recordError(NOT_CONFIGURED_DOWNLOAD_MESSAGE)
+            return@coroutineScope
+        }
+        AndroidAttachmentReceive.markRunning(ref.blobId, ref.sizeBytes)
+        val cache = AndroidAttachmentReceive.cache(applicationContext, config)
+        val transferred = AtomicLong(0)
+        // 進捗通知はアップロードと同じくポーリングで間引く（コールバック毎に notify すると数千回叩いてしまう）。
+        val pollJob = launch {
+            while (isActive) {
+                val percent = percentOf(ref.sizeBytes, transferred.get())
+                manager.notify(notificationId, progressNotification(ref.blobId, ref.fileName, percent, uploading = false))
+                if (percent >= 100) break
+                delay(PROGRESS_POLL_MILLIS)
+            }
+        }
+        val file = try {
+            cache.download(ref) { current ->
+                transferred.set(current)
+                AndroidAttachmentReceive.markProgress(ref.blobId, current, ref.sizeBytes)
+            }
+        } finally {
+            pollJob.cancel()
+        }
+        AndroidAttachmentReceive.markCached(ref, file)
+        log.i { "attachment downloaded blobId=${ref.blobId}" }
     }
 
     private fun cancelTransfer(transferId: String?) {
@@ -155,14 +231,18 @@ class AttachmentTransferService : Service() {
             recordError(UPLOAD_FAILED_MESSAGE)
             return
         }
-        val payload = buildFilePayload(
+        // 複数添付の Envelope が UnifiedPush の実質上限を超えないよう、収まる範囲で複数ペイロードに分割する（§4.3）。
+        val payloads = buildFilePayloads(
             deviceId = config.deviceId!!,
             attachments = attachments,
+            keyId = config.keyId!!,
             now = nowEpochMillis(),
             caption = caption,
         )
-        PerantaSend.dispatch(applicationContext, payload, config)
-        log.i { "file payload dispatched transferId=$transferId attachments=${attachments.size}" }
+        payloads.forEach { payload -> PerantaSend.dispatch(applicationContext, payload, config) }
+        log.i {
+            "file payloads dispatched transferId=$transferId attachments=${attachments.size} payloads=${payloads.size}"
+        }
     }
 
     private suspend fun uploadOne(
@@ -180,7 +260,7 @@ class AttachmentTransferService : Service() {
             val pollJob = launch {
                 while (isActive) {
                     val percent = percentOf(meta.sizeBytes, transferred.get())
-                    manager.notify(notificationId, progressNotification(transferId, meta.fileName, percent))
+                    manager.notify(notificationId, progressNotification(transferId, meta.fileName, percent, uploading = true))
                     if (percent >= 100) break
                     delay(PROGRESS_POLL_MILLIS)
                 }
@@ -270,16 +350,19 @@ class AttachmentTransferService : Service() {
     /** サービスの生存期間中だけ出す前面化用の通知（個々の転送はこれとは別の進捗通知で表す）。 */
     private fun umbrellaNotification(): Notification =
         Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle(UPLOAD_TITLE)
+            .setContentTitle(UMBRELLA_TITLE)
             .setSmallIcon(android.R.drawable.stat_sys_upload)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()
 
-    private fun progressNotification(transferId: String, fileName: String, percent: Int): Notification =
-        Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle(if (fileName.isBlank()) UPLOAD_TITLE else "$fileName をアップロード中 $percent%")
-            .setSmallIcon(android.R.drawable.stat_sys_upload)
+    private fun progressNotification(transferId: String, fileName: String, percent: Int, uploading: Boolean): Notification {
+        val verb = if (uploading) "アップロード中" else "ダウンロード中"
+        val fallbackTitle = if (uploading) UPLOAD_TITLE else DOWNLOAD_TITLE
+        val icon = if (uploading) android.R.drawable.stat_sys_upload else android.R.drawable.stat_sys_download
+        return Notification.Builder(this, CHANNEL_ID)
+            .setContentTitle(if (fileName.isBlank()) fallbackTitle else "$fileName を$verb $percent%")
+            .setSmallIcon(icon)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setProgress(100, percent, percent == 0)
@@ -287,6 +370,7 @@ class AttachmentTransferService : Service() {
                 Notification.Action.Builder(null, CANCEL_LABEL, cancelIntent(transferId)).build(),
             )
             .build()
+    }
 
     private fun cancelIntent(transferId: String): PendingIntent {
         val intent = Intent(this, AttachmentTransferService::class.java)
@@ -325,8 +409,7 @@ class AttachmentTransferService : Service() {
         super.onDestroy()
     }
 
-    private fun kindFor(mimeType: String): AttachmentKind =
-        if (mimeType.startsWith("image/")) AttachmentKind.IMAGE else AttachmentKind.FILE
+    private fun kindFor(mimeType: String): AttachmentKind = attachmentKindForMimeType(mimeType)
 
     private data class AttachmentMeta(val fileName: String, val mimeType: String, val sizeBytes: Long)
 
@@ -348,12 +431,16 @@ class AttachmentTransferService : Service() {
 
     companion object {
         private const val ACTION_UPLOAD = "to.sava.peranta.action.UPLOAD"
-        private const val ACTION_CANCEL = "to.sava.peranta.action.CANCEL_UPLOAD"
+        private const val ACTION_DOWNLOAD = "to.sava.peranta.action.DOWNLOAD"
+        private const val ACTION_CANCEL = "to.sava.peranta.action.CANCEL_TRANSFER"
         private const val EXTRA_CAPTION = "caption"
         private const val EXTRA_TRANSFER_ID = "transferId"
-        private const val CHANNEL_ID = "peranta-attachment-upload"
-        private const val CHANNEL_NAME = "添付アップロード"
+        private const val EXTRA_ATTACHMENT_REF = "attachmentRef"
+        private const val CHANNEL_ID = "peranta-attachment-transfer"
+        private const val CHANNEL_NAME = "添付の転送"
+        private const val UMBRELLA_TITLE = "ファイルを転送中"
         private const val UPLOAD_TITLE = "画像をアップロード中"
+        private const val DOWNLOAD_TITLE = "ファイルをダウンロード中"
         private const val CANCEL_LABEL = "キャンセル"
         private const val SPOOL_DIR = "outgoing"
         private const val DEFAULT_IMAGE_MIME = "image/*"
@@ -368,6 +455,8 @@ class AttachmentTransferService : Service() {
 
         private const val UPLOAD_FAILED_MESSAGE = "画像のアップロードに失敗しました。もう一度お試しください"
         private const val NOT_CONFIGURED_MESSAGE = "送信の設定が未完了のため画像を送れません"
+        private const val DOWNLOAD_FAILED_MESSAGE = "ファイルのダウンロードに失敗しました。もう一度お試しください"
+        private const val NOT_CONFIGURED_DOWNLOAD_MESSAGE = "設定が未完了のためファイルを受け取れません"
 
         /**
          * 共有された [uris] のアップロードをサービスに依頼する（§4.3）。
@@ -395,6 +484,30 @@ class AttachmentTransferService : Service() {
             val clip = ClipData.newRawUri(CLIP_LABEL, uris.first())
             uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) }
             return clip
+        }
+
+        /**
+         * [ref] の添付ダウンロードをフォアグラウンドサービスへ依頼する（§4.3）。
+         * 300MB 級でも WorkManager の実行時間制限を避けるため、アップロードと同じ FGS 経路を使う。
+         * UI のボタンを即座に進行中表示へ切り替えるため、状態を先に進行中へ更新してから起動する。
+         */
+        fun enqueueDownload(context: Context, ref: AttachmentRef) {
+            AndroidAttachmentReceive.markRunning(ref.blobId, ref.sizeBytes)
+            val intent = Intent(context, AttachmentTransferService::class.java).apply {
+                action = ACTION_DOWNLOAD
+                putExtra(EXTRA_ATTACHMENT_REF, encodeAttachmentRef(ref))
+                putExtra(EXTRA_TRANSFER_ID, ref.blobId)
+            }
+            context.startForegroundService(intent)
+        }
+
+        /** 進行中の転送（[transferId] はアップロードの転送 ID かダウンロードの blobId）をキャンセルする。 */
+        fun cancel(context: Context, transferId: String) {
+            val intent = Intent(context, AttachmentTransferService::class.java).apply {
+                action = ACTION_CANCEL
+                putExtra(EXTRA_TRANSFER_ID, transferId)
+            }
+            context.startService(intent)
         }
     }
 }

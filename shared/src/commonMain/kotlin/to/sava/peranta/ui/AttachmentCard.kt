@@ -21,9 +21,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.StateFlow
+import to.sava.peranta.blob.AttachmentCategory
 import to.sava.peranta.blob.TransferProgress
 import to.sava.peranta.blob.TransferState
-import to.sava.peranta.model.AttachmentKind
+import to.sava.peranta.blob.attachmentCategoryFor
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.nowEpochMillis
 
@@ -38,6 +39,9 @@ const val TAG_ATTACHMENT_OPEN_PREFIX: String = "attachment-open-"
 
 /** 添付カードの「保存」ボタンのタグ接頭辞。 */
 const val TAG_ATTACHMENT_SAVE_PREFIX: String = "attachment-save-"
+
+/** 添付カードの「共有」ボタンのタグ接頭辞。 */
+const val TAG_ATTACHMENT_SHARE_PREFIX: String = "attachment-share-"
 
 /** 添付カードの「再試行」ボタンのタグ接頭辞。 */
 const val TAG_ATTACHMENT_RETRY_PREFIX: String = "attachment-retry-"
@@ -71,6 +75,8 @@ class AttachmentUi(
     val onCancel: (blobId: String) -> Unit = {},
     val onOpen: (blobId: String) -> Unit = {},
     val onSave: (blobId: String) -> Unit = {},
+    val onShare: (blobId: String) -> Unit = {},
+    val canShare: Boolean = false,
     val now: () -> Long = ::nowEpochMillis,
 )
 
@@ -85,11 +91,15 @@ internal fun formatFileSize(bytes: Long): String {
     }
 }
 
-/** 添付種別のフォールバックアイコン（サムネイルが無いときに出す）。 */
-private fun kindGlyph(kind: AttachmentKind): String = when (kind) {
-    AttachmentKind.IMAGE -> "🖼"
-    AttachmentKind.FILE -> "📄"
-}
+/** 添付種別のフォールバックアイコン（サムネイルが無いときに出す）。mimeType と拡張子から簡易分類する。 */
+private fun categoryGlyph(ref: AttachmentRef): String =
+    when (attachmentCategoryFor(ref.mimeType, ref.fileName)) {
+        AttachmentCategory.IMAGE -> "🖼"
+        AttachmentCategory.VIDEO -> "🎞"
+        AttachmentCategory.AUDIO -> "🎵"
+        AttachmentCategory.DOCUMENT -> "📄"
+        AttachmentCategory.OTHER -> "📎"
+    }
 
 /**
  * 1 件の添付を表すカード（§4.3）。状態別にボタンを出し分ける:
@@ -112,7 +122,7 @@ internal fun AttachmentCard(ref: AttachmentRef, ui: AttachmentUi) {
         }
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             if (state.thumbnail == null) {
-                Text(text = kindGlyph(ref.kind), modifier = Modifier.padding(end = 6.dp))
+                Text(text = categoryGlyph(ref), modifier = Modifier.padding(end = 6.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -149,6 +159,12 @@ private fun AttachmentControls(
                 onClick = { ui.onSave(ref.blobId) },
                 modifier = Modifier.testTag("$TAG_ATTACHMENT_SAVE_PREFIX${ref.blobId}"),
             ) { Text("保存") }
+            if (ui.canShare) {
+                TextButton(
+                    onClick = { ui.onShare(ref.blobId) },
+                    modifier = Modifier.testTag("$TAG_ATTACHMENT_SHARE_PREFIX${ref.blobId}"),
+                ) { Text("共有") }
+            }
         }
 
         progress?.state == TransferState.RUNNING || progress?.state == TransferState.PENDING -> Column {

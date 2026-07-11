@@ -21,15 +21,23 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import to.sava.peranta.android.AndroidAttachmentActions
+import to.sava.peranta.android.AndroidAttachmentReceive
 import to.sava.peranta.android.AndroidHealthChecker
 import to.sava.peranta.android.AndroidInstalledAppsProvider
 import to.sava.peranta.android.AttachmentTransferService
 import to.sava.peranta.android.PerantaReceive
 import to.sava.peranta.android.PerantaUnifiedPush
 import to.sava.peranta.android.androidConfigRepository
+import to.sava.peranta.config.PerantaConfig
+import to.sava.peranta.model.AttachmentRef
+import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.pairing.PairingImportController
+import to.sava.peranta.send.sharedStreamItems
+import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.AppFilterScreen
+import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.healthCheckNeedsAttention
 import to.sava.peranta.ui.PairingScanScreen
@@ -45,6 +53,9 @@ private const val NOTIFICATIONS_DENIED_MESSAGE =
 private const val CAMERA_DENIED_MESSAGE =
     "カメラの権限が許可されていません。ペアリング文字列を貼り付けて取り込んでください"
 
+/** SAF 保存要求中の blobId を Activity 再生成越しに引き継ぐための保存キー。 */
+private const val KEY_PENDING_SAVE_BLOB_ID = "pendingSaveBlobId"
+
 /**
  * MainActivity が表示する画面（§10）。
  * [Main] はロール（受信/送信）に応じて本体を出し、[Pairing] は QR 取り込み画面、
@@ -55,7 +66,7 @@ private sealed interface Screen {
     data object Pairing : Screen
     data object AppFilter : Screen
     data object HealthCheck : Screen
-    data class Share(val images: List<Uri>) : Screen
+    data class Share(val files: List<Uri>) : Screen
 }
 
 class MainActivity : ComponentActivity() {
@@ -94,6 +105,16 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    /** 受信添付の「開く」「保存」「共有」を担う。受信ロールで設定が揃ったときだけ生成する（§4.3）。 */
+    private var attachmentActions: AndroidAttachmentActions? = null
+
+    /** 添付保存（SAF）のドキュメント作成ランチャー。返った Uri へキャッシュからコピーする。 */
+    private val createDocumentLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
+            val actions = attachmentActions ?: return@registerForActivityResult
+            lifecycleScope.launch { actions.copyToDocument(uri) }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -108,19 +129,28 @@ class MainActivity : ComponentActivity() {
             PerantaUnifiedPush.register(this)
         }
         val receiveRole = !config.sendEnabled && config.isReadyForUnifiedPushReceive
+        val attachmentUi = if (receiveRole) {
+            attachmentActions = buildAttachmentActions(config).also {
+                it.restorePendingSaveState(savedInstanceState?.getString(KEY_PENDING_SAVE_BLOB_ID))
+            }
+            AndroidAttachmentReceive.attachmentUi(this, attachmentActions!!)
+        } else {
+            null
+        }
         if (receiveRole) {
             requestNotificationsPermissionIfNeeded()
             lifecycleScope.launch { PerantaReceive.prime(this@MainActivity) }
+            primeAttachmentCache(config)
         }
 
         val healthChecker = AndroidHealthChecker(this)
-        val sharedImages = extractSharedImages(intent)
+        val sharedFiles = extractSharedFiles(intent)
 
         setContent {
             var screen: Screen by remember {
                 mutableStateOf(
                     when {
-                        sharedImages.isNotEmpty() && config.hasSharedKey -> Screen.Share(sharedImages)
+                        sharedFiles.isNotEmpty() && config.hasSharedKey -> Screen.Share(sharedFiles)
                         config.hasSharedKey -> Screen.Main
                         else -> Screen.Pairing
                     },
@@ -160,6 +190,7 @@ class MainActivity : ComponentActivity() {
                         onOpenAppFilter = { screen = Screen.AppFilter },
                         onOpenHealthCheck = { screen = Screen.HealthCheck },
                         timelineActions = PerantaReceive.timelineActions(this@MainActivity),
+                        attachmentUi = attachmentUi,
                     )
                 } else {
                     SendRoleApp(
@@ -197,11 +228,11 @@ class MainActivity : ComponentActivity() {
                 }
 
                 is Screen.Share -> PerantaTheme {
-                    val images = (screen as Screen.Share).images
+                    val files = (screen as Screen.Share).files
                     ShareScreen(
-                        imageCount = images.size,
+                        itemCount = files.size,
                         onSend = { caption ->
-                            AttachmentTransferService.enqueueUpload(this@MainActivity, images, caption)
+                            AttachmentTransferService.enqueueUpload(this@MainActivity, files, caption)
                             finish()
                         },
                         onCancel = { finish() },
@@ -211,8 +242,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** 共有シート（ACTION_SEND）で渡された画像 Uri を取り出す。単数/複数の両方に対応する。 */
-    private fun extractSharedImages(intent: Intent?): List<Uri> {
+    /** 共有シート（ACTION_SEND / ACTION_SEND_MULTIPLE）で渡されたファイル Uri を取り出す。単数/複数の両方に対応する。 */
+    private fun extractSharedFiles(intent: Intent?): List<Uri> {
         if (intent?.action != Intent.ACTION_SEND && intent?.action != Intent.ACTION_SEND_MULTIPLE) return emptyList()
         val single = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
@@ -220,19 +251,73 @@ class MainActivity : ComponentActivity() {
             @Suppress("DEPRECATION")
             intent.getParcelableExtra(Intent.EXTRA_STREAM)
         }
-        single?.let { return listOf(it) }
         val multiple = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
         } else {
             @Suppress("DEPRECATION")
             intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
         }
-        return multiple.orEmpty()
+        return sharedStreamItems(single, multiple)
+    }
+
+    /**
+     * 受信添付の操作束を組む（§4.3）。blobId からタイムライン履歴の [AttachmentRef] を引き、
+     * 復号済みキャッシュを FileProvider の Uri として開く/共有し、保存は SAF ランチャーへ委ねる。
+     */
+    private fun buildAttachmentActions(config: PerantaConfig): AndroidAttachmentActions =
+        AndroidAttachmentActions(
+            context = this,
+            refFor = { blobId -> findAttachmentRef(blobId) },
+            cachedFileFor = { ref -> AndroidAttachmentReceive.cache(this, config).cachedFile(ref) },
+            launchSaveDocument = { fileName, _ -> createDocumentLauncher.launch(fileName) },
+            reportError = { message -> reportTimelineError(message) },
+        )
+
+    /** タイムライン履歴から blobId に一致する添付参照を引く。未取得・履歴消失時は null。 */
+    private fun findAttachmentRef(blobId: String): AttachmentRef? =
+        PerantaReceive.items.value
+            .filterIsInstance<ReceivedFile>()
+            .flatMap { it.payload.attachments }
+            .firstOrNull { it.blobId == blobId }
+
+    /**
+     * 起動時に添付キャッシュを剪定し、以後タイムラインの更新ごとに取得済み添付を「完了」状態へ反映する（§4.3）。
+     * 剪定・キャッシュ走査・サムネイルデコードはブロッキング I/O とビットマップ処理を伴うため IO ディスパッチャで動かす。
+     */
+    private fun primeAttachmentCache(config: PerantaConfig) {
+        lifecycleScope.launch(ioDispatcher) {
+            runCatching { AndroidAttachmentReceive.cache(this@MainActivity, config).prune() }
+                .onFailure { if (it is CancellationException) throw it }
+            PerantaReceive.items.collect { items ->
+                AndroidAttachmentReceive.primeCached(this@MainActivity, config, items)
+            }
+        }
+    }
+
+    private fun reportTimelineError(message: String) {
+        lifecycleScope.launch {
+            try {
+                PerantaReceive.reportError(this@MainActivity, message)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                // タイムラインへのエラー反映失敗は本体の動作を妨げない。
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
         resumeTick++
+    }
+
+    /**
+     * SAF の保存ピッカーを開いている間に Activity が再生成されても保存対象を見失わないよう、
+     * 保存要求中の blobId を退避する（結果 Uri が返ったときに正しい添付へ書き出すため、§4.3）。
+     */
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        attachmentActions?.pendingSaveState()?.let { outState.putString(KEY_PENDING_SAVE_BLOB_ID, it) }
     }
 
     /** カメラ権限を確かめてから QR スキャナを起動する（§10.5: 起動時ではなく必要時に要求）。 */

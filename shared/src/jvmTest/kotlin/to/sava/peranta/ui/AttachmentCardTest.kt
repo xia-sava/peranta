@@ -4,6 +4,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,34 +24,40 @@ class AttachmentCardTest {
 
     private val blobId = "blob-1"
 
-    private fun ref(expiresAt: Long? = null) = AttachmentRef(
+    private fun ref(
+        expiresAt: Long? = null,
+        fileName: String = "photo.jpg",
+        mimeType: String = "image/jpeg",
+        kind: AttachmentKind = AttachmentKind.IMAGE,
+    ) = AttachmentRef(
         blobId = blobId,
         url = "https://peranta.sava.to/file/abc",
-        fileName = "photo.jpg",
-        mimeType = "image/jpeg",
+        fileName = fileName,
+        mimeType = mimeType,
         sizeBytes = 2048,
-        kind = AttachmentKind.IMAGE,
+        kind = kind,
         blobExpiresAtEpochMillis = expiresAt,
         enc = BlobEnc(keyId = "k1", saltBase64 = "AAAAAAAAAAAAAAAAAAAAAA==", chunkSize = 1_048_576, totalChunks = 1),
     )
 
-    private fun items(expiresAt: Long? = null) = MutableStateFlow<List<TimelineItem>>(
-        listOf(
-            ReceivedFile(
-                id = "f1",
-                timestampEpochMillis = 1000L,
-                payload = FilePayload(
+    private fun items(expiresAt: Long? = null, ref: AttachmentRef = ref(expiresAt)) =
+        MutableStateFlow<List<TimelineItem>>(
+            listOf(
+                ReceivedFile(
                     id = "f1",
-                    from = "phone",
-                    to = "*",
-                    sentAtEpochMillis = 1000L,
-                    caption = "写真です",
-                    attachments = listOf(ref(expiresAt)),
-                    postedAtEpochMillis = 1000L,
+                    timestampEpochMillis = 1000L,
+                    payload = FilePayload(
+                        id = "f1",
+                        from = "phone",
+                        to = "*",
+                        sentAtEpochMillis = 1000L,
+                        caption = "写真です",
+                        attachments = listOf(ref),
+                        postedAtEpochMillis = 1000L,
+                    ),
                 ),
             ),
-        ),
-    )
+        )
 
     private fun ui(
         states: MutableStateFlow<Map<String, AttachmentDownloadState>>,
@@ -58,8 +65,10 @@ class AttachmentCardTest {
         onCancel: (String) -> Unit = {},
         onOpen: (String) -> Unit = {},
         onSave: (String) -> Unit = {},
+        onShare: (String) -> Unit = {},
+        canShare: Boolean = false,
         now: Long = 0L,
-    ) = AttachmentUi(states, onDownload, onCancel, onOpen, onSave, now = { now })
+    ) = AttachmentUi(states, onDownload, onCancel, onOpen, onSave, onShare, canShare, now = { now })
 
     /** 未取得の添付はダウンロードボタンを出し、押すと onDownload が呼ばれる。 */
     @Test
@@ -134,6 +143,40 @@ class AttachmentCardTest {
         states.value = mapOf(blobId to AttachmentDownloadState(cached = true))
         waitForIdle()
         onAllNodesWithTag("$TAG_ATTACHMENT_OPEN_PREFIX$blobId").assertCountEquals(1)
+    }
+
+    /** 共有可能な端末（canShare=true）では完了状態で共有ボタンを出し、押すと onShare が呼ばれる。 */
+    @Test
+    fun completedShowsShareWhenShareable() = runComposeUiTest {
+        val states = MutableStateFlow(mapOf(blobId to AttachmentDownloadState(cached = true)))
+        var shared: String? = null
+        setContent {
+            TimelineScreen(items(), attachments = ui(states, onShare = { shared = it }, canShare = true))
+        }
+        onNodeWithTag("$TAG_ATTACHMENT_SHARE_PREFIX$blobId").performClick()
+        assertEquals(blobId, shared)
+    }
+
+    /** 共有非対応端末（Desktop 等）では共有ボタンを出さない。 */
+    @Test
+    fun completedHidesShareWhenNotShareable() = runComposeUiTest {
+        val states = MutableStateFlow(mapOf(blobId to AttachmentDownloadState(cached = true)))
+        setContent {
+            TimelineScreen(items(), attachments = ui(states, canShare = false))
+        }
+        onAllNodesWithTag("$TAG_ATTACHMENT_SHARE_PREFIX$blobId").assertCountEquals(0)
+    }
+
+    /** 非画像ファイルはサムネイル無しでも未取得のダウンロードボタンを出し、ファイル名を表示する（種別アイコン表示）。 */
+    @Test
+    fun nonImageFileShowsDownloadWithoutThumbnail() = runComposeUiTest {
+        val states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+        val fileRef = ref(fileName = "report.pdf", mimeType = "application/pdf", kind = AttachmentKind.FILE)
+        setContent {
+            TimelineScreen(items(ref = fileRef), attachments = ui(states))
+        }
+        onAllNodesWithTag("$TAG_ATTACHMENT_DOWNLOAD_PREFIX$blobId").assertCountEquals(1)
+        onNodeWithText("report.pdf").assertExists()
     }
 
     /** サーバ側の添付期限を過ぎた未取得の添付は、無効化された期限切れ表示にする。 */

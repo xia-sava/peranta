@@ -29,12 +29,12 @@ const val TAG_SHARE_SEND: String = "share-send"
 const val TAG_SHARE_CAPTION: String = "share-caption"
 
 /**
- * 共有シートから渡された画像を転送する前に、キャプションを入力して送信する小さな画面（§4.3）。
- * 宛先はペアリング済みの全端末（`to: "*"`）で、[imageCount] 枚の画像をまとめて送る。
+ * 共有シートから渡されたファイル（画像を含む）を転送する前に、キャプションを入力して送信する小さな画面（§4.3）。
+ * 宛先はペアリング済みの全端末（`to: "*"`）で、[itemCount] 件のファイルをまとめて送る。
  */
 @Composable
 fun ShareScreen(
-    imageCount: Int,
+    itemCount: Int,
     onSend: (caption: String?) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
@@ -45,9 +45,9 @@ fun ShareScreen(
             modifier = Modifier.fillMaxSize().padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(text = "画像を送信", style = MaterialTheme.typography.titleLarge)
+            Text(text = "ファイルを送信", style = MaterialTheme.typography.titleLarge)
             Text(
-                text = "$imageCount 枚の画像をペアリング済みの端末へ送ります。",
+                text = "$itemCount 件のファイルをペアリング済みの端末へ送ります。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -16,7 +16,7 @@ class ShareScreenTest {
     fun sendPassesCaption() = runComposeUiTest {
         var sent: String? = "unset"
         setContent {
-            ShareScreen(imageCount = 2, onSend = { sent = it }, onCancel = {})
+            ShareScreen(itemCount = 2, onSend = { sent = it }, onCancel = {})
         }
         onNodeWithTag(TAG_SHARE_CAPTION).performTextInput("旅行")
         onNodeWithTag(TAG_SHARE_SEND).performClick()
@@ -28,7 +28,7 @@ class ShareScreenTest {
     fun blankCaptionSendsNull() = runComposeUiTest {
         var sent: String? = "unset"
         setContent {
-            ShareScreen(imageCount = 1, onSend = { sent = it }, onCancel = {})
+            ShareScreen(itemCount = 1, onSend = { sent = it }, onCancel = {})
         }
         onNodeWithTag(TAG_SHARE_SEND).performClick()
         assertEquals(null, sent)
