@@ -14,6 +14,7 @@ const val DEFAULT_HOST: String = "peranta.sava.to"
  * [deviceId] は端末を一意に識別する安定 ID で、ペイロードの from/to とロスターの参照に使う。
  * [deviceName] は人間向けの表示名で、リネーム可能でありアドレス指定には使わない。
  * [controlTopic] は全端末で共有する presence/ロスター用 topic（§8）で、ペアリングで配布する。
+ * [blobTopic] は全端末で共有する画像/ファイル転送用 topic（§8、§4.3）で、ペアリングで配布する。
  * [revokedDeviceIds] は失効させた端末の deviceId 集合で、ロスター解決時に配送先から除外する（§9）。
  */
 data class PerantaConfig(
@@ -27,6 +28,7 @@ data class PerantaConfig(
     val keyId: String? = null,
     val receiveTopic: String? = null,
     val controlTopic: String? = null,
+    val blobTopic: String? = null,
     val unifiedPushEndpoint: String? = null,
     val sendEnabled: Boolean = false,
     val smsDirectReceive: Boolean = true,

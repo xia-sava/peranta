@@ -28,6 +28,7 @@ class PairingApplier(
                 useTls = if (devMode) data.tls else true,
                 port = data.port,
                 controlTopic = data.controlTopic ?: current.controlTopic,
+                blobTopic = data.blobTopic ?: current.blobTopic,
             ),
         )
     }

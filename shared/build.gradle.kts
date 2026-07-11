@@ -98,6 +98,7 @@ kover {
                     "to.sava.peranta.receive",
                     "to.sava.peranta.filter",
                     "to.sava.peranta.send",
+                    "to.sava.peranta.blob",
                     "to.sava.peranta.roster",
                     "to.sava.peranta.pairing",
                     "to.sava.peranta.toast",
@@ -107,6 +108,12 @@ kover {
             excludes {
                 // net パッケージ内の HTTP クライアント生成配線（実 ntfy 接続が必要）。
                 classes("to.sava.peranta.net.JvmNtfyHttpKt")
+                // blob パッケージのうち ntfy 添付の HTTP アップロード/ダウンロード配線（実 ntfy 接続が必要。
+                // 純粋ロジックは BlobFormat / BlobCipher で、契約は FakeBlobTransport のテストで担保する）。
+                classes("to.sava.peranta.blob.KtorBlobTransport")
+                classes("to.sava.peranta.blob.KtorBlobTransportKt")
+                classes("to.sava.peranta.blob.NtfyPublishResponse")
+                classes("to.sava.peranta.blob.NtfyAttachment")
                 // pairing パッケージのうち QR 生成・PNG 描画の配線（zxing と画像 I/O が要る。
                 // 生成結果は jvmTest の round-trip（PNG を再デコード）で振る舞いを担保する）。
                 classes("to.sava.peranta.pairing.QrCodeKt")

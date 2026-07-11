@@ -67,6 +67,22 @@ data class NotificationPayload(
     val postedAtEpochMillis: Long,
     val expiresAtEpochMillis: Long? = null,
     val priority: Priority = Priority.NORMAL,
+    val attachments: List<AttachmentRef> = emptyList(),
+) : Payload()
+
+/** 画像・ファイルの転送（§4.3）。本体は暗号化 blob として別送し、[attachments] で参照する。 */
+@Serializable
+@SerialName("file")
+data class FilePayload(
+    override val id: String,
+    override val from: String,
+    override val to: String,
+    override val sentAtEpochMillis: Long,
+    val caption: String? = null,
+    val attachments: List<AttachmentRef>,
+    val postedAtEpochMillis: Long,
+    val expiresAtEpochMillis: Long? = null,
+    val priority: Priority = Priority.NORMAL,
 ) : Payload()
 
 /** SMS の転送。 */

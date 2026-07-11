@@ -35,6 +35,7 @@ class ConfigRepository(
             keyId = settings.getStringOrNull(KEY_KEY_ID),
             receiveTopic = settings.getStringOrNull(KEY_RECEIVE_TOPIC),
             controlTopic = settings.getStringOrNull(KEY_CONTROL_TOPIC),
+            blobTopic = settings.getStringOrNull(KEY_BLOB_TOPIC),
             unifiedPushEndpoint = settings.getStringOrNull(KEY_UNIFIED_PUSH_ENDPOINT),
             sendEnabled = settings.getBoolean(KEY_SEND_ENABLED, false),
             smsDirectReceive = settings.getBoolean(KEY_SMS_DIRECT_RECEIVE, true),
@@ -66,6 +67,7 @@ class ConfigRepository(
         putOrRemove(KEY_KEY_ID, config.keyId)
         putOrRemove(KEY_RECEIVE_TOPIC, config.receiveTopic)
         putOrRemove(KEY_CONTROL_TOPIC, config.controlTopic)
+        putOrRemove(KEY_BLOB_TOPIC, config.blobTopic)
         putOrRemove(KEY_UNIFIED_PUSH_ENDPOINT, config.unifiedPushEndpoint)
         settings.putBoolean(KEY_SEND_ENABLED, config.sendEnabled)
         settings.putBoolean(KEY_SMS_DIRECT_RECEIVE, config.smsDirectReceive)
@@ -139,6 +141,15 @@ class ConfigRepository(
             settings.putString(KEY_CONTROL_TOPIC, it)
         }
 
+    /**
+     * blob topic を返す。未設定なら生成して永続化する（§8、§4.3）。
+     * 全端末で共有する topic のため、設定元端末で確定した値をペアリングで配布する。
+     */
+    fun ensureBlobTopic(): String =
+        settings.getStringOrNull(KEY_BLOB_TOPIC) ?: generateBlobTopic().also {
+            settings.putString(KEY_BLOB_TOPIC, it)
+        }
+
     private fun putOrRemove(key: String, value: String?) {
         value?.let { settings.putString(key, it) } ?: settings.remove(key)
     }
@@ -153,6 +164,7 @@ class ConfigRepository(
         const val KEY_KEY_ID = "keyId"
         const val KEY_RECEIVE_TOPIC = "receiveTopic"
         const val KEY_CONTROL_TOPIC = "controlTopic"
+        const val KEY_BLOB_TOPIC = "blobTopic"
         const val KEY_UNIFIED_PUSH_ENDPOINT = "unifiedPushEndpoint"
         const val KEY_SEND_ENABLED = "sendEnabled"
         const val KEY_SMS_DIRECT_RECEIVE = "smsDirectReceive"
@@ -199,6 +211,9 @@ fun generateReceiveTopic(deviceName: String): String {
 
 /** 全端末共有の control topic を採番する（§8）。 */
 fun generateControlTopic(): String = "peranta-control-${randomTopicSuffix()}"
+
+/** 全端末共有の blob topic を採番する（§8、§4.3）。 */
+fun generateBlobTopic(): String = "peranta-blob-${randomTopicSuffix()}"
 
 /** 端末の安定 ID（ランダム UUID）を生成する。 */
 @OptIn(ExperimentalUuidApi::class)

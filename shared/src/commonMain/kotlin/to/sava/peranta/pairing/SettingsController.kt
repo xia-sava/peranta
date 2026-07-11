@@ -65,7 +65,7 @@ class SettingsController(private val repository: ConfigRepository) {
     /**
      * 現在の設定から新しい端末を追加するためのペアリング URI を組み立てる（§6）。
      * token・keyId・共有鍵のいずれかが未設定なら null を返す。
-     * control topic は未設定なら採番して永続化し、全端末で共有する値として配布する（§8）。
+     * control topic・blob topic は未設定なら採番して永続化し、全端末で共有する値として配布する（§8、§4.3）。
      */
     fun buildPairingUri(): String? {
         val config = repository.load()
@@ -73,6 +73,7 @@ class SettingsController(private val repository: ConfigRepository) {
         val keyId = config.keyId?.takeIf { it.isNotBlank() } ?: return null
         val keyBase64 = config.sharedKeyBase64?.takeIf { it.isNotBlank() } ?: return null
         val controlTopic = repository.ensureControlTopic()
+        val blobTopic = repository.ensureBlobTopic()
         val data = PairingData(
             host = config.host,
             token = token,
@@ -81,6 +82,7 @@ class SettingsController(private val repository: ConfigRepository) {
             tls = config.useTls,
             port = config.port,
             controlTopic = controlTopic,
+            blobTopic = blobTopic,
         )
         return PairingUri.encode(data)
     }

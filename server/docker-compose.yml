@@ -13,6 +13,7 @@ services:
     volumes:
       - ./server.yml:/etc/ntfy/server.yml:ro
       - ./.local/data:/var/lib/ntfy
+      # cache.db と添付（attachment-cache-dir=/var/cache/ntfy/attachments、§4.3）の両方がこの下に入る
       - ./.local/cache:/var/cache/ntfy
     environment:
       NTFY_BASE_URL: "http://localhost:8090"

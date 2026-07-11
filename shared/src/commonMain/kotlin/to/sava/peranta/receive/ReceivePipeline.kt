@@ -14,6 +14,7 @@ import to.sava.peranta.filter.payloadForPersistence
 import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
+import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.SmsPayload
@@ -210,6 +211,7 @@ class ReceivePipeline(
     private fun expiresAtOf(payload: Payload): Long? = when (payload) {
         is NotificationPayload -> payload.expiresAtEpochMillis
         is SmsPayload -> payload.expiresAtEpochMillis
+        is FilePayload -> payload.expiresAtEpochMillis
         is CommandPayload -> payload.expiresAtEpochMillis
         else -> null
     }

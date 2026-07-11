@@ -16,8 +16,21 @@ auth-default-access: "deny-all"
 cache-file: "/var/cache/ntfy/cache.db"
 cache-duration: "24h"
 
-# 添付ファイルは使わない
-attachment-cache-dir: ""
+# 添付（暗号化 blob）の置き場（§4.3）。誰も購読しない blobTopic へ PUT された暗号文を保持する。
+# 自前ホストのみが使うため上限は既定より緩める。本体は常にクライアント側で暗号化済み。
+attachment-cache-dir: "/var/cache/ntfy/attachments"
+# 1 添付あたりの上限（300MB 目標に安全マージンを乗せる）
+attachment-file-size-limit: "350M"
+# 全添付の合計ディスク上限
+attachment-total-size-limit: "10G"
+# 添付の保持期間（受信は手動ダウンロード想定のため長め）
+attachment-expiry-duration: "72h"
+# 1 ユーザーあたりの添付合計・日次帯域の上限
+visitor-attachment-total-size-limit: "10G"
+visitor-attachment-daily-bandwidth-limit: "30G"
+
+# AttachmentRef を載せた通知本文の余裕を持たせるため既定（4k）から引き上げる（§4.3）
+message-size-limit: "16k"
 
 # 前段に TLS 終端のリバースプロキシを置く
 behind-proxy: true

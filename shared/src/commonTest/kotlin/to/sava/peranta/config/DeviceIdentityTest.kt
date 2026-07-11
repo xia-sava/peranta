@@ -39,18 +39,36 @@ class DeviceIdentityTest {
         assertEquals(first, repo.load().controlTopic)
     }
 
-    /** deviceId と controlTopic は save/load で往復し、未設定なら null に戻る。 */
+    /** ensureBlobTopic は blob 形式で採番し、以後は同じ値を返す。 */
+    @Test
+    fun ensureBlobTopicGeneratesAndPersists() {
+        val repo = repo()
+        val first = repo.ensureBlobTopic()
+        assertTrue(first.startsWith("peranta-blob-"), first)
+        assertEquals(first, repo.ensureBlobTopic())
+        assertEquals(first, repo.load().blobTopic)
+    }
+
+    /** deviceId と controlTopic・blobTopic は save/load で往復し、未設定なら null に戻る。 */
     @Test
     fun deviceIdAndControlTopicRoundTrip() {
         val repo = repo()
-        repo.save(PerantaConfig(deviceId = "dev-123", controlTopic = "peranta-control-xyz"))
+        repo.save(
+            PerantaConfig(
+                deviceId = "dev-123",
+                controlTopic = "peranta-control-xyz",
+                blobTopic = "peranta-blob-xyz",
+            ),
+        )
         val loaded = repo.load()
         assertEquals("dev-123", loaded.deviceId)
         assertEquals("peranta-control-xyz", loaded.controlTopic)
+        assertEquals("peranta-blob-xyz", loaded.blobTopic)
 
-        repo.save(PerantaConfig(deviceId = null, controlTopic = null))
+        repo.save(PerantaConfig(deviceId = null, controlTopic = null, blobTopic = null))
         assertNull(repo.load().deviceId)
         assertNull(repo.load().controlTopic)
+        assertNull(repo.load().blobTopic)
     }
 
     /** control topic だけでも送信ロールの前提（配送先の解決手段）が揃う。 */

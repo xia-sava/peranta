@@ -7,6 +7,7 @@ import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.filter.payloadForPersistence
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.Envelope
+import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.Priority
@@ -217,6 +218,7 @@ class SendPipeline(
 fun priorityOf(payload: Payload): Priority = when (payload) {
     is NotificationPayload -> payload.priority
     is SmsPayload -> payload.priority
+    is FilePayload -> payload.priority
     else -> Priority.NORMAL
 }
 
@@ -224,6 +226,7 @@ fun priorityOf(payload: Payload): Priority = when (payload) {
 fun expiresOf(payload: Payload): Long? = when (payload) {
     is NotificationPayload -> payload.expiresAtEpochMillis
     is SmsPayload -> payload.expiresAtEpochMillis
+    is FilePayload -> payload.expiresAtEpochMillis
     is CommandPayload -> payload.expiresAtEpochMillis
     else -> null
 }

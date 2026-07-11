@@ -1,0 +1,108 @@
+package to.sava.peranta.model
+
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+class AttachmentSerializationTest {
+
+    private fun attachment(blobId: String = "blob-1") = AttachmentRef(
+        blobId = blobId,
+        url = "https://peranta.sava.to/file/abc123",
+        fileName = "photo.jpg",
+        mimeType = "image/jpeg",
+        sizeBytes = 3_145_728,
+        kind = AttachmentKind.IMAGE,
+        blobExpiresAtEpochMillis = 5_000,
+        enc = BlobEnc(
+            v = 1,
+            keyId = "k1",
+            saltBase64 = "AAAAAAAAAAAAAAAAAAAAAA==",
+            chunkSize = 1_048_576,
+            totalChunks = 3,
+        ),
+    )
+
+    /** FilePayload が添付を含めて全フィールドを保持したままラウンドトリップする。 */
+    @Test
+    fun filePayloadRoundTrip() {
+        val payload = FilePayload(
+            id = "id-1",
+            from = "phone",
+            to = BROADCAST_TARGET,
+            sentAtEpochMillis = 1_000,
+            caption = "見て",
+            attachments = listOf(attachment("a"), attachment("b")),
+            postedAtEpochMillis = 900,
+            expiresAtEpochMillis = 2_000,
+            priority = Priority.HIGH,
+        )
+        assertEquals(payload, decodePayload(encodePayload(payload)))
+    }
+
+    /** FilePayload の JSON 判別子は "file"。 */
+    @Test
+    fun filePayloadDiscriminatorIsFile() {
+        val json = encodePayload(
+            FilePayload(
+                id = "id-2",
+                from = "phone",
+                to = BROADCAST_TARGET,
+                sentAtEpochMillis = 1,
+                attachments = listOf(attachment()),
+                postedAtEpochMillis = 1,
+            ),
+        )
+        assertTrue(json.contains("\"type\":\"file\""), json)
+    }
+
+    /** NotificationPayload は attachments を含めてもラウンドトリップする。 */
+    @Test
+    fun notificationWithAttachmentsRoundTrip() {
+        val payload = NotificationPayload(
+            id = "id-3",
+            from = "phone",
+            to = BROADCAST_TARGET,
+            sentAtEpochMillis = 1_000,
+            packageName = "com.example.app",
+            appName = "Example",
+            title = "Title",
+            text = "Body",
+            notificationKey = "0|com.example.app|1|tag|10",
+            postedAtEpochMillis = 900,
+            attachments = listOf(attachment()),
+        )
+        assertEquals(payload, decodePayload(encodePayload(payload)))
+    }
+
+    /** attachments フィールドを持たない旧 JSON も、空リスト既定で復元される（後方互換）。 */
+    @Test
+    fun notificationWithoutAttachmentsDefaultsToEmpty() {
+        val json = """
+            {
+              "type": "notification",
+              "id": "id-4",
+              "from": "phone",
+              "to": "*",
+              "sentAtEpochMillis": 10,
+              "packageName": "com.example.app",
+              "appName": "Example",
+              "title": "T",
+              "text": "B",
+              "notificationKey": "k",
+              "postedAtEpochMillis": 9
+            }
+        """.trimIndent()
+        val decoded = decodePayload(json) as NotificationPayload
+        assertEquals(emptyList(), decoded.attachments)
+    }
+
+    /** AttachmentRef 単体も kotlinx.serialization でラウンドトリップする。 */
+    @Test
+    fun attachmentRefRoundTrip() {
+        val ref = attachment()
+        assertEquals(ref, PerantaJson.decodeFromString<AttachmentRef>(PerantaJson.encodeToString(ref)))
+    }
+}
