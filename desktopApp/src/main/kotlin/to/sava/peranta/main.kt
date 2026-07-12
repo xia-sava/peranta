@@ -199,6 +199,7 @@ fun main(args: Array<String>) {
                     onOpenHealthCheck = { showHealthCheck = true },
                     timelineActions = receiver.timelineActions(),
                     attachmentUi = receiver.attachmentUi(),
+                    fullTextUi = receiver.fullTextUi(),
                 )
                 else -> App()
             }

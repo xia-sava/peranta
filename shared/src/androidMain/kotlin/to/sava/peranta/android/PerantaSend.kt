@@ -7,9 +7,15 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import to.sava.peranta.blob.BlobCipher
+import to.sava.peranta.blob.KtorBlobTransport
+import to.sava.peranta.blob.uploadFullTextAttachment
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.crypto.MessageCipher
+import to.sava.peranta.model.AttachmentRef
+import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
+import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.createNtfyHttpClient
@@ -17,6 +23,7 @@ import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.send.CommandSender
 import to.sava.peranta.send.ForwardedKeyTracker
 import to.sava.peranta.send.SendPipeline
+import to.sava.peranta.send.attachFullTextIfNeeded
 import to.sava.peranta.send.resolveSendTopics
 import to.sava.peranta.send.SmsDedupeTracker
 import to.sava.peranta.send.NotificationUpdateTracker
@@ -111,6 +118,62 @@ object PerantaSend {
             log.w(error) { "send dispatch setup failed for id=${payload.id}" }
             false
         }
+    }
+
+    /**
+     * 長い本文の通知に全文添付を付ける（§4.3）。添付不要（トグル OFF・センシティブ・プレビュー予算内）なら
+     * [payload] をそのまま返す。blob アップロード失敗時は例外を握って切り詰めプレビューのみで送る
+     * （全文が失われても本文送信自体は退行させない）。
+     */
+    suspend fun withFullTextAttachment(
+        context: Context,
+        payload: NotificationPayload,
+        fullText: String,
+        config: PerantaConfig,
+    ): NotificationPayload = augmentWithFullText(payload) {
+        attachFullTextIfNeeded(
+            payload = payload,
+            fullText = fullText,
+            attachFullTextWhenTruncated = config.attachFullTextWhenTruncated,
+            persistSensitiveHistory = config.persistSensitiveHistory,
+            uploadFullText = { text -> uploadFullText(context, config, text) },
+        )
+    }
+
+    /** 長い本文の SMS に全文添付を付ける（§4.3）。挙動は通知版と同じ。 */
+    suspend fun withFullTextAttachment(
+        context: Context,
+        payload: SmsPayload,
+        fullText: String,
+        config: PerantaConfig,
+    ): SmsPayload = augmentWithFullText(payload) {
+        attachFullTextIfNeeded(
+            payload = payload,
+            fullText = fullText,
+            attachFullTextWhenTruncated = config.attachFullTextWhenTruncated,
+            persistSensitiveHistory = config.persistSensitiveHistory,
+            uploadFullText = { text -> uploadFullText(context, config, text) },
+        )
+    }
+
+    /** 全文添付の付与を試み、失敗したら元の [payload]（切り詰めプレビューのみ）へフォールバックする。 */
+    private suspend fun <T : Payload> augmentWithFullText(payload: T, block: suspend () -> T): T =
+        try {
+            block()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            log.w(error) { "full text attach failed; sending truncated preview only id=${payload.id}" }
+            payload
+        }
+
+    /** 切り詰め前の本文全文を暗号化 blob として blobTopic へアップロードし、[AttachmentRef] を返す（§4.3）。 */
+    private suspend fun uploadFullText(context: Context, config: PerantaConfig, text: String): AttachmentRef {
+        val repo = androidConfigRepository(context)
+        val blobTopic = config.blobTopic ?: repo.ensureBlobTopic()
+        val cipher = BlobCipher(Base64.decode(config.sharedKeyBase64!!), config.keyId!!)
+        val transport = KtorBlobTransport(config, httpClient)
+        return uploadFullTextAttachment(transport, cipher, blobTopic, text)
     }
 
     /**

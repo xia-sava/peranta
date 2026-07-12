@@ -10,7 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import to.sava.peranta.config.PerantaConfig
-import to.sava.peranta.model.Payload
+import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.send.buildSmsPayload
 
@@ -63,17 +63,19 @@ class SmsReceiver : BroadcastReceiver() {
             deviceId = deviceId,
             now = now,
         )
-        dispatchAsync(context, payload, config.copy(deviceId = deviceId))
+        dispatchAsync(context, payload, body, config.copy(deviceId = deviceId))
     }
 
-    private fun dispatchAsync(context: Context, payload: Payload, config: PerantaConfig) {
+    private fun dispatchAsync(context: Context, payload: SmsPayload, fullText: String, config: PerantaConfig) {
         val pendingResult = goAsync()
         scope.launch {
             try {
-                if (PerantaSend.dispatch(context, payload, config, publishTimeoutMillis = SMS_PUBLISH_TIMEOUT_MILLIS)) {
-                    log.i { "sms sent id=${payload.id}" }
+                // 長文 SMS なら全文を暗号化 blob として添付し、インラインは切り詰めプレビューにする（§4.3）。
+                val sent = PerantaSend.withFullTextAttachment(context, payload, fullText, config)
+                if (PerantaSend.dispatch(context, sent, config, publishTimeoutMillis = SMS_PUBLISH_TIMEOUT_MILLIS)) {
+                    log.i { "sms sent id=${sent.id}" }
                 } else {
-                    log.d { "sms queued for retry or dropped id=${payload.id}" }
+                    log.d { "sms queued for retry or dropped id=${sent.id}" }
                 }
             } finally {
                 pendingResult.finish()

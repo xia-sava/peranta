@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.StateFlow
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.ui.AttachmentUi
+import to.sava.peranta.ui.FullTextUi
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.TimelineActions
 import to.sava.peranta.ui.TimelineScreen
@@ -38,6 +39,7 @@ fun App(
     onOpenHealthCheck: (() -> Unit)? = null,
     timelineActions: TimelineActions? = null,
     attachmentUi: AttachmentUi? = null,
+    fullTextUi: FullTextUi? = null,
 ) {
     PerantaTheme {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -74,7 +76,7 @@ fun App(
                 }
             }
             Box(modifier = Modifier.weight(1f)) {
-                TimelineScreen(items, actions = timelineActions, attachments = attachmentUi)
+                TimelineScreen(items, actions = timelineActions, attachments = attachmentUi, fullText = fullTextUi)
             }
         }
     }

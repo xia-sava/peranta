@@ -11,20 +11,25 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withContext
 import to.sava.peranta.blob.BlobTransport
 import to.sava.peranta.blob.KtorBlobTransport
 import to.sava.peranta.blob.TransferProgress
 import to.sava.peranta.blob.TransferState
 import to.sava.peranta.blob.attachmentKindForMimeType
+import to.sava.peranta.blob.exceedsFullTextAutoFetchLimit
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.net.createNtfyHttpClient
+import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.ui.AttachmentDownloadState
 import to.sava.peranta.ui.AttachmentUi
+import to.sava.peranta.ui.FullTextUi
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.encoding.Base64
 import kotlin.math.roundToInt
 
@@ -69,6 +74,9 @@ object AndroidAttachmentReceive {
 
     /** blobId 毎のダウンロード状態。UI がこれを購読する。 */
     val states: StateFlow<Map<String, AttachmentDownloadState>> = _states.asStateFlow()
+
+    /** 復号済みの全文添付本文を blobId 毎に保持し、再表示（スクロール復帰）での再取得を避ける（§4.3）。 */
+    private val fullTextCache = ConcurrentHashMap<String, String>()
 
     /** [context] のキャッシュ領域を基点にした添付キャッシュを組む。 */
     fun cache(context: Context, config: PerantaConfig): AndroidAttachmentCache =
@@ -185,5 +193,34 @@ object AndroidAttachmentReceive {
             onShare = { blobId -> actions.share(blobId) },
             canShare = true,
         )
+    }
+
+    /**
+     * タイムラインの全文添付（kind=TEXT）の自動取得口を作る（§4.3）。
+     * 全文 blob は小さいためフォアグラウンドサービス（進捗通知）を通さず、添付キャッシュで直接復号する。
+     * 取得失敗（オフライン・期限切れ等）は null を返し、切り詰めプレビューのまま据え置く。
+     */
+    fun fullTextUi(context: Context, config: PerantaConfig): FullTextUi {
+        val appContext = context.applicationContext
+        return FullTextUi(fetchFullText = { ref -> fetchFullText(appContext, config, ref) })
+    }
+
+    private suspend fun fetchFullText(context: Context, config: PerantaConfig, ref: AttachmentRef): String? {
+        fullTextCache[ref.blobId]?.let { return it }
+        if (!config.hasSharedKey) return null
+        if (exceedsFullTextAutoFetchLimit(ref.sizeBytes)) {
+            log.w { "full text attachment exceeds auto fetch limit; skipping blobId=${ref.blobId} sizeBytes=${ref.sizeBytes}" }
+            return null
+        }
+        return try {
+            withContext(ioDispatcher) {
+                cache(context, config).download(ref).readText(Charsets.UTF_8)
+            }.also { fullTextCache[ref.blobId] = it }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            log.w(error) { "full text fetch failed blobId=${ref.blobId}" }
+            null
+        }
     }
 }

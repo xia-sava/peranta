@@ -191,6 +191,7 @@ class MainActivity : ComponentActivity() {
                         onOpenHealthCheck = { screen = Screen.HealthCheck },
                         timelineActions = PerantaReceive.timelineActions(this@MainActivity),
                         attachmentUi = attachmentUi,
+                        fullTextUi = AndroidAttachmentReceive.fullTextUi(this@MainActivity, config),
                     )
                 } else {
                     SendRoleApp(

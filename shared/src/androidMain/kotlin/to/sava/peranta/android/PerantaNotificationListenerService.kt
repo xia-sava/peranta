@@ -20,7 +20,7 @@ import to.sava.peranta.model.Priority
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.receive.CommandExecutionException
 import to.sava.peranta.send.NotificationInput
-import to.sava.peranta.send.buildNotificationPayload
+import to.sava.peranta.send.prepareForwardedNotification
 
 /**
  * 通知を捕捉して送信パイプラインへ渡す NotificationListenerService（§3.1、§5）。
@@ -185,7 +185,7 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         config: PerantaConfig,
         isCrossProfilePackage: Boolean,
     ) {
-        val payload = buildNotificationPayload(
+        val prepared = prepareForwardedNotification(
             input = input,
             mode = config.filterMode,
             rules = config.filterRules,
@@ -202,8 +202,12 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         }
         val sendConfig = config.copy(deviceId = deviceId)
         // 転送対象にした通知の key を覚え、元通知が消えたときの既読同期（§3.4）で参照する。
-        PerantaSend.forwarded.remember(payload.notificationKey)
+        PerantaSend.forwarded.remember(prepared.payload.notificationKey)
         scope.launch {
+            // 長文本文なら全文を暗号化 blob として添付し、インラインは切り詰めプレビューにする（§4.3）。
+            val payload = PerantaSend.withFullTextAttachment(
+                applicationContext, prepared.payload, prepared.fullText, sendConfig,
+            )
             if (PerantaSend.dispatch(applicationContext, payload, sendConfig)) {
                 log.i { "notification sent id=${payload.id}" }
             } else {

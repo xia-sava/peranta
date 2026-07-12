@@ -81,6 +81,7 @@ fun TimelineScreen(
     modifier: Modifier = Modifier,
     actions: TimelineActions? = null,
     attachments: AttachmentUi? = null,
+    fullText: FullTextUi? = null,
 ) {
     val list by items.collectAsState()
     val locallyDismissed = remember { mutableStateListOf<String>() }
@@ -99,6 +100,7 @@ fun TimelineScreen(
                         item = item,
                         actions = actions,
                         attachments = attachments,
+                        fullText = fullText,
                         onLocalDismiss = { locallyDismissed.add(item.id) },
                     )
                 }
@@ -122,11 +124,16 @@ private fun TimelineRow(
     item: TimelineItem,
     actions: TimelineActions?,
     attachments: AttachmentUi?,
+    fullText: FullTextUi?,
     onLocalDismiss: () -> Unit,
 ) {
     when (item) {
         is ReceivedNotification ->
-            if (actions == null) ReceivedBubble(item) else InteractiveReceivedBubble(item, actions, onLocalDismiss)
+            if (actions == null) {
+                ReceivedBubble(item, fullText)
+            } else {
+                InteractiveReceivedBubble(item, actions, fullText, onLocalDismiss)
+            }
 
         is ReceivedFile -> ReceivedFileBubble(item, attachments)
         is SentNotification -> SentBubble(item)
@@ -164,14 +171,14 @@ private fun FilePayloadContent(payload: FilePayload, attachments: AttachmentUi?)
 }
 
 @Composable
-private fun ReceivedBubble(item: ReceivedNotification) {
+private fun ReceivedBubble(item: ReceivedNotification, fullText: FullTextUi?) {
     Bubble(
         alignment = Alignment.CenterStart,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         time = item.timestampEpochMillis,
     ) {
-        ReceivedContent(item.payload)
+        ReceivedContent(item.payload, fullText)
     }
 }
 
@@ -183,6 +190,7 @@ private fun ReceivedBubble(item: ReceivedNotification) {
 private fun InteractiveReceivedBubble(
     item: ReceivedNotification,
     actions: TimelineActions,
+    fullText: FullTextUi?,
     onLocalDismiss: () -> Unit,
 ) {
     val dismiss: () -> Unit = {
@@ -221,7 +229,7 @@ private fun InteractiveReceivedBubble(
                     .timelineContextGesture(enabled = true) { menuOpen = true },
             ) {
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    ReceivedContent(item.payload)
+                    ReceivedContent(item.payload, fullText)
                     ActionButtons(item.payload, actions)
                     Text(
                         text = formatTimeOfDay(item.timestampEpochMillis),
@@ -299,7 +307,7 @@ private fun ContextMenu(
 }
 
 @Composable
-private fun ReceivedContent(payload: Payload) {
+private fun ReceivedContent(payload: Payload, fullText: FullTextUi?) {
     Text(
         text = payload.displayHeader(),
         fontWeight = FontWeight.SemiBold,
@@ -308,7 +316,12 @@ private fun ReceivedContent(payload: Payload) {
     payload.displayTitle()?.let {
         Text(text = it, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium)
     }
-    Text(text = payload.displayText(), style = MaterialTheme.typography.bodyMedium)
+    val textAttachment = payload.fullTextAttachment()
+    if (fullText != null && textAttachment != null) {
+        ExpandableText(preview = payload.displayText(), ref = textAttachment, fullText = fullText)
+    } else {
+        Text(text = payload.displayText(), style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
 @Composable

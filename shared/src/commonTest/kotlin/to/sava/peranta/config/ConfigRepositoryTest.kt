@@ -188,6 +188,18 @@ class ConfigRepositoryTest {
         assertTrue(loaded.filterRules.all { it.action == RuleAction.EXCLUDE })
     }
 
+    /** 全文添付トグルは既定 true で、false に設定しても save/load で往復する（§4.3）。 */
+    @Test
+    fun attachFullTextToggleRoundTrips() {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        assertTrue(repo.load().attachFullTextWhenTruncated)
+        repo.save(PerantaConfig(attachFullTextWhenTruncated = false))
+        assertFalse(repo.load().attachFullTextWhenTruncated)
+        repo.save(PerantaConfig(attachFullTextWhenTruncated = true))
+        assertTrue(repo.load().attachFullTextWhenTruncated)
+    }
+
     /** 共有鍵未設定の config を保存すると鍵はクリアされ、load で null になる。 */
     @Test
     fun savingWithoutKeyClearsStoredKey() {

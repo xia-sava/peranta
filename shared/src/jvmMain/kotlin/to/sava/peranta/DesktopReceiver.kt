@@ -20,6 +20,7 @@ import to.sava.peranta.blob.DesktopAttachmentCache
 import to.sava.peranta.blob.KtorBlobTransport
 import to.sava.peranta.blob.TransferProgress
 import to.sava.peranta.blob.TransferState
+import to.sava.peranta.blob.exceedsFullTextAutoFetchLimit
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.isDevMode
@@ -56,6 +57,7 @@ import to.sava.peranta.toast.toastContentFor
 import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.AttachmentDownloadState
 import to.sava.peranta.ui.AttachmentUi
+import to.sava.peranta.ui.FullTextUi
 import to.sava.peranta.ui.TimelineActions
 import java.awt.Desktop
 import java.awt.FileDialog
@@ -128,6 +130,9 @@ class DesktopReceiver(
     // Compose UI スレッドと IO ディスパッチャの双方から並行アクセスされるためスレッドセーフにする。
     private val downloadJobs = ConcurrentHashMap<String, Job>()
     private val knownRefs = ConcurrentHashMap<String, AttachmentRef>()
+
+    // 復号済みの全文添付本文を blobId 毎に保持し、再表示（スクロール復帰）での再取得を避ける（§4.3）。
+    private val fullTextCache = ConcurrentHashMap<String, String>()
 
     // 受信専用端末では dismiss のみ意味を持つ executor を注入する。他 command 種別は no-op（§3.4）。
     private val dismissExecutor = LocalDismissCommandExecutor(
@@ -303,6 +308,35 @@ class DesktopReceiver(
         onOpen = { blobId -> openAttachment(blobId) },
         onSave = { blobId -> saveAttachment(blobId) },
     )
+
+    /**
+     * タイムラインの全文添付（kind=TEXT）の自動取得口を作る（§4.3）。
+     * カードのような手動導線は持たず、表示時にキャッシュ経由で復号し全文文字列を返す。取得失敗は null。
+     */
+    fun fullTextUi(): FullTextUi = FullTextUi(fetchFullText = ::fetchFullText)
+
+    /**
+     * 全文添付の本文を取得する。既に復号済みならメモから、無ければキャッシュへダウンロード・復号して読む（§4.3）。
+     * ブロッキング I/O を含むため IO ディスパッチャで動かす。取得失敗（オフライン・期限切れ等）は握って null を返し、
+     * 呼び出し側（[to.sava.peranta.ui.ExpandableText]）は切り詰めプレビューのまま据え置く。
+     */
+    private suspend fun fetchFullText(ref: AttachmentRef): String? {
+        fullTextCache[ref.blobId]?.let { return it }
+        if (exceedsFullTextAutoFetchLimit(ref.sizeBytes)) {
+            log.w { "full text attachment exceeds auto fetch limit; skipping blobId=${ref.blobId} sizeBytes=${ref.sizeBytes}" }
+            return null
+        }
+        return try {
+            withContext(ioDispatcher) {
+                attachmentCache.download(ref).readText(Charsets.UTF_8)
+            }.also { fullTextCache[ref.blobId] = it }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            log.w(error) { "full text fetch failed blobId=${ref.blobId}" }
+            null
+        }
+    }
 
     /** [ref] の添付を手動ダウンロードする。既に進行中なら二重起動しない。 */
     private fun startDownload(ref: AttachmentRef) {

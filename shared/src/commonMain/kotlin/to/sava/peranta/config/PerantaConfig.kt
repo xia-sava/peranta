@@ -16,6 +16,8 @@ const val DEFAULT_HOST: String = "peranta.sava.to"
  * [controlTopic] は全端末で共有する presence/ロスター用 topic（§8）で、ペアリングで配布する。
  * [blobTopic] は全端末で共有する画像/ファイル転送用 topic（§8、§4.3）で、ペアリングで配布する。
  * [revokedDeviceIds] は失効させた端末の deviceId 集合で、ロスター解決時に配送先から除外する（§9）。
+ * [attachFullTextWhenTruncated] が true のとき、プレビュー予算を超える本文は全文を暗号化 blob として
+ * 添付し、受信側で自動展開させる（§4.3）。false なら従来どおり単純にバイト切り詰めする。
  */
 data class PerantaConfig(
     val host: String = DEFAULT_HOST,
@@ -38,6 +40,7 @@ data class PerantaConfig(
     val persistSensitiveHistory: Boolean = false,
     val otpSenderPackages: List<String> = emptyList(),
     val revokedDeviceIds: Set<String> = emptySet(),
+    val attachFullTextWhenTruncated: Boolean = true,
 ) {
     /**
      * ペアリング済みか（共有鍵と keyId が揃っているか）。

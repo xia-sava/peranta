@@ -99,6 +99,7 @@ data class SmsPayload(
     val postedAtEpochMillis: Long,
     val expiresAtEpochMillis: Long? = null,
     val priority: Priority = Priority.HIGH,
+    val attachments: List<AttachmentRef> = emptyList(),
 ) : Payload()
 
 /** 送信元端末への操作指示。 */

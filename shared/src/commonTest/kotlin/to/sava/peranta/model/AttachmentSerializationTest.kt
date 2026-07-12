@@ -105,4 +105,49 @@ class AttachmentSerializationTest {
         val ref = attachment()
         assertEquals(ref, PerantaJson.decodeFromString<AttachmentRef>(PerantaJson.encodeToString(ref)))
     }
+
+    /** kind=TEXT（全文添付）の AttachmentRef は JSON で "text" として往復する。 */
+    @Test
+    fun textAttachmentKindRoundTrips() {
+        val ref = attachment().copy(kind = AttachmentKind.TEXT, mimeType = "text/plain", fileName = "message.txt")
+        val json = PerantaJson.encodeToString(ref)
+        assertTrue(json.contains("\"kind\":\"text\""), json)
+        assertEquals(ref, PerantaJson.decodeFromString<AttachmentRef>(json))
+    }
+
+    /** SmsPayload は attachments を含めてもラウンドトリップする。 */
+    @Test
+    fun smsWithAttachmentsRoundTrip() {
+        val payload = SmsPayload(
+            id = "sms-1",
+            from = "phone",
+            to = BROADCAST_TARGET,
+            sentAtEpochMillis = 1_000,
+            senderNumber = "09000000000",
+            senderName = "銀行",
+            text = "本文プレビュー…",
+            postedAtEpochMillis = 900,
+            attachments = listOf(attachment().copy(kind = AttachmentKind.TEXT)),
+        )
+        assertEquals(payload, decodePayload(encodePayload(payload)))
+    }
+
+    /** attachments を持たない旧 SMS JSON も、空リスト既定で復元される（後方互換）。 */
+    @Test
+    fun smsWithoutAttachmentsDefaultsToEmpty() {
+        val json = """
+            {
+              "type": "sms",
+              "id": "sms-2",
+              "from": "phone",
+              "to": "*",
+              "sentAtEpochMillis": 10,
+              "senderNumber": "09000000000",
+              "text": "確認コード",
+              "postedAtEpochMillis": 9
+            }
+        """.trimIndent()
+        val decoded = decodePayload(json) as SmsPayload
+        assertEquals(emptyList(), decoded.attachments)
+    }
 }

@@ -6,7 +6,11 @@ import kotlinx.serialization.Serializable
 /** Peranta Blob Format の現行バージョン（§4.3）。 */
 const val BLOB_FORMAT_VERSION: Int = 1
 
-/** 添付の種別。JSON では小文字文字列で表現する。 */
+/**
+ * 添付の種別。JSON では小文字文字列で表現する。
+ * IMAGE/FILE は受信側で手動ダウンロードするが、TEXT（長文本文の全文、§4.3）は
+ * 受信側が表示時に自動取得して切り詰めプレビューを全文へ差し替える。
+ */
 @Serializable
 enum class AttachmentKind {
     @SerialName("image")
@@ -14,6 +18,9 @@ enum class AttachmentKind {
 
     @SerialName("file")
     FILE,
+
+    @SerialName("text")
+    TEXT,
 }
 
 /**

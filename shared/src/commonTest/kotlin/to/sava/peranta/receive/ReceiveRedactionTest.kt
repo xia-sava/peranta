@@ -10,6 +10,7 @@ import to.sava.peranta.model.BlobEnc
 import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
+import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.encodeEnvelope
 import to.sava.peranta.net.FakeNtfyClient
 import to.sava.peranta.net.NtfyEvent
@@ -20,6 +21,7 @@ import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ReceiveRedactionTest {
 
@@ -70,6 +72,43 @@ class ReceiveRedactionTest {
             ),
         ),
         postedAtEpochMillis = now - 100,
+    )
+
+    private fun textAttachment(blobId: String = "blob-text"): AttachmentRef = AttachmentRef(
+        blobId = blobId,
+        url = "https://ntfy.example/file/$blobId",
+        fileName = "message.txt",
+        mimeType = "text/plain",
+        sizeBytes = 4096,
+        kind = AttachmentKind.TEXT,
+        enc = BlobEnc(keyId = "k1", saltBase64 = "c2FsdA==", chunkSize = 1024, totalChunks = 4),
+    )
+
+    private fun imageAttachment(blobId: String = "blob-image"): AttachmentRef = AttachmentRef(
+        blobId = blobId,
+        url = "https://ntfy.example/file/$blobId",
+        fileName = "photo.jpg",
+        mimeType = "image/jpeg",
+        sizeBytes = 2048,
+        kind = AttachmentKind.IMAGE,
+        enc = BlobEnc(keyId = "k1", saltBase64 = "c2FsdA==", chunkSize = 1024, totalChunks = 2),
+    )
+
+    /** 送信元が持たせた全文添付（TEXT）付きの OTP 通知。IMAGE 添付も併せ持たせ、伏せ字対象外の種別が残ることを検証する。 */
+    private fun otpWithAttachments(id: String = "n1"): NotificationPayload = otp(id = id).copy(
+        attachments = listOf(imageAttachment(), textAttachment()),
+    )
+
+    /** 送信元が持たせた全文添付（TEXT）付きの SMS。 */
+    private fun smsWithTextAttachment(id: String = "s1"): SmsPayload = SmsPayload(
+        id = id,
+        from = "phone",
+        to = "*",
+        sentAtEpochMillis = now - 100,
+        senderNumber = "09011112222",
+        text = "ふつうの本文",
+        postedAtEpochMillis = now - 100,
+        attachments = listOf(textAttachment()),
     )
 
     private suspend fun eventFor(payload: Payload): NtfyEvent =
@@ -147,6 +186,54 @@ class ReceiveRedactionTest {
 
         val stored = store.loadAll().single() as ReceivedFile
         assertEquals("領収書 12,800 円", stored.payload.caption)
+    }
+
+    /**
+     * 送信元が persistSensitiveHistory=true で送ってきた OTP 通知に TEXT 添付（全文 blob 参照）が
+     * 付いていても、受信側の persistSensitiveHistory=false では本文とあわせて TEXT 添付も永続から除く。
+     * IMAGE 添付は伏せ字と無関係なため永続にも表示にも残る。
+     */
+    @Test
+    fun textAttachmentStrippedFromStoreWhenRedacted() = runTest {
+        val store = store()
+        val pipeline = pipeline(store, persistSensitive = false)
+
+        pipeline.handleEvent(eventFor(otpWithAttachments()))
+
+        val displayed = (pipeline.items.value.single() as ReceivedNotification).payload as NotificationPayload
+        assertEquals(listOf(AttachmentKind.IMAGE, AttachmentKind.TEXT), displayed.attachments.map { it.kind })
+
+        val stored = (store.loadAll().single() as ReceivedNotification).payload as NotificationPayload
+        assertEquals(SENSITIVE_HISTORY_PLACEHOLDER, stored.text)
+        assertEquals(listOf(AttachmentKind.IMAGE), stored.attachments.map { it.kind })
+    }
+
+    /** persistSensitiveHistory=true では本文が伏せられないため、TEXT 添付も永続にそのまま残る。 */
+    @Test
+    fun textAttachmentKeptInStoreWhenSensitiveOptIn() = runTest {
+        val store = store()
+        val pipeline = pipeline(store, persistSensitive = true)
+
+        pipeline.handleEvent(eventFor(otpWithAttachments()))
+
+        val stored = (store.loadAll().single() as ReceivedNotification).payload as NotificationPayload
+        assertEquals(listOf(AttachmentKind.IMAGE, AttachmentKind.TEXT), stored.attachments.map { it.kind })
+    }
+
+    /** SMS も同様に、伏せ字適用時は TEXT 添付を永続から除く。表示用には残す。 */
+    @Test
+    fun smsTextAttachmentStrippedFromStoreWhenRedacted() = runTest {
+        val store = store()
+        val pipeline = pipeline(store, persistSensitive = false)
+
+        pipeline.handleEvent(eventFor(smsWithTextAttachment()))
+
+        val displayed = (pipeline.items.value.single() as ReceivedNotification).payload as SmsPayload
+        assertEquals(listOf(AttachmentKind.TEXT), displayed.attachments.map { it.kind })
+
+        val stored = (store.loadAll().single() as ReceivedNotification).payload as SmsPayload
+        assertEquals(SENSITIVE_HISTORY_PLACEHOLDER, stored.text)
+        assertTrue(stored.attachments.isEmpty())
     }
 
     /** loadHistory は失効済みエントリを表示から除外するが、剪定するまでストアには残す。 */

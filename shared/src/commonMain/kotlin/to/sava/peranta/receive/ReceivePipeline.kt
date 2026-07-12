@@ -11,6 +11,8 @@ import to.sava.peranta.crypto.DecryptionException
 import to.sava.peranta.crypto.KeyIdMismatchException
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.filter.payloadForPersistence
+import to.sava.peranta.model.AttachmentKind
+import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
@@ -265,20 +267,33 @@ class ReceivePipeline(
     /**
      * 保存用アイテムを組む。[persistSensitiveHistory] が false なら本文を伏せる（§11）。
      * 伏せる必要が無ければ表示用アイテムをそのまま保存に使う。
+     * 伏せ字を適用する場合は、送信元が持たせた TEXT 添付（全文 blob 参照、§4.3）も併せて取り除く。
+     * 残したままだと表示側の自動取得やダウンロードキャッシュ経由で伏せたはずの本文全文が漏れる。
      */
     private fun persistItemFor(displayItem: ReceivedNotification, payload: Payload): ReceivedNotification {
         val redacted = payloadForPersistence(payload, persistSensitiveHistory)
-        return if (redacted === payload) displayItem else displayItem.copy(payload = redacted)
+        return if (redacted === payload) displayItem else displayItem.copy(payload = withoutTextAttachments(redacted))
     }
 
     /**
      * ファイル転送の保存用アイテムを組む。[persistSensitiveHistory] が false ならキャプションを伏せる（§11）。
      * 添付メタ・ファイル名はダウンロードに要るため保持する。伏せる必要が無ければ表示用をそのまま保存に使う。
+     * キャプションを伏せる場合は TEXT 添付も併せて取り除く（[persistItemFor] と同じ理由）。
      */
     private fun persistFileItemFor(displayItem: ReceivedFile, payload: FilePayload): ReceivedFile {
         val redacted = payloadForPersistence(payload, persistSensitiveHistory)
-        return if (redacted === payload) displayItem else displayItem.copy(payload = redacted as FilePayload)
+        return if (redacted === payload) displayItem else displayItem.copy(payload = withoutTextAttachments(redacted) as FilePayload)
     }
+
+    /** 添付一覧から kind=TEXT（全文 blob 参照）のみを取り除く。画像・ファイル添付は伏せ字と無関係なため残す。 */
+    private fun withoutTextAttachments(payload: Payload): Payload = when (payload) {
+        is NotificationPayload -> payload.copy(attachments = payload.attachments.filterNotTextKind())
+        is SmsPayload -> payload.copy(attachments = payload.attachments.filterNotTextKind())
+        is FilePayload -> payload.copy(attachments = payload.attachments.filterNotTextKind())
+        else -> payload
+    }
+
+    private fun List<AttachmentRef>.filterNotTextKind() = filterNot { it.kind == AttachmentKind.TEXT }
 
     private suspend fun recordError(
         kind: ErrorKind,
