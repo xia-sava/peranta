@@ -45,6 +45,8 @@ class SettingsControllerTest {
             deviceName = "desktop-1",
             useTls = false,
             port = 8090,
+            persistSensitiveHistory = false,
+            attachFullTextWhenTruncated = true,
         )
 
         val loaded = repo.load()
@@ -66,12 +68,50 @@ class SettingsControllerTest {
             deviceName = "  ",
             useTls = true,
             port = null,
+            persistSensitiveHistory = false,
+            attachFullTextWhenTruncated = true,
         )
 
         val loaded = repo.load()
         assertNull(loaded.accessToken)
         assertNull(loaded.deviceName)
         assertNull(loaded.port)
+    }
+
+    /** persistSensitiveHistory・attachFullTextWhenTruncated の保存/読み込みラウンドトリップ。 */
+    @Test
+    fun saveConnectionSettingsPersistsSensitiveHistoryAndFullTextToggles() {
+        val (controller, repo) = controllerWith(
+            PerantaConfig(persistSensitiveHistory = false, attachFullTextWhenTruncated = true),
+        )
+
+        controller.saveConnectionSettings(
+            host = "example.test",
+            accessToken = "tk",
+            deviceName = "desktop-1",
+            useTls = true,
+            port = null,
+            persistSensitiveHistory = true,
+            attachFullTextWhenTruncated = false,
+        )
+
+        val loaded = repo.load()
+        assertTrue(loaded.persistSensitiveHistory)
+        assertFalse(loaded.attachFullTextWhenTruncated)
+
+        controller.saveConnectionSettings(
+            host = "example.test",
+            accessToken = "tk",
+            deviceName = "desktop-1",
+            useTls = true,
+            port = null,
+            persistSensitiveHistory = false,
+            attachFullTextWhenTruncated = true,
+        )
+
+        val revertedLoaded = repo.load()
+        assertFalse(revertedLoaded.persistSensitiveHistory)
+        assertTrue(revertedLoaded.attachFullTextWhenTruncated)
     }
 
     /** 鍵未設定からの作成: 32 バイト鍵が入り keyId は "1" になる。 */

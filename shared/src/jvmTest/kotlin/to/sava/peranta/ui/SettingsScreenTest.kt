@@ -5,6 +5,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -131,6 +133,49 @@ class SettingsScreenTest {
         onNodeWithTag(TAG_SAVE).performClick()
 
         assertEquals(true, repo.load().useTls)
+    }
+
+    /** センシティブ履歴保存・全文添付のチェックボックスは既定値どおりに初期表示される（§11）。 */
+    @Test
+    fun sensitiveHistoryAndFullTextCheckboxesShowDefaults() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_PERSIST_SENSITIVE).assertIsOff()
+        onNodeWithTag(TAG_ATTACH_FULL_TEXT).assertIsOn()
+    }
+
+    /** 保存済み設定の値がチェックボックスの初期状態に反映される。 */
+    @Test
+    fun sensitiveHistoryAndFullTextCheckboxesReflectSavedConfig() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(PerantaConfig(persistSensitiveHistory = true, attachFullTextWhenTruncated = false))
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_PERSIST_SENSITIVE).assertIsOn()
+        onNodeWithTag(TAG_ATTACH_FULL_TEXT).assertIsOff()
+    }
+
+    /** チェックボックスをトグルして保存すると、値が ConfigRepository に反映される。 */
+    @Test
+    fun togglingSensitiveHistoryAndFullTextCheckboxesPersistsOnSave() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_PERSIST_SENSITIVE).performClick()
+        onNodeWithTag(TAG_ATTACH_FULL_TEXT).performClick()
+        onNodeWithTag(TAG_DEVICE_NAME).performTextReplacement("desktop-1")
+        onNodeWithTag(TAG_SAVE).performClick()
+
+        val loaded = repo.load()
+        assertEquals(true, loaded.persistSensitiveHistory)
+        assertEquals(false, loaded.attachFullTextWhenTruncated)
     }
 
     private companion object {

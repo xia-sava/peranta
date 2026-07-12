@@ -44,6 +44,10 @@ private const val ROTATE_WARNING_BODY: String =
 private const val RESTART_NOTICE: String =
     "設定を保存しました。変更を反映するにはアプリを再起動してください。"
 
+/** センシティブ通知の履歴保存トグルの説明文（§11: 既定 OFF が安全側）。 */
+private const val PERSIST_SENSITIVE_HISTORY_DESCRIPTION: String =
+    "OFF のままだと OTP 等の本文はタイムラインに残しません。"
+
 /**
  * 設定画面（§10.2）とペアリング（§10.3）を 1 画面にまとめたもの。
  * 接続情報の入力・保存、共有鍵の作成、QR による新端末追加を行う。
@@ -67,6 +71,8 @@ fun SettingsScreen(
     var port by remember { mutableStateOf(initial.port?.toString().orEmpty()) }
     var keyId by remember { mutableStateOf(initial.keyId) }
     var hasKey by remember { mutableStateOf(!initial.sharedKeyBase64.isNullOrBlank()) }
+    var persistSensitiveHistory by remember { mutableStateOf(initial.persistSensitiveHistory) }
+    var attachFullTextWhenTruncated by remember { mutableStateOf(initial.attachFullTextWhenTruncated) }
 
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var showRotateWarning by remember { mutableStateOf(false) }
@@ -142,6 +148,28 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth().testTag(TAG_PORT),
             )
 
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = persistSensitiveHistory,
+                    onCheckedChange = { persistSensitiveHistory = it },
+                    modifier = Modifier.testTag(TAG_PERSIST_SENSITIVE),
+                )
+                Text(text = "センシティブな通知の本文を履歴に保存する")
+            }
+            Text(
+                text = PERSIST_SENSITIVE_HISTORY_DESCRIPTION,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = attachFullTextWhenTruncated,
+                    onCheckedChange = { attachFullTextWhenTruncated = it },
+                    modifier = Modifier.testTag(TAG_ATTACH_FULL_TEXT),
+                )
+                Text(text = "長文本文の全文をシームレスに添付・展開する")
+            }
+
             Button(
                 onClick = {
                     controller.saveConnectionSettings(
@@ -150,6 +178,8 @@ fun SettingsScreen(
                         deviceName = deviceName,
                         useTls = useTls,
                         port = port.toIntOrNull(),
+                        persistSensitiveHistory = persistSensitiveHistory,
+                        attachFullTextWhenTruncated = attachFullTextWhenTruncated,
                     )
                     statusMessage = RESTART_NOTICE
                 },
@@ -236,6 +266,8 @@ const val TAG_TOKEN: String = "settings-token"
 const val TAG_DEVICE_NAME: String = "settings-deviceName"
 const val TAG_TLS: String = "settings-tls"
 const val TAG_PORT: String = "settings-port"
+const val TAG_PERSIST_SENSITIVE: String = "settings-persist-sensitive"
+const val TAG_ATTACH_FULL_TEXT: String = "settings-attach-full-text"
 const val TAG_SAVE: String = "settings-save"
 const val TAG_ROTATE: String = "settings-rotate"
 const val TAG_ROTATE_CONFIRM: String = "settings-rotate-confirm"

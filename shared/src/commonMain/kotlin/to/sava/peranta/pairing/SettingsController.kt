@@ -36,6 +36,8 @@ class SettingsController(private val repository: ConfigRepository) {
         deviceName: String?,
         useTls: Boolean,
         port: Int?,
+        persistSensitiveHistory: Boolean,
+        attachFullTextWhenTruncated: Boolean,
     ): PerantaConfig {
         val updated = repository.load().copy(
             host = host,
@@ -43,6 +45,8 @@ class SettingsController(private val repository: ConfigRepository) {
             deviceName = deviceName?.takeIf { it.isNotBlank() },
             useTls = useTls,
             port = port,
+            persistSensitiveHistory = persistSensitiveHistory,
+            attachFullTextWhenTruncated = attachFullTextWhenTruncated,
         )
         repository.save(updated)
         return updated
