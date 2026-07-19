@@ -31,19 +31,31 @@ kotlin {
     }
 
     sourceSets {
-        androidMain.dependencies {
-            implementation(libs.compose.uiToolingPreview)
-            implementation(libs.cryptography.provider.jdk)
-            implementation(libs.ktor.client.okhttp)
-            implementation(libs.multiplatform.settings.noArg)
-            implementation(libs.androidx.work.runtime)
-            implementation(libs.unifiedpush.connector)
+        // jvmMain・androidMain 双方が依存する JVM 系中間ソースセット（zxing 等の pure Java 実装を共有する）。
+        val jvmShared by creating {
+            dependsOn(commonMain.get())
+            dependencies {
+                implementation(libs.zxing.core)
+            }
         }
-        jvmMain.dependencies {
-            implementation(libs.cryptography.provider.jdk)
-            implementation(libs.ktor.client.cio)
-            implementation(libs.multiplatform.settings.noArg)
-            implementation(libs.zxing.core)
+        androidMain {
+            dependsOn(jvmShared)
+            dependencies {
+                implementation(libs.compose.uiToolingPreview)
+                implementation(libs.cryptography.provider.jdk)
+                implementation(libs.ktor.client.okhttp)
+                implementation(libs.multiplatform.settings.noArg)
+                implementation(libs.androidx.work.runtime)
+                implementation(libs.unifiedpush.connector)
+            }
+        }
+        jvmMain {
+            dependsOn(jvmShared)
+            dependencies {
+                implementation(libs.cryptography.provider.jdk)
+                implementation(libs.ktor.client.cio)
+                implementation(libs.multiplatform.settings.noArg)
+            }
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -114,9 +126,11 @@ kover {
                 classes("to.sava.peranta.blob.KtorBlobTransportKt")
                 classes("to.sava.peranta.blob.NtfyPublishResponse")
                 classes("to.sava.peranta.blob.NtfyAttachment")
-                // pairing パッケージのうち QR 生成・PNG 描画の配線（zxing と画像 I/O が要る。
+                // pairing パッケージのうち QR 行列生成・PNG 描画の配線（zxing と画像 I/O が要る。
                 // 生成結果は jvmTest の round-trip（PNG を再デコード）で振る舞いを担保する）。
+                classes("to.sava.peranta.pairing.PairingQrMatrixKt")
                 classes("to.sava.peranta.pairing.QrCodeKt")
+                // QR ドット行列の値オブジェクト（描画・PNG 書き出しの入力。round-trip テストで間接的に担保する）。
                 classes("to.sava.peranta.pairing.QrMatrix")
                 // toast パッケージのうち SnoreToast プロセス起動・exe 展開・OS 判定・データ定義の配線
                 // （実行に Windows と同梱 exe が要る。純粋ロジックは SnoreToastCommand / ToastContentKt）。

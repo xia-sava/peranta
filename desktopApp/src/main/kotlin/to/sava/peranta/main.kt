@@ -1,6 +1,5 @@
 package to.sava.peranta
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.layout.BoxScope
@@ -15,7 +14,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -34,6 +32,7 @@ import to.sava.peranta.platform.initLogging
 import to.sava.peranta.ui.AppFilterScreen
 import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.PerantaTheme
+import to.sava.peranta.ui.QrCodeCanvas
 import to.sava.peranta.ui.SettingsScreen
 import to.sava.peranta.update.DesktopUpdater
 import java.awt.EventQueue
@@ -56,21 +55,7 @@ private val perantaIcon: Painter = object : Painter() {
 @Composable
 private fun DesktopQrCode(uri: String, modifier: Modifier = Modifier) {
     val matrix = remember(uri) { pairingQrMatrix(uri) }
-    Canvas(modifier = modifier.size(240.dp)) {
-        val moduleSize = size.minDimension / matrix.size
-        drawRect(color = Color.White, size = Size(matrix.size * moduleSize, matrix.size * moduleSize))
-        for (y in 0 until matrix.size) {
-            for (x in 0 until matrix.size) {
-                if (matrix.isDark(x, y)) {
-                    drawRect(
-                        color = Color.Black,
-                        topLeft = Offset(x * moduleSize, y * moduleSize),
-                        size = Size(moduleSize, moduleSize),
-                    )
-                }
-            }
-        }
-    }
+    QrCodeCanvas(matrix, modifier = modifier.size(240.dp))
 }
 
 /** 設定画面のスクロール位置に追従する縦スクロールバー。commonMain の設定画面へスロットとして注入する。 */
