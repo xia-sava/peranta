@@ -1,13 +1,18 @@
 package to.sava.peranta
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -33,7 +38,9 @@ import to.sava.peranta.ui.SettingsScreen
 import to.sava.peranta.update.DesktopUpdater
 import java.awt.EventQueue
 import java.awt.Frame
+import java.awt.Toolkit
 import java.awt.Window as AwtWindow
+import java.awt.datatransfer.StringSelection
 import java.util.concurrent.atomic.AtomicReference
 
 /** トレイ・ウィンドウ用の簡易アイコン。 */
@@ -64,6 +71,20 @@ private fun DesktopQrCode(uri: String, modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+/** 設定画面のスクロール位置に追従する縦スクロールバー。commonMain の設定画面へスロットとして注入する。 */
+@Composable
+private fun BoxScope.DesktopScrollbar(scrollState: ScrollState) {
+    VerticalScrollbar(
+        adapter = rememberScrollbarAdapter(scrollState),
+        modifier = Modifier.align(Alignment.CenterEnd),
+    )
+}
+
+/** ペアリング文字列をシステムクリップボードにコピーする。 */
+private fun copyToClipboard(text: String) {
+    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
 }
 
 /** メインウィンドウをアクティブ化し、最前面に出す（トーストクリック導線で使う）。EDT 上で実行する。 */
@@ -179,7 +200,8 @@ fun main(args: Array<String>) {
                         } else {
                             null
                         },
-                        devMode = desktopSettings.devMode,
+                        scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
+                        onCopyPairingUri = ::copyToClipboard,
                     )
                 }
                 showAppFilter && receiver != null -> PerantaTheme {

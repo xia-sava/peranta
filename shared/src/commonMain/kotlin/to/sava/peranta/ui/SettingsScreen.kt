@@ -1,6 +1,10 @@
 package to.sava.peranta.ui
 
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,8 +55,8 @@ private const val PERSIST_SENSITIVE_HISTORY_DESCRIPTION: String =
 /**
  * 設定画面（§10.2）とペアリング（§10.3）を 1 画面にまとめたもの。
  * 接続情報の入力・保存、共有鍵の作成、QR による新端末追加を行う。
- * QR の描画はプラットフォーム依存のため [qrContent] スロットで注入する。
- * [devMode] が偽のときは TLS を常に有効とし、切替チェックボックスを隠す（§16）。
+ * QR の描画・スクロールバー・ペアリング文字列コピーはプラットフォーム依存のため
+ * [qrContent] / [scrollbarContent] / [onCopyPairingUri] スロットで注入する。
  */
 @Composable
 fun SettingsScreen(
@@ -61,13 +65,13 @@ fun SettingsScreen(
     qrContent: @Composable (uri: String) -> Unit = {},
     onOpenTimeline: (() -> Unit)? = null,
     qrVisibleMillis: Long = DEFAULT_QR_VISIBLE_MILLIS,
-    devMode: Boolean = false,
+    scrollbarContent: @Composable BoxScope.(scrollState: ScrollState) -> Unit = {},
+    onCopyPairingUri: ((String) -> Unit)? = null,
 ) {
     val initial = remember { controller.load() }
     var host by remember { mutableStateOf(initial.host) }
     var accessToken by remember { mutableStateOf(initial.accessToken.orEmpty()) }
     var deviceName by remember { mutableStateOf(initial.deviceName.orEmpty()) }
-    var useTls by remember { mutableStateOf(if (devMode) initial.useTls else true) }
     var port by remember { mutableStateOf(initial.port?.toString().orEmpty()) }
     var keyId by remember { mutableStateOf(initial.keyId) }
     var hasKey by remember { mutableStateOf(!initial.sharedKeyBase64.isNullOrBlank()) }
@@ -93,146 +97,157 @@ fun SettingsScreen(
     }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+        val scrollState = rememberScrollState()
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(text = "設定", style = MaterialTheme.typography.titleLarge)
-                if (onOpenTimeline != null) {
-                    TextButton(onClick = onOpenTimeline) { Text(text = "タイムラインへ") }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(text = "設定", style = MaterialTheme.typography.titleLarge)
+                    if (onOpenTimeline != null) {
+                        TextButton(onClick = onOpenTimeline) { Text(text = "タイムラインへ") }
+                    }
                 }
-            }
 
-            OutlinedTextField(
-                value = host,
-                onValueChange = { host = it },
-                label = { Text("サーバホスト名") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().testTag(TAG_HOST),
-            )
-            OutlinedTextField(
-                value = accessToken,
-                onValueChange = { accessToken = it },
-                label = { Text("アクセストークン") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().testTag(TAG_TOKEN),
-            )
-            OutlinedTextField(
-                value = deviceName,
-                onValueChange = { deviceName = it },
-                label = { Text("端末名") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().testTag(TAG_DEVICE_NAME),
-            )
-            if (devMode) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = host,
+                    onValueChange = { host = it },
+                    label = { Text("サーバホスト名") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag(TAG_HOST),
+                )
+                OutlinedTextField(
+                    value = accessToken,
+                    onValueChange = { accessToken = it },
+                    label = { Text("アクセストークン") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag(TAG_TOKEN),
+                )
+                OutlinedTextField(
+                    value = deviceName,
+                    onValueChange = { deviceName = it },
+                    label = { Text("端末名") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag(TAG_DEVICE_NAME),
+                )
+                OutlinedTextField(
+                    value = port,
+                    onValueChange = { input -> port = input.filter { it.isDigit() } },
+                    label = { Text("ポート（任意）") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth().testTag(TAG_PORT),
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { persistSensitiveHistory = !persistSensitiveHistory },
+                ) {
                     Checkbox(
-                        checked = useTls,
-                        onCheckedChange = { useTls = it },
-                        modifier = Modifier.testTag(TAG_TLS),
+                        checked = persistSensitiveHistory,
+                        onCheckedChange = { persistSensitiveHistory = it },
+                        modifier = Modifier.testTag(TAG_PERSIST_SENSITIVE),
                     )
-                    Text(text = "TLS を使う")
+                    Text(text = "センシティブな通知の本文を履歴に保存する")
                 }
-            }
-            OutlinedTextField(
-                value = port,
-                onValueChange = { input -> port = input.filter { it.isDigit() } },
-                label = { Text("ポート（任意）") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth().testTag(TAG_PORT),
-            )
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = persistSensitiveHistory,
-                    onCheckedChange = { persistSensitiveHistory = it },
-                    modifier = Modifier.testTag(TAG_PERSIST_SENSITIVE),
-                )
-                Text(text = "センシティブな通知の本文を履歴に保存する")
-            }
-            Text(
-                text = PERSIST_SENSITIVE_HISTORY_DESCRIPTION,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = attachFullTextWhenTruncated,
-                    onCheckedChange = { attachFullTextWhenTruncated = it },
-                    modifier = Modifier.testTag(TAG_ATTACH_FULL_TEXT),
-                )
-                Text(text = "長文本文の全文をシームレスに添付・展開する")
-            }
-
-            Button(
-                onClick = {
-                    controller.saveConnectionSettings(
-                        host = host,
-                        accessToken = accessToken,
-                        deviceName = deviceName,
-                        useTls = useTls,
-                        port = port.toIntOrNull(),
-                        persistSensitiveHistory = persistSensitiveHistory,
-                        attachFullTextWhenTruncated = attachFullTextWhenTruncated,
-                    )
-                    statusMessage = RESTART_NOTICE
-                },
-                modifier = Modifier.testTag(TAG_SAVE),
-            ) {
-                Text(text = "保存")
-            }
-
-            Text(
-                text = if (hasKey) "共有鍵: 設定済み（keyId=${keyId ?: "?"}）" else "共有鍵: 未設定",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(
-                    onClick = { if (hasKey) showRotateWarning = true else rotateKey() },
-                    modifier = Modifier.testTag(TAG_ROTATE),
-                ) {
-                    Text(text = "鍵を作る")
-                }
-                OutlinedButton(
-                    onClick = {
-                        pairingUri = controller.buildPairingUri()
-                        if (pairingUri == null) {
-                            statusMessage = "先にトークンと共有鍵を設定してください。"
-                        }
-                    },
-                    modifier = Modifier.testTag(TAG_ADD_DEVICE),
-                ) {
-                    Text(text = "新しい端末を追加")
-                }
-            }
-
-            pairingUri?.let { uri ->
                 Text(
-                    text = "この QR を新しい端末のカメラで読み取ってください。時間が経つと自動的に隠れます。",
+                    text = PERSIST_SENSITIVE_HISTORY_DESCRIPTION,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                qrContent(uri)
-                TextButton(onClick = { pairingUri = null }, modifier = Modifier.testTag(TAG_HIDE_QR)) {
-                    Text(text = "QR を隠す")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { attachFullTextWhenTruncated = !attachFullTextWhenTruncated },
+                ) {
+                    Checkbox(
+                        checked = attachFullTextWhenTruncated,
+                        onCheckedChange = { attachFullTextWhenTruncated = it },
+                        modifier = Modifier.testTag(TAG_ATTACH_FULL_TEXT),
+                    )
+                    Text(text = "長文本文の全文をシームレスに添付・展開する")
+                }
+
+                Button(
+                    onClick = {
+                        controller.saveConnectionSettings(
+                            host = host,
+                            accessToken = accessToken,
+                            deviceName = deviceName,
+                            useTls = true,
+                            port = port.toIntOrNull(),
+                            persistSensitiveHistory = persistSensitiveHistory,
+                            attachFullTextWhenTruncated = attachFullTextWhenTruncated,
+                        )
+                        statusMessage = RESTART_NOTICE
+                    },
+                    modifier = Modifier.testTag(TAG_SAVE),
+                ) {
+                    Text(text = "保存")
+                }
+
+                Text(
+                    text = if (hasKey) "共有鍵: 設定済み（keyId=${keyId ?: "?"}）" else "共有鍵: 未設定",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(
+                        onClick = { if (hasKey) showRotateWarning = true else rotateKey() },
+                        modifier = Modifier.testTag(TAG_ROTATE),
+                    ) {
+                        Text(text = "鍵を作る")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            pairingUri = controller.buildPairingUri()
+                            if (pairingUri == null) {
+                                statusMessage = "先にトークンと共有鍵を設定してください。"
+                            }
+                        },
+                        modifier = Modifier.testTag(TAG_ADD_DEVICE),
+                    ) {
+                        Text(text = "新しい端末を追加")
+                    }
+                }
+
+                pairingUri?.let { uri ->
+                    Text(
+                        text = "この QR を新しい端末のカメラで読み取ってください。時間が経つと自動的に隠れます。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    qrContent(uri)
+                    if (onCopyPairingUri != null) {
+                        OutlinedButton(
+                            onClick = {
+                                onCopyPairingUri(uri)
+                                statusMessage = "ペアリング文字列をコピーしました。"
+                            },
+                            modifier = Modifier.testTag(TAG_COPY_PAIRING_URI),
+                        ) {
+                            Text(text = "文字列をコピー")
+                        }
+                    }
+                    TextButton(onClick = { pairingUri = null }, modifier = Modifier.testTag(TAG_HIDE_QR)) {
+                        Text(text = "QR を隠す")
+                    }
+                }
+
+                statusMessage?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.testTag(TAG_STATUS),
+                    )
                 }
             }
-
-            statusMessage?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.testTag(TAG_STATUS),
-                )
-            }
+            scrollbarContent(scrollState)
         }
     }
 
@@ -264,7 +279,6 @@ fun SettingsScreen(
 const val TAG_HOST: String = "settings-host"
 const val TAG_TOKEN: String = "settings-token"
 const val TAG_DEVICE_NAME: String = "settings-deviceName"
-const val TAG_TLS: String = "settings-tls"
 const val TAG_PORT: String = "settings-port"
 const val TAG_PERSIST_SENSITIVE: String = "settings-persist-sensitive"
 const val TAG_ATTACH_FULL_TEXT: String = "settings-attach-full-text"
@@ -273,4 +287,5 @@ const val TAG_ROTATE: String = "settings-rotate"
 const val TAG_ROTATE_CONFIRM: String = "settings-rotate-confirm"
 const val TAG_ADD_DEVICE: String = "settings-add-device"
 const val TAG_HIDE_QR: String = "settings-hide-qr"
+const val TAG_COPY_PAIRING_URI: String = "settings-copy-pairing-uri"
 const val TAG_STATUS: String = "settings-status"

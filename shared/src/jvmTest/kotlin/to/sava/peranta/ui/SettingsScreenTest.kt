@@ -100,34 +100,14 @@ class SettingsScreenTest {
         onNodeWithTag(QR_SLOT_TAG).assertIsDisplayed()
     }
 
-    /** devMode でないときは TLS 切替チェックボックスを表示しない（§16）。 */
+    /** 保存済み設定が TLS 無効でも、保存時は常に TLS 有効を書き込む。 */
     @Test
-    fun tlsCheckboxHiddenWhenNotDevMode() = runComposeUiTest {
-        val controller = SettingsController(ConfigRepository(MapSettings()))
-
-        setContent { SettingsScreen(controller, devMode = false) }
-
-        onNodeWithTag(TAG_TLS).assertDoesNotExist()
-    }
-
-    /** devMode のときは TLS 切替チェックボックスを表示する。 */
-    @Test
-    fun tlsCheckboxShownWhenDevMode() = runComposeUiTest {
-        val controller = SettingsController(ConfigRepository(MapSettings()))
-
-        setContent { SettingsScreen(controller, devMode = true) }
-
-        onNodeWithTag(TAG_TLS).assertIsDisplayed()
-    }
-
-    /** devMode でなければ、保存済み設定が TLS 無効でも保存時に TLS 有効を書き込む（§16）。 */
-    @Test
-    fun saveForcesTlsWhenNotDevMode() = runComposeUiTest {
+    fun saveAlwaysPersistsTlsEnabled() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
         repo.save(PerantaConfig(useTls = false))
         val controller = SettingsController(repo)
 
-        setContent { SettingsScreen(controller, devMode = false) }
+        setContent { SettingsScreen(controller) }
 
         onNodeWithTag(TAG_DEVICE_NAME).performTextReplacement("desktop-1")
         onNodeWithTag(TAG_SAVE).performClick()
@@ -178,7 +158,90 @@ class SettingsScreenTest {
         assertEquals(false, loaded.attachFullTextWhenTruncated)
     }
 
+    /** チェックボックスのラベル文字列をクリックしてもオンオフが切り替わる。 */
+    @Test
+    fun clickingCheckboxLabelTogglesCheckbox() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_PERSIST_SENSITIVE).assertIsOff()
+        onNodeWithText("センシティブな通知の本文を履歴に保存する").performClick()
+        onNodeWithTag(TAG_PERSIST_SENSITIVE).assertIsOn()
+
+        onNodeWithTag(TAG_ATTACH_FULL_TEXT).assertIsOn()
+        onNodeWithText("長文本文の全文をシームレスに添付・展開する").performClick()
+        onNodeWithTag(TAG_ATTACH_FULL_TEXT).assertIsOff()
+    }
+
+    /** scrollbarContent スロットに現在のスクロール状態が渡され、描画される（Desktop 用スクロールバーの注入経路）。 */
+    @Test
+    fun scrollbarContentSlotIsInvoked() = runComposeUiTest {
+        val controller = SettingsController(ConfigRepository(MapSettings()))
+
+        setContent {
+            SettingsScreen(
+                controller = controller,
+                scrollbarContent = { Text(text = "scrollbar", modifier = Modifier.testTag(SCROLLBAR_SLOT_TAG)) },
+            )
+        }
+
+        onNodeWithTag(SCROLLBAR_SLOT_TAG).assertIsDisplayed()
+    }
+
+    /** onCopyPairingUri が未指定なら、QR 表示中でもコピーボタンは出ない。 */
+    @Test
+    fun copyButtonHiddenWhenOnCopyPairingUriNotProvided() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(
+            PerantaConfig(
+                host = "peranta.sava.to",
+                accessToken = "tk",
+                sharedKeyBase64 = Base64.encode(ByteArray(32)),
+                keyId = "1",
+            ),
+        )
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_ADD_DEVICE).performClick()
+
+        onNodeWithTag(TAG_COPY_PAIRING_URI).assertDoesNotExist()
+    }
+
+    /** onCopyPairingUri が指定されていれば QR 表示中にコピーボタンが出て、押すとペアリング文字列がコールバックへ渡り完了メッセージが出る。 */
+    @Test
+    fun copyButtonInvokesCallbackWithPairingUri() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(
+            PerantaConfig(
+                host = "peranta.sava.to",
+                accessToken = "tk",
+                sharedKeyBase64 = Base64.encode(ByteArray(32)),
+                keyId = "1",
+            ),
+        )
+        val controller = SettingsController(repo)
+        var copiedUri: String? = null
+
+        setContent {
+            SettingsScreen(
+                controller = controller,
+                onCopyPairingUri = { uri -> copiedUri = uri },
+            )
+        }
+
+        onNodeWithTag(TAG_ADD_DEVICE).performClick()
+        onNodeWithTag(TAG_COPY_PAIRING_URI).performClick()
+
+        assertEquals(controller.buildPairingUri(), copiedUri)
+        onNodeWithText("ペアリング文字列をコピーしました。").assertExists()
+    }
+
     private companion object {
         const val QR_SLOT_TAG = "qr-slot"
+        const val SCROLLBAR_SLOT_TAG = "scrollbar-slot"
     }
 }

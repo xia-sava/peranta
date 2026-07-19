@@ -89,7 +89,6 @@ fun loadDesktopConfig(
 /**
  * Desktop 起動時の設定読み込みと、設定画面コントローラを同一の settings 実体から作る。
  * これにより desktopApp 側は multiplatform-settings の型に依存せず設定 UI を配線できる。
- * [devMode] は設定画面の TLS 切替可否など UI 側の分岐にも渡す。
  */
 class DesktopSettings(
     settings: Settings = Settings(),
