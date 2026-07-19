@@ -1,8 +1,11 @@
 package to.sava.peranta.ui
 
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -10,12 +13,14 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runComposeUiTest
 import com.russhwolf.settings.MapSettings
 import to.sava.peranta.config.ConfigRepository
+import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.pairing.PairingData
 import to.sava.peranta.pairing.PairingImportController
 import to.sava.peranta.pairing.PairingUri
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class PairingScanScreenTest {
@@ -103,5 +108,97 @@ class PairingScanScreenTest {
 
         onAllNodesWithTag(TAG_PAIRING_SCAN).assertCountEquals(0)
         onNodeWithTag(TAG_PAIRING_MANUAL_INPUT).assertIsDisplayed()
+    }
+
+    /** 端末名を入力して取り込むと、その端末名が設定へ適用される。 */
+    @Test
+    fun deviceNameInputIsAppliedOnImport() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+
+        setContent { PairingScanScreen(PairingImportController(repo)) }
+
+        onNodeWithTag(TAG_PAIRING_DEVICE_NAME).performTextReplacement("居間のPC")
+        onNodeWithTag(TAG_PAIRING_MANUAL_INPUT).performTextReplacement(validUri())
+        onNodeWithTag(TAG_PAIRING_IMPORT).performClick()
+
+        assertEquals("居間のPC", repo.load().deviceName)
+        onNodeWithTag(TAG_PAIRING_STATUS).assert(
+            hasText("端末名が未設定", substring = true).not(),
+        )
+    }
+
+    /** 端末名を空白のまま取り込むと既存の端末名を引き継ぎ、状態表示に未設定の警告が出る。 */
+    @Test
+    fun blankDeviceNameKeepsExistingAndWarns() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(PerantaConfig(deviceName = "既存端末名"))
+
+        setContent { PairingScanScreen(PairingImportController(repo)) }
+
+        onNodeWithTag(TAG_PAIRING_MANUAL_INPUT).performTextReplacement(validUri())
+        onNodeWithTag(TAG_PAIRING_IMPORT).performClick()
+
+        assertEquals("既存端末名", repo.load().deviceName)
+        onNodeWithTag(TAG_PAIRING_STATUS).assertTextContains(
+            "端末名が未設定です。後で設定画面から入力してください。",
+            substring = true,
+        )
+    }
+
+    /** 設定画面への導線スロット未注入なら「設定元にする」ボタンを出さない。 */
+    @Test
+    fun openSettingsButtonHiddenWhenNoSlotInjected() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+
+        setContent { PairingScanScreen(PairingImportController(repo)) }
+
+        onAllNodesWithTag(TAG_PAIRING_OPEN_SETTINGS).assertCountEquals(0)
+    }
+
+    /** 設定画面への導線スロットを注入するとボタンが出て、クリックでコールバックが呼ばれる。 */
+    @Test
+    fun openSettingsButtonInvokesCallback() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        var opened = false
+
+        setContent {
+            PairingScanScreen(
+                controller = PairingImportController(repo),
+                onOpenSettings = { opened = true },
+            )
+        }
+
+        onNodeWithTag(TAG_PAIRING_OPEN_SETTINGS).performClick()
+
+        assertTrue(opened)
+    }
+
+    /**
+     * 取り込み成功後は「タイムラインへ」導線を出し、クリックでコールバックを呼ぶ。
+     * あわせて「設定元にする」導線は取り込み成功後に隠す（受信側になった後は意味を持たないため）。
+     */
+    @Test
+    fun importedSlotAppearsOnlyAfterSuccessAndHidesOpenSettings() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        var imported = false
+
+        setContent {
+            PairingScanScreen(
+                controller = PairingImportController(repo),
+                onOpenSettings = { },
+                onImported = { imported = true },
+            )
+        }
+
+        onAllNodesWithTag(TAG_PAIRING_IMPORTED).assertCountEquals(0)
+        onNodeWithTag(TAG_PAIRING_OPEN_SETTINGS).assertIsDisplayed()
+
+        onNodeWithTag(TAG_PAIRING_MANUAL_INPUT).performTextReplacement(validUri())
+        onNodeWithTag(TAG_PAIRING_IMPORT).performClick()
+
+        onAllNodesWithTag(TAG_PAIRING_OPEN_SETTINGS).assertCountEquals(0)
+        onNodeWithTag(TAG_PAIRING_IMPORTED).performClick()
+
+        assertTrue(imported)
     }
 }

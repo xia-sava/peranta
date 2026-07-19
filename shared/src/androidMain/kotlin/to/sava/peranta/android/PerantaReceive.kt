@@ -74,6 +74,15 @@ object PerantaReceive {
     }
 
     /**
+     * 保持中の受信パイプラインを破棄する。次回の [prime] / [handleEnvelope] で最新設定から作り直される。
+     * 設定変更後、Activity 再生成（recreate）だけではプロセス内シングルトンの状態が更新されないため、
+     * その直前に呼んで確実に最新設定を反映させる。
+     */
+    suspend fun reset() {
+        mutex.withLock { pipeline = null }
+    }
+
+    /**
      * UnifiedPush で受け取った 1 メッセージ（暗号文 Envelope 文字列）を処理する。
      * 復号 → 宛先検証 → 失効判定 → タイムライン反映を受信中核に委ね、
      * 反映されたアイテムを OS 通知として表示する（§3.2）。設定不足なら復号できないため何もしない。

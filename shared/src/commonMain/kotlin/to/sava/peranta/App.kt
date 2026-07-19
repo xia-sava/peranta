@@ -107,6 +107,7 @@ fun SendRoleApp(
     sendEnabled: Boolean,
     updateController: UpdateController? = null,
     onInstallUpdate: ((String) -> Unit)? = null,
+    onOpenSettings: (() -> Unit)? = null,
     onOpenPairing: (() -> Unit)? = null,
     onOpenAppFilter: (() -> Unit)? = null,
     onOpenHealthCheck: (() -> Unit)? = null,
@@ -135,6 +136,9 @@ fun SendRoleApp(
                     }
                     if (onOpenPairing != null) {
                         TextButton(onClick = onOpenPairing) { Text(text = "QR で設定を取り込む") }
+                    }
+                    if (onOpenSettings != null) {
+                        TextButton(onClick = onOpenSettings) { Text(text = "設定") }
                     }
                 }
             }

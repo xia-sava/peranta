@@ -24,9 +24,9 @@ import androidx.compose.ui.unit.dp
 import to.sava.peranta.pairing.PairingImportController
 import to.sava.peranta.pairing.PairingImportResult
 
-/** 取り込み成功後に再起動を促す文言（設定は次回起動時に反映される）。 */
-private const val PAIRING_RESTART_NOTICE: String =
-    "変更を反映するにはアプリを再起動してください。"
+/** 端末名を入れずに取り込んだときの警告文（設定画面で後から入力できる）。 */
+private const val PAIRING_DEVICE_NAME_MISSING_NOTICE: String =
+    "端末名が未設定です。後で設定画面から入力してください。"
 
 /**
  * QR ペアリング取り込み画面（§10.3）。設定元端末が表示した QR を読み取るか、
@@ -36,24 +36,35 @@ private const val PAIRING_RESTART_NOTICE: String =
  * 注入されたスキャナが読み取り結果（生文字列、キャンセル時は null）をコールバックへ返すと、
  * 手動貼り付けと同じ経路で復号・適用する。[onRequestScan] が null のときはスキャンボタンを出さず、
  * 手動貼り付けのみで動作する（カメラ非対応環境・ヘッドレステスト向け）。
+ * 端末名欄が空欄なら端末名は既存値を引き継ぐ（§6）。[onOpenSettings] が非 null のときは、
+ * この端末自身を設定元にするための設定画面への導線を表示する（取り込み成功後は隠す）。
+ * 取り込み成功後は [onImported] が非 null ならタイムラインへ進む導線を表示する。
  */
 @Composable
 fun PairingScanScreen(
     controller: PairingImportController,
     modifier: Modifier = Modifier,
     onRequestScan: ((onResult: (String?) -> Unit) -> Unit)? = null,
+    onOpenSettings: (() -> Unit)? = null,
+    onImported: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null,
 ) {
     var manualInput by remember { mutableStateOf("") }
+    var deviceNameInput by remember { mutableStateOf("") }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var succeeded by remember { mutableStateOf(false) }
 
     fun importRaw(raw: String) {
-        when (val result = controller.import(raw)) {
+        val deviceName = deviceNameInput.ifBlank { null }
+        when (val result = controller.import(raw, deviceName)) {
             is PairingImportResult.Applied -> {
                 succeeded = true
                 manualInput = ""
-                statusMessage = "設定を取り込みました（keyId=${result.keyId}）。$PAIRING_RESTART_NOTICE"
+                statusMessage = if (deviceName == null) {
+                    "設定を取り込みました（keyId=${result.keyId}）。$PAIRING_DEVICE_NAME_MISSING_NOTICE"
+                } else {
+                    "設定を取り込みました（keyId=${result.keyId}）。"
+                }
             }
 
             is PairingImportResult.Failed -> {
@@ -86,6 +97,13 @@ fun PairingScanScreen(
                 }
             }
 
+            OutlinedTextField(
+                value = deviceNameInput,
+                onValueChange = { deviceNameInput = it },
+                label = { Text("端末名（任意）") },
+                modifier = Modifier.fillMaxWidth().testTag(TAG_PAIRING_DEVICE_NAME),
+            )
+
             Text(
                 text = "カメラが使えないときは、ペアリング文字列を貼り付けて取り込めます。",
                 style = MaterialTheme.typography.bodySmall,
@@ -117,6 +135,24 @@ fun PairingScanScreen(
                 )
             }
 
+            if (succeeded && onImported != null) {
+                Button(
+                    onClick = onImported,
+                    modifier = Modifier.testTag(TAG_PAIRING_IMPORTED),
+                ) {
+                    Text(text = "タイムラインへ")
+                }
+            }
+
+            if (!succeeded && onOpenSettings != null) {
+                TextButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.testTag(TAG_PAIRING_OPEN_SETTINGS),
+                ) {
+                    Text(text = "この端末を設定元にする")
+                }
+            }
+
             if (onBack != null) {
                 TextButton(onClick = onBack, modifier = Modifier.testTag(TAG_PAIRING_BACK)) {
                     Text(text = "戻る")
@@ -128,6 +164,9 @@ fun PairingScanScreen(
 
 const val TAG_PAIRING_SCAN: String = "pairing-scan"
 const val TAG_PAIRING_MANUAL_INPUT: String = "pairing-manual-input"
+const val TAG_PAIRING_DEVICE_NAME: String = "pairing-device-name"
 const val TAG_PAIRING_IMPORT: String = "pairing-import"
 const val TAG_PAIRING_STATUS: String = "pairing-status"
+const val TAG_PAIRING_IMPORTED: String = "pairing-imported"
+const val TAG_PAIRING_OPEN_SETTINGS: String = "pairing-open-settings"
 const val TAG_PAIRING_BACK: String = "pairing-back"

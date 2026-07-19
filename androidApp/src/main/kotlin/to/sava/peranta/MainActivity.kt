@@ -1,21 +1,29 @@
 package to.sava.peranta
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PersistableBundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
@@ -33,6 +41,8 @@ import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.pairing.PairingImportController
+import to.sava.peranta.pairing.SettingsController
+import to.sava.peranta.pairing.pairingQrMatrix
 import to.sava.peranta.send.sharedStreamItems
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.ui.AppFilterController
@@ -42,6 +52,8 @@ import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.healthCheckNeedsAttention
 import to.sava.peranta.ui.PairingScanScreen
 import to.sava.peranta.ui.PerantaTheme
+import to.sava.peranta.ui.QrCodeCanvas
+import to.sava.peranta.ui.SettingsScreen
 import to.sava.peranta.ui.ShareScreen
 import to.sava.peranta.update.AndroidUpdater
 
@@ -59,11 +71,13 @@ private const val KEY_PENDING_SAVE_BLOB_ID = "pendingSaveBlobId"
 /**
  * MainActivity が表示する画面（§10）。
  * [Main] はロール（受信/送信）に応じて本体を出し、[Pairing] は QR 取り込み画面、
- * [AppFilter] はアプリフィルタ画面（§10.4）、[HealthCheck] は健康診断画面（§10.5）を出す。
+ * [Settings] は設定画面（§10.2）、[AppFilter] はアプリフィルタ画面（§10.4）、
+ * [HealthCheck] は健康診断画面（§10.5）を出す。
  */
 private sealed interface Screen {
     data object Main : Screen
     data object Pairing : Screen
+    data object Settings : Screen
     data object AppFilter : Screen
     data object HealthCheck : Screen
     data class Share(val files: List<Uri>) : Screen
@@ -172,8 +186,14 @@ class MainActivity : ComponentActivity() {
                     PairingScanScreen(
                         controller = importController,
                         onRequestScan = { onResult -> requestScan(onResult) },
+                        onOpenSettings = if (config.hasSharedKey) {
+                            null
+                        } else {
+                            { screen = Screen.Settings }
+                        },
+                        onImported = { resetReceiveAndRecreate() },
                         onBack = if (config.hasSharedKey) {
-                            { screen = Screen.Main }
+                            { resetReceiveAndRecreate() }
                         } else {
                             null
                         },
@@ -186,6 +206,7 @@ class MainActivity : ComponentActivity() {
                         updateController = updater.controller,
                         onInstallUpdate = { url -> updater.install(url) },
                         receiveEndpoint = config.unifiedPushEndpoint,
+                        onOpenSettings = { screen = Screen.Settings },
                         onOpenPairing = { screen = Screen.Pairing },
                         onOpenAppFilter = { screen = Screen.AppFilter },
                         onOpenHealthCheck = { screen = Screen.HealthCheck },
@@ -198,9 +219,22 @@ class MainActivity : ComponentActivity() {
                         sendEnabled = config.sendEnabled,
                         updateController = updater.controller,
                         onInstallUpdate = { url -> updater.install(url) },
+                        onOpenSettings = { screen = Screen.Settings },
                         onOpenPairing = { screen = Screen.Pairing },
                         onOpenAppFilter = { screen = Screen.AppFilter },
                         onOpenHealthCheck = { screen = Screen.HealthCheck },
+                    )
+                }
+
+                Screen.Settings -> PerantaTheme {
+                    SettingsScreen(
+                        controller = SettingsController(androidConfigRepository()),
+                        qrContent = { uri ->
+                            QrCodeCanvas(pairingQrMatrix(uri), modifier = Modifier.size(240.dp))
+                        },
+                        onCopyPairingUri = { text -> copyPairingUri(text) },
+                        showSendRoleOptions = true,
+                        onOpenTimeline = { resetReceiveAndRecreate() },
                     )
                 }
 
@@ -319,6 +353,32 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         attachmentActions?.pendingSaveState()?.let { outState.putString(KEY_PENDING_SAVE_BLOB_ID, it) }
+    }
+
+    /**
+     * 受信パイプラインを破棄してから Activity を再生成する。プロセス内シングルトンの受信状態は
+     * recreate だけでは更新されないため、最新設定を確実に反映させる導線で使う。
+     */
+    private fun resetReceiveAndRecreate() {
+        lifecycleScope.launch {
+            PerantaReceive.reset()
+            recreate()
+        }
+    }
+
+    /**
+     * ペアリング文字列をシステムクリップボードへコピーする（設定画面のコピー導線、§10.3）。
+     * 共有鍵・トークンを含む機密情報のため、Android 13+ ではクリップボード履歴・プレビューから伏せる。
+     */
+    private fun copyPairingUri(text: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("Peranta pairing", text)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            clip.description.extras = PersistableBundle().apply {
+                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+            }
+        }
+        clipboard.setPrimaryClip(clip)
     }
 
     /** カメラ権限を確かめてから QR スキャナを起動する（§10.5: 起動時ではなく必要時に要求）。 */
