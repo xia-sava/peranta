@@ -178,7 +178,6 @@ fun SettingsScreen(
                             host = host,
                             accessToken = accessToken,
                             deviceName = deviceName,
-                            useTls = true,
                             port = port.toIntOrNull(),
                             persistSensitiveHistory = persistSensitiveHistory,
                             attachFullTextWhenTruncated = attachFullTextWhenTruncated,

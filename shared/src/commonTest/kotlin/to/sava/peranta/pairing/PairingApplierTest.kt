@@ -49,19 +49,18 @@ class PairingApplierTest {
     @Test
     fun applyPersistsKeyThroughKeyStoreSeam() {
         val settings = MapSettings()
-        PairingApplier(ConfigRepository(settings), devMode = true).apply(
+        PairingApplier(ConfigRepository(settings)).apply(
             PairingData("h", "tk", "k1", key(), tls = false, port = null),
         )
 
         val reloaded = ConfigRepository(settings).load()
         assertEquals(Base64.encode(key()), reloaded.sharedKeyBase64)
-        assertEquals(false, reloaded.useTls)
         assertEquals(null, reloaded.port)
     }
 
-    /** devMode でないときは QR が tls=false でも TLS を有効に強制する（§16）。 */
+    /** QR が tls=false でも TLS を有効に強制する（§16）。 */
     @Test
-    fun forcesTlsWhenNotDevMode() {
+    fun forcesTls() {
         val settings = MapSettings()
         PairingApplier(ConfigRepository(settings)).apply(
             PairingData("h", "tk", "k1", key(), tls = false, port = null),
@@ -70,14 +69,38 @@ class PairingApplierTest {
         assertEquals(true, ConfigRepository(settings).load().useTls)
     }
 
-    /** devMode のときは QR の tls フラグをそのまま反映する。 */
+    /** 端末名を渡すと設定へ適用される。 */
     @Test
-    fun keepsTlsFlagWhenDevMode() {
+    fun applyAppliesDeviceNameWhenProvided() {
         val settings = MapSettings()
-        PairingApplier(ConfigRepository(settings), devMode = true).apply(
-            PairingData("h", "tk", "k1", key(), tls = false, port = null),
-        )
+        val repo = ConfigRepository(settings)
 
-        assertEquals(false, ConfigRepository(settings).load().useTls)
+        PairingApplier(repo).apply(PairingData("h", "tk", "k1", key()), deviceName = "phone-1")
+
+        assertEquals("phone-1", repo.load().deviceName)
+    }
+
+    /** 端末名に空文字を渡してもそのまま適用する（未入力でも許可）。 */
+    @Test
+    fun applyAppliesEmptyDeviceName() {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings)
+        repo.save(PerantaConfig(deviceName = "old"))
+
+        PairingApplier(repo).apply(PairingData("h", "tk", "k1", key()), deviceName = "")
+
+        assertEquals("", repo.load().deviceName)
+    }
+
+    /** 端末名を渡さなければ既存設定を引き継ぐ。 */
+    @Test
+    fun applyKeepsDeviceNameWhenNotProvided() {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings)
+        repo.save(PerantaConfig(deviceName = "tablet"))
+
+        PairingApplier(repo).apply(PairingData("h", "tk", "k1", key()))
+
+        assertEquals("tablet", repo.load().deviceName)
     }
 }

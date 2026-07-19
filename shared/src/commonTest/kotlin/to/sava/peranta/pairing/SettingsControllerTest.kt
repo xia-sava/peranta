@@ -34,7 +34,7 @@ class SettingsControllerTest {
         assertEquals("101", nextKeyId(" 100 "))
     }
 
-    /** 接続設定の保存: 値がリポジトリへ反映され、空文字の token/端末名は null になる。 */
+    /** 接続設定の保存: 値がリポジトリへ反映され、TLS は常に有効として保存される。 */
     @Test
     fun saveConnectionSettingsPersistsValues() {
         val (controller, repo) = controllerWith()
@@ -43,7 +43,6 @@ class SettingsControllerTest {
             host = "example.test",
             accessToken = "tk",
             deviceName = "desktop-1",
-            useTls = false,
             port = 8090,
             persistSensitiveHistory = false,
             attachFullTextWhenTruncated = true,
@@ -53,8 +52,25 @@ class SettingsControllerTest {
         assertEquals("example.test", loaded.host)
         assertEquals("tk", loaded.accessToken)
         assertEquals("desktop-1", loaded.deviceName)
-        assertEquals(false, loaded.useTls)
+        assertTrue(loaded.useTls)
         assertEquals(8090, loaded.port)
+    }
+
+    /** 既存レコードに useTls=false が残っていても、保存を通じて true へ正規化される。 */
+    @Test
+    fun saveConnectionSettingsNormalizesTlsToTrue() {
+        val (controller, repo) = controllerWith(PerantaConfig(useTls = false))
+
+        controller.saveConnectionSettings(
+            host = "example.test",
+            accessToken = "tk",
+            deviceName = "desktop-1",
+            port = null,
+            persistSensitiveHistory = false,
+            attachFullTextWhenTruncated = true,
+        )
+
+        assertTrue(repo.load().useTls)
     }
 
     /** 空文字の token/端末名/port は未設定（null）として保存される。 */
@@ -66,7 +82,6 @@ class SettingsControllerTest {
             host = "example.test",
             accessToken = "",
             deviceName = "  ",
-            useTls = true,
             port = null,
             persistSensitiveHistory = false,
             attachFullTextWhenTruncated = true,
@@ -89,7 +104,6 @@ class SettingsControllerTest {
             host = "example.test",
             accessToken = "tk",
             deviceName = "desktop-1",
-            useTls = true,
             port = null,
             persistSensitiveHistory = true,
             attachFullTextWhenTruncated = false,
@@ -103,7 +117,6 @@ class SettingsControllerTest {
             host = "example.test",
             accessToken = "tk",
             deviceName = "desktop-1",
-            useTls = true,
             port = null,
             persistSensitiveHistory = false,
             attachFullTextWhenTruncated = true,
@@ -171,5 +184,92 @@ class SettingsControllerTest {
 
         val (noKey, _) = controllerWith(PerantaConfig(accessToken = "tk"))
         assertNull(noKey.buildPairingUri())
+    }
+
+    /** 送信ロール設定の保存: sendEnabled/smsDirectReceive がリポジトリへ反映される。 */
+    @Test
+    fun saveSendRoleSettingsPersistsValues() {
+        val (controller, repo) = controllerWith(
+            PerantaConfig(sendEnabled = false, smsDirectReceive = true),
+        )
+
+        controller.saveSendRoleSettings(sendEnabled = true, smsDirectReceive = false)
+
+        val loaded = repo.load()
+        assertTrue(loaded.sendEnabled)
+        assertFalse(loaded.smsDirectReceive)
+    }
+
+    /** 送信ロール設定の保存: 他項目（host 等）は既存値を引き継ぐ。 */
+    @Test
+    fun saveSendRoleSettingsKeepsOtherFields() {
+        val (controller, repo) = controllerWith(
+            PerantaConfig(host = "example.test", accessToken = "tk"),
+        )
+
+        controller.saveSendRoleSettings(sendEnabled = true, smsDirectReceive = true)
+
+        val loaded = repo.load()
+        assertEquals("example.test", loaded.host)
+        assertEquals("tk", loaded.accessToken)
+    }
+
+    /** 初期設定完了判定: どのロールの readiness も満たさなければ未完了。 */
+    @Test
+    fun isSetupCompleteFalseWhenNothingReady() {
+        val (controller, _) = controllerWith()
+        assertFalse(controller.isSetupComplete())
+    }
+
+    /** 初期設定完了判定: UnifiedPush 受信ロールが成立すれば完了。 */
+    @Test
+    fun isSetupCompleteTrueWhenUnifiedPushReceiveReady() {
+        val (controller, _) = controllerWith(
+            PerantaConfig(
+                deviceName = "tablet",
+                sharedKeyBase64 = Base64.encode(ByteArray(32)),
+                keyId = "1",
+            ),
+        )
+        assertTrue(controller.isSetupComplete())
+    }
+
+    /**
+     * 初期設定完了判定: 送信ロール（isReadyForSend）のみが成立すれば完了。
+     * receiveTopic を持たないため isReadyForReceive は不成立、
+     * host あり (token/鍵あり)なので isReadyForUnifiedPushReceive とは重複しない別枝であることを確認する。
+     */
+    @Test
+    fun isSetupCompleteTrueWhenOnlySendReady() {
+        val (controller, _) = controllerWith(
+            PerantaConfig(
+                host = "example.test",
+                accessToken = "tk",
+                deviceName = "desktop-1",
+                sharedKeyBase64 = Base64.encode(ByteArray(32)),
+                keyId = "1",
+                deliveryTopics = listOf("delivery-topic"),
+            ),
+        )
+        assertTrue(controller.isSetupComplete())
+    }
+
+    /**
+     * 初期設定完了判定: 受信ロール（isReadyForReceive）のみが成立すれば完了。
+     * receiveTopic を明示的に持つ点で、UnifiedPush 受信 readiness（receiveTopic 不問）とは別の枝である。
+     */
+    @Test
+    fun isSetupCompleteTrueWhenOnlyReceiveReady() {
+        val (controller, _) = controllerWith(
+            PerantaConfig(
+                host = "example.test",
+                accessToken = "tk",
+                deviceName = "desktop-1",
+                sharedKeyBase64 = Base64.encode(ByteArray(32)),
+                keyId = "1",
+                receiveTopic = "receive-topic",
+            ),
+        )
+        assertTrue(controller.isSetupComplete())
     }
 }

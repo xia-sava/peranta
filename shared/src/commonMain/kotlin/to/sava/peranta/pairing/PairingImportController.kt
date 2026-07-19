@@ -6,20 +6,20 @@ import to.sava.peranta.config.ConfigRepository
  * QR スキャンや手動貼り付けで受け取ったペアリング文字列を復号して設定へ適用する（§10.3）。
  * 取り込み画面から復号・適用ロジックを切り離し、結果を [PairingImportResult] で返す。
  * カメラ起動などプラットフォーム依存の入力手段には依存せず、生文字列だけを受け取る。
- * [devMode] は [PairingApplier] の TLS 強制可否へそのまま渡す（§16）。
  */
-class PairingImportController(configRepository: ConfigRepository, devMode: Boolean = false) {
+class PairingImportController(configRepository: ConfigRepository) {
 
-    private val applier: PairingApplier = PairingApplier(configRepository, devMode)
+    private val applier: PairingApplier = PairingApplier(configRepository)
 
     /**
      * [rawUri] を復号し、成功なら設定へ適用する。
      * 前後の空白は入力ミスとして除去する。失敗理由は握り潰さず文言で返す。
+     * [deviceName] を渡した場合は空文字列でもそのまま端末名として適用する。
      */
-    fun import(rawUri: String): PairingImportResult =
+    fun import(rawUri: String, deviceName: String? = null): PairingImportResult =
         when (val result = PairingUri.decode(rawUri.trim())) {
             is PairingResult.Success -> {
-                applier.apply(result.data)
+                applier.apply(result.data, deviceName)
                 PairingImportResult.Applied(result.data.keyId)
             }
 

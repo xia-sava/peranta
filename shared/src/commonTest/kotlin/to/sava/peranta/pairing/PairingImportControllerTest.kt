@@ -61,6 +61,20 @@ class PairingImportControllerTest {
         assertTrue(repo.load().isReadyForUnifiedPushReceive)
     }
 
+    /** 端末名を渡して取り込むと、共有鍵とともに端末名も設定へ適用される。 */
+    @Test
+    fun importAppliesDeviceNameWhenProvided() {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings)
+        val controller = PairingImportController(repo)
+
+        controller.import(validUri(), deviceName = "phone-1")
+
+        val loaded = repo.load()
+        assertEquals("phone-1", loaded.deviceName)
+        assertTrue(loaded.isReadyForUnifiedPushReceive)
+    }
+
     /** 前後の空白付きで貼り付けられても除去して取り込める。 */
     @Test
     fun importTrimsSurroundingWhitespace() {

@@ -28,13 +28,12 @@ class SettingsController(private val repository: ConfigRepository) {
 
     /**
      * 接続まわりの設定を保存する。空文字の token/deviceName は未設定（null）として扱う。
-     * 鍵・keyId・topic などは既存値を引き継ぐ。
+     * 鍵・keyId・topic などは既存値を引き継ぐ。TLS は常に有効として保存する。
      */
     fun saveConnectionSettings(
         host: String,
         accessToken: String?,
         deviceName: String?,
-        useTls: Boolean,
         port: Int?,
         persistSensitiveHistory: Boolean,
         attachFullTextWhenTruncated: Boolean,
@@ -43,13 +42,36 @@ class SettingsController(private val repository: ConfigRepository) {
             host = host,
             accessToken = accessToken?.takeIf { it.isNotBlank() },
             deviceName = deviceName?.takeIf { it.isNotBlank() },
-            useTls = useTls,
+            useTls = true,
             port = port,
             persistSensitiveHistory = persistSensitiveHistory,
             attachFullTextWhenTruncated = attachFullTextWhenTruncated,
         )
         repository.save(updated)
         return updated
+    }
+
+    /**
+     * 送信ロールまわりの設定を保存する。他項目は既存値を引き継ぐ。
+     */
+    fun saveSendRoleSettings(sendEnabled: Boolean, smsDirectReceive: Boolean): PerantaConfig {
+        val updated = repository.load().copy(
+            sendEnabled = sendEnabled,
+            smsDirectReceive = smsDirectReceive,
+        )
+        repository.save(updated)
+        return updated
+    }
+
+    /**
+     * 初期設定が完了しているか（いずれかのロールを開始できる状態か）。
+     * 送信・受信（UnifiedPush 受信を含む）のいずれかの readiness が満たされれば完了とみなす。
+     */
+    fun isSetupComplete(): Boolean {
+        val config = repository.load()
+        return config.isReadyForSend ||
+            config.isReadyForReceive ||
+            config.isReadyForUnifiedPushReceive
     }
 
     /**
