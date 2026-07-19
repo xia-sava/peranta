@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,11 +25,17 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.snapshotFlow
 import to.sava.peranta.autostart.AutoStartManager
 import to.sava.peranta.autostart.DesktopHealthChecker
 import to.sava.peranta.autostart.WindowsRunRegistry
 import to.sava.peranta.pairing.pairingQrMatrix
 import to.sava.peranta.platform.initLogging
+import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.ui.AppFilterScreen
 import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.PerantaTheme
@@ -88,7 +95,6 @@ fun main(args: Array<String>) {
     initLogging()
     val log = Logger.withTag("Main")
     val desktopSettings = DesktopSettings()
-    val config = desktopSettings.config
     val settingsController = desktopSettings.controller
 
     // ログオン自動起動から --minimized で起動された場合はウィンドウを出さずトレイ常駐で開始する（§3.3）。
@@ -103,28 +109,25 @@ fun main(args: Array<String>) {
         showWindowRequest.get().invoke()
         mainWindow.get()?.let(::bringWindowToFront)
     }
-    val receiver = if (config.isReadyForReceive) {
-        DesktopReceiver(
-            config,
-            repository = desktopSettings.repository,
-            onToastClicked = bringToFront,
-        )
-    } else {
-        null
-    }
-
-    val updater = DesktopUpdater(config, DesktopVersion.versionCode)
+    val updater = DesktopUpdater(desktopSettings.config, DesktopVersion.versionCode)
     updater.checkAtStartup()
 
     application {
+        // 設定保存のたびに増やす世代番号。受信機は世代の変化で作り直される。
+        var configGeneration by remember { mutableStateOf(0) }
+        var receiver by remember { mutableStateOf<DesktopReceiver?>(null) }
+        var errorMessage by remember { mutableStateOf<String?>(null) }
+
+        // アプリ終了時は次世代の受信機が起動しないため JSONL 競合の懸念が無く、close 完了を待たずに投げる。
+        val appScope = rememberCoroutineScope()
         val closeAndExit = {
-            receiver?.close()
+            receiver?.let { appScope.launch { it.close() } }
             updater.close()
             exitApplication()
         }
 
         var windowVisible by remember { mutableStateOf(!startMinimized) }
-        var showSettings by remember { mutableStateOf(receiver == null) }
+        var showSettings by remember { mutableStateOf(!desktopSettings.config.isReadyForReceive) }
         var showAppFilter by remember { mutableStateOf(false) }
         var showHealthCheck by remember { mutableStateOf(false) }
 
@@ -148,17 +151,37 @@ fun main(args: Array<String>) {
             },
         )
 
-        var errorMessage by remember { mutableStateOf<String?>(null) }
-
-        LaunchedEffect(receiver) {
-            if (receiver == null) return@LaunchedEffect
-            try {
-                receiver.run()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                log.e(e) { "receiver stopped with error" }
-                errorMessage = "受信中にエラーが発生しました。設定を確認してください。"
+        // 世代の変化を collectLatest で直列化する。新しい世代が来ると旧受信機の run() を
+        // キャンセルし、その close()（finally）完了を待ってから次の受信機を組み立てるため、
+        // 新旧受信機の並行動作（JSONL 追記の競合・エラー表示の取りこぼし）が構造的に起きない。
+        LaunchedEffect(Unit) {
+            snapshotFlow { configGeneration }.collectLatest {
+                errorMessage = null
+                val freshConfig = withContext(ioDispatcher) { desktopSettings.reloadConfig() }
+                // 構築（トースター初期化の同期 I/O）中に世代切替でキャンセルされても必ず close するため、
+                // try は DesktopReceiver の構築から run() までを覆う。
+                var newReceiver: DesktopReceiver? = null
+                try {
+                    if (freshConfig.isReadyForReceive) {
+                        newReceiver = withContext(ioDispatcher) {
+                            DesktopReceiver(
+                                freshConfig,
+                                repository = desktopSettings.repository,
+                                onToastClicked = bringToFront,
+                            )
+                        }
+                    }
+                    receiver = newReceiver
+                    val started = newReceiver ?: return@collectLatest
+                    started.run()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    log.e(e) { "receiver stopped with error" }
+                    errorMessage = "受信中にエラーが発生しました。設定を確認してください。"
+                } finally {
+                    newReceiver?.let { withContext(NonCancellable) { it.close() } }
+                }
             }
         }
 
@@ -169,6 +192,7 @@ fun main(args: Array<String>) {
             title = "Peranta",
         ) {
             LaunchedEffect(window) { mainWindow.set(window) }
+            val currentReceiver = receiver
             when {
                 showHealthCheck -> PerantaTheme {
                     HealthCheckScreen(
@@ -180,33 +204,34 @@ fun main(args: Array<String>) {
                     SettingsScreen(
                         controller = settingsController,
                         qrContent = { uri -> DesktopQrCode(uri) },
-                        onOpenTimeline = if (receiver != null) {
+                        onOpenTimeline = if (currentReceiver != null) {
                             { showSettings = false }
                         } else {
                             null
                         },
                         scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
                         onCopyPairingUri = ::copyToClipboard,
+                        onSaved = { configGeneration++ },
                     )
                 }
-                showAppFilter && receiver != null -> PerantaTheme {
+                showAppFilter && currentReceiver != null -> PerantaTheme {
                     AppFilterScreen(
-                        controller = receiver.appFilterController(),
-                        items = receiver.items,
+                        controller = currentReceiver.appFilterController(),
+                        items = currentReceiver.items,
                         onBack = { showAppFilter = false },
                     )
                 }
                 errorMessage != null -> App(errorMessage!!)
-                receiver != null -> App(
-                    items = receiver.items,
+                currentReceiver != null -> App(
+                    items = currentReceiver.items,
                     updateController = updater.controller,
                     onInstallUpdate = { url -> updater.install(url) },
                     onOpenSettings = { showSettings = true },
                     onOpenAppFilter = { showAppFilter = true },
                     onOpenHealthCheck = { showHealthCheck = true },
-                    timelineActions = receiver.timelineActions(),
-                    attachmentUi = receiver.attachmentUi(),
-                    fullTextUi = receiver.fullTextUi(),
+                    timelineActions = currentReceiver.timelineActions(),
+                    attachmentUi = currentReceiver.attachmentUi(),
+                    fullTextUi = currentReceiver.fullTextUi(),
                 )
                 else -> App()
             }

@@ -8,7 +8,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -69,22 +69,26 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.encoding.Base64
 
 /**
- * Desktop の設定を settings から読む。
- * [devMode] が真のときだけ開発用オーバーライド（[withDevOverrides]）を適用する。
- * 偽のとき（配布物）はオーバーライドを一切適用せず、TLS を常に有効化する（§16）。
+ * [repository] の永続化状態から Desktop 実行に必要な項目を補って設定を組み立てる。
+ * [devMode] が真のときだけ開発用オーバーライド（[withDevOverrides]）を適用し、
+ * 偽のとき（配布物）はオーバーライドを一切適用せず TLS を常に有効化する（§16）。
  * 端末名があれば安定 deviceId を確定し、受信 topic 未設定なら topic を採番・永続化する。
+ */
+private fun enrichConfig(repository: ConfigRepository, devMode: Boolean): PerantaConfig {
+    val config = if (devMode) repository.load().withDevOverrides() else repository.load().copy(useTls = true)
+    val deviceName = config.deviceName ?: return config
+    val deviceId = repository.ensureDeviceId()
+    val topic = config.receiveTopic ?: repository.ensureReceiveTopic(deviceName)
+    return config.copy(deviceId = deviceId, receiveTopic = topic)
+}
+
+/**
+ * Desktop の設定を settings から読む。[enrichConfig] に委譲する薄いエントリポイント。
  */
 fun loadDesktopConfig(
     settings: Settings = Settings(),
     devMode: Boolean = isDevMode(),
-): PerantaConfig {
-    val repo = ConfigRepository(settings)
-    val config = if (devMode) repo.load().withDevOverrides() else repo.load().copy(useTls = true)
-    val deviceName = config.deviceName ?: return config
-    val deviceId = repo.ensureDeviceId()
-    val topic = config.receiveTopic ?: repo.ensureReceiveTopic(deviceName)
-    return config.copy(deviceId = deviceId, receiveTopic = topic)
-}
+): PerantaConfig = enrichConfig(ConfigRepository(settings), devMode)
 
 /**
  * Desktop 起動時の設定読み込みと、設定画面コントローラを同一の settings 実体から作る。
@@ -96,8 +100,13 @@ class DesktopSettings(
 ) {
     /** 設定ストアに紐づくリポジトリ。設定画面・アプリフィルタ画面の永続化で共有する。 */
     val repository: ConfigRepository = ConfigRepository(settings)
-    val config: PerantaConfig = loadDesktopConfig(settings, devMode)
+
+    /** 起動時に一度だけ読み込んだ設定。初期表示の判定に使う。 */
+    val config: PerantaConfig = enrichConfig(repository, devMode)
     val controller: SettingsController = SettingsController(repository)
+
+    /** 現在の永続化状態から enrichment 済みの設定を読み直す（設定変更の自動反映に使う）。 */
+    fun reloadConfig(): PerantaConfig = enrichConfig(repository, devMode)
 }
 
 /**
@@ -116,7 +125,8 @@ class DesktopReceiver(
     private val store = JsonlTimelineStore(defaultTimelineFile())
     private val cipher = MessageCipher(Base64.decode(config.sharedKeyBase64!!), config.keyId!!)
     private val ntfy = KtorNtfyClient(config, httpClient, Logger.withTag("NtfyClient"))
-    private val toastScope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val toastJob = SupervisorJob()
+    private val toastScope = CoroutineScope(toastJob + ioDispatcher)
     private val commandSender = CommandSender(config, cipher, ntfy, SendPipeline(cipher, ntfy, store))
 
     private val attachmentCache = DesktopAttachmentCache(
@@ -444,9 +454,12 @@ class DesktopReceiver(
     private fun cachedFileFor(blobId: String): File? =
         knownRefs[blobId]?.let { attachmentCache.cachedFile(it) }
 
-    /** 保持するリソース（トーストコルーチンと HTTP クライアント）を閉じる。 */
-    fun close() {
-        toastScope.cancel()
+    /**
+     * 保持するリソース（トーストコルーチンと HTTP クライアント）を閉じる。
+     * 進行中のトーストジョブ（dismiss/mute 等の JSONL 追記を含む）の完了を待ってから HTTP を閉じる。
+     */
+    suspend fun close() {
+        toastJob.cancelAndJoin()
         httpClient.close()
     }
 

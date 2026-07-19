@@ -1,6 +1,7 @@
 package to.sava.peranta
 
 import com.russhwolf.settings.MapSettings
+import kotlinx.coroutines.runBlocking
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.crypto.generateKey
@@ -55,7 +56,7 @@ class DesktopReceiverTimelineMuteTest {
             assertEquals("com.spam", rules[0].packageName)
             assertEquals(RuleAction.EXCLUDE, rules[0].action)
         } finally {
-            receiver.close()
+            runBlocking { receiver.close() }
         }
     }
 }
