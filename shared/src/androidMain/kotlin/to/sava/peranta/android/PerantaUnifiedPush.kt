@@ -65,6 +65,12 @@ object PerantaUnifiedPush {
         UnifiedPush.unregister(context.applicationContext)
     }
 
+    /** エンドポイントを取り直す。ntfy アプリの既定サーバー変更後は再登録でしか新サーバーへ移れない。 */
+    fun reregister(context: Context) {
+        unregister(context)
+        register(context)
+    }
+
     /** ntfy を優先し、無ければ先頭を選ぶ。同じ端末構成なら常に同じ選択になる。 */
     private fun chooseDistributor(distributors: List<String>): String =
         distributors.firstOrNull { it == NTFY_PACKAGE } ?: distributors.first()
