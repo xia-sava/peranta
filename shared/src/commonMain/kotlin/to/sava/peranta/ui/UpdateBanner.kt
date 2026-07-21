@@ -43,7 +43,11 @@ fun UpdateBanner(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(text = statusText(status), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = statusText(status),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
                 TextButton(onClick = { controller.checkNow() }, enabled = !checking) {
                     Text(text = if (checking) "確認中..." else "更新を確認")
                 }
@@ -58,6 +62,7 @@ fun UpdateBanner(
                         text = "新しいバージョン ${available.versionName}",
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.weight(1f),
                     )
                     Button(onClick = { onInstall(available.url) }) {
                         Text(text = "更新")

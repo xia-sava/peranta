@@ -3,7 +3,7 @@ package to.sava.peranta
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -50,27 +50,27 @@ fun App(
                 onOpenAppFilter != null || onOpenHealthCheck != null
             ) {
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = receiveEndpoint?.let { "受信エンドポイント: $it" }.orEmpty(),
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (onOpenHealthCheck != null) {
-                            TextButton(onClick = onOpenHealthCheck) { Text(text = "健康診断") }
+                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        val endpointLabel = receiveEndpoint?.let { "受信エンドポイント: $it" }.orEmpty()
+                        if (endpointLabel.isNotEmpty()) {
+                            Text(text = endpointLabel, style = MaterialTheme.typography.labelSmall)
                         }
-                        if (onOpenAppFilter != null) {
-                            TextButton(onClick = onOpenAppFilter) { Text(text = "アプリフィルタ") }
-                        }
-                        if (onOpenPairing != null) {
-                            TextButton(onClick = onOpenPairing) { Text(text = "QR で設定を取り込む") }
-                        }
-                        if (onOpenSettings != null) {
-                            TextButton(onClick = onOpenSettings) { Text(text = "設定") }
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            if (onOpenHealthCheck != null) {
+                                TextButton(onClick = onOpenHealthCheck) { Text(text = "健康診断") }
+                            }
+                            if (onOpenAppFilter != null) {
+                                TextButton(onClick = onOpenAppFilter) { Text(text = "アプリフィルタ") }
+                            }
+                            if (onOpenPairing != null) {
+                                TextButton(onClick = onOpenPairing) { Text(text = "QR で設定を取り込む") }
+                            }
+                            if (onOpenSettings != null) {
+                                TextButton(onClick = onOpenSettings) { Text(text = "設定") }
+                            }
                         }
                     }
                 }
@@ -118,27 +118,27 @@ fun SendRoleApp(
                 UpdateBanner(updateController, onInstallUpdate)
             }
             Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
                     Text(
                         text = if (sendEnabled) "通知を送信する: 有効" else "通知を送信する: 無効",
                         style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.weight(1f),
                     )
-                    if (onOpenHealthCheck != null) {
-                        TextButton(onClick = onOpenHealthCheck) { Text(text = "健康診断") }
-                    }
-                    if (onOpenAppFilter != null) {
-                        TextButton(onClick = onOpenAppFilter) { Text(text = "アプリフィルタ") }
-                    }
-                    if (onOpenPairing != null) {
-                        TextButton(onClick = onOpenPairing) { Text(text = "QR で設定を取り込む") }
-                    }
-                    if (onOpenSettings != null) {
-                        TextButton(onClick = onOpenSettings) { Text(text = "設定") }
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        if (onOpenHealthCheck != null) {
+                            TextButton(onClick = onOpenHealthCheck) { Text(text = "健康診断") }
+                        }
+                        if (onOpenAppFilter != null) {
+                            TextButton(onClick = onOpenAppFilter) { Text(text = "アプリフィルタ") }
+                        }
+                        if (onOpenPairing != null) {
+                            TextButton(onClick = onOpenPairing) { Text(text = "QR で設定を取り込む") }
+                        }
+                        if (onOpenSettings != null) {
+                            TextButton(onClick = onOpenSettings) { Text(text = "設定") }
+                        }
                     }
                 }
             }
