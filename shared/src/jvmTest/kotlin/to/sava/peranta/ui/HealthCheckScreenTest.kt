@@ -69,6 +69,26 @@ class HealthCheckScreenTest {
         assertEquals(1, checker.calls)
     }
 
+    /** onFix が成功すると、項目に実行済みの案内文を出す。 */
+    @Test
+    fun successfulFixShowsDoneNotice() = runComposeUiTest {
+        setContent {
+            HealthCheckScreen(
+                checker = checker(
+                    HealthCheckItem(
+                        id = "unifiedpush",
+                        label = "UnifiedPush の登録",
+                        state = HealthCheckState.FAILING,
+                        fixLabel = "登録する",
+                        onFix = {},
+                    ),
+                ),
+            )
+        }
+        onNodeWithTag("${TAG_HEALTH_FIX_PREFIX}unifiedpush").performClick()
+        onNodeWithTag("${TAG_HEALTH_FIX_PENDING_PREFIX}unifiedpush").assertIsDisplayed()
+    }
+
     /** 合格項目は「直す」ボタンを出さない。 */
     @Test
     fun passingItemHasNoFixButton() = runComposeUiTest {

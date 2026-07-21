@@ -68,3 +68,6 @@ const val TAG_HEALTH_FIX_PREFIX: String = "health-fix-"
 
 /** 「直す」操作が失敗したときのエラー文のタグ接頭辞（末尾に item id を付ける）。 */
 const val TAG_HEALTH_FIX_ERROR_PREFIX: String = "health-fix-error-"
+
+/** 「直す」操作が成功した直後の案内文のタグ接頭辞（末尾に item id を付ける）。 */
+const val TAG_HEALTH_FIX_PENDING_PREFIX: String = "health-fix-pending-"

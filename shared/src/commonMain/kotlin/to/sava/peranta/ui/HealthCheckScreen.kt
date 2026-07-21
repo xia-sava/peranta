@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 
 /** 画面冒頭の説明文（強制ブロックせず、後でも直せる旨を明示する、§10.5）。 */
 private const val HEALTH_DESCRIPTION: String =
@@ -39,6 +40,17 @@ private const val HEALTH_ALL_CLEAR: String = "点検した項目はすべて問�
 
 /** 「直す」操作が例外を送出したが、メッセージを持たない場合の既定文。 */
 private const val HEALTH_FIX_FAILED_DEFAULT: String = "操作に失敗しました。"
+
+/** 「直す」操作が成功した直後に項目へ添える案内文。 */
+private const val HEALTH_FIX_DONE: String = "操作を実行しました。"
+
+/** 「直す」実行後に反映を追いかける自動再チェックの回数と間隔。 */
+private const val FIX_RECHECK_COUNT: Int = 3
+private const val FIX_RECHECK_INTERVAL_MILLIS: Long = 2_000L
+
+/** オールグリーン表示の背景・文字色（ライト/ダーク共通で「緑=正常」を示す固定色）。 */
+private val ALL_CLEAR_CONTAINER: Color = Color(0xFFC8E6C9)
+private val ALL_CLEAR_CONTENT: Color = Color(0xFF1B5E20)
 
 /**
  * 健康診断画面（§10.5）。[checker] が返す項目を合格 ✓ / 不合格 ✗ / 情報 ⓘ で描画し、
@@ -56,10 +68,19 @@ fun HealthCheckScreen(
     externalRefreshKey: Int = 0,
 ) {
     var manualRefresh by remember { mutableStateOf(0) }
+    var followUpRechecks by remember { mutableStateOf(0) }
     var items by remember { mutableStateOf<List<HealthCheckItem>?>(null) }
 
     LaunchedEffect(externalRefreshKey, manualRefresh) {
         items = checker.check()
+    }
+
+    // 「直す」の結果が非同期に反映される項目（UnifiedPush 登録など）を追いかけて数回だけ再チェックする。
+    LaunchedEffect(followUpRechecks) {
+        if (followUpRechecks <= 0) return@LaunchedEffect
+        delay(FIX_RECHECK_INTERVAL_MILLIS)
+        manualRefresh++
+        followUpRechecks--
     }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -82,15 +103,16 @@ fun HealthCheckScreen(
             } else {
                 val visible = loaded.filterNot { it.state == HealthCheckState.NOT_APPLICABLE }
                 if (visible.none { it.state == HealthCheckState.FAILING || it.state == HealthCheckState.INFO }) {
-                    Text(
-                        text = HEALTH_ALL_CLEAR,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.testTag(TAG_HEALTH_ALL_CLEAR),
-                    )
+                    AllClearBanner()
                 }
                 visible.forEach { item ->
-                    HealthItemRow(item = item, onFixed = { manualRefresh++ })
+                    HealthItemRow(
+                        item = item,
+                        onFixed = {
+                            manualRefresh++
+                            followUpRechecks = FIX_RECHECK_COUNT
+                        },
+                    )
                 }
             }
 
@@ -124,9 +146,30 @@ private fun Header(onBack: (() -> Unit)?) {
     }
 }
 
+/** 全項目が合格・対象外のときに出す緑のバナー。合格が一目で判るよう面で塗る。 */
+@Composable
+private fun AllClearBanner() {
+    Surface(
+        color = ALL_CLEAR_CONTAINER,
+        contentColor = ALL_CLEAR_CONTENT,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth().testTag(TAG_HEALTH_ALL_CLEAR),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text = "✓", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(text = HEALTH_ALL_CLEAR, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
 @Composable
 private fun HealthItemRow(item: HealthCheckItem, onFixed: () -> Unit) {
     var fixError by remember(item.id) { mutableStateOf<String?>(null) }
+    var fixRequested by remember(item.id, item.state) { mutableStateOf(false) }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -158,6 +201,7 @@ private fun HealthItemRow(item: HealthCheckItem, onFixed: () -> Unit) {
                 TextButton(
                     onClick = {
                         fixError = runFix(onFix)
+                        fixRequested = fixError == null
                         if (fixError == null) onFixed()
                     },
                     modifier = Modifier.testTag("$TAG_HEALTH_FIX_PREFIX${item.id}"),
@@ -170,6 +214,14 @@ private fun HealthItemRow(item: HealthCheckItem, onFixed: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.testTag("$TAG_HEALTH_FIX_ERROR_PREFIX${item.id}"),
+                    )
+                }
+                if (fixRequested && fixError == null) {
+                    Text(
+                        text = HEALTH_FIX_DONE,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("$TAG_HEALTH_FIX_PENDING_PREFIX${item.id}"),
                     )
                 }
             }
