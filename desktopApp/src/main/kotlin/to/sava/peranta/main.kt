@@ -20,7 +20,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
@@ -49,6 +48,7 @@ import java.awt.Toolkit
 import java.awt.Window as AwtWindow
 import java.awt.datatransfer.StringSelection
 import java.util.concurrent.atomic.AtomicReference
+import javax.swing.UIManager
 
 /** トレイ・ウィンドウ用の簡易アイコン。 */
 private val perantaIcon: Painter = object : Painter() {
@@ -95,6 +95,9 @@ private fun bringWindowToFront(window: AwtWindow) {
 fun main(args: Array<String>) {
     initLogging()
     val log = Logger.withTag("Main")
+    // トレイメニュー等の Swing 部品を OS ネイティブの見た目にする。失敗しても既定 LaF で続行する。
+    runCatching { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()) }
+        .onFailure { log.w(it) { "failed to set system look and feel" } }
     val desktopSettings = DesktopSettings()
     val settingsController = desktopSettings.controller
 
@@ -146,21 +149,17 @@ fun main(args: Array<String>) {
             }
         }
 
-        Tray(
-            icon = perantaIcon,
-            tooltip = "Peranta",
-            onAction = bringToFront,
-            menu = {
-                Item("設定", onClick = {
-                    showSettings = true
-                    bringToFront()
-                })
-                Item("健康診断", onClick = {
-                    showHealthCheck = true
-                    bringToFront()
-                })
-                Item("終了", onClick = closeAndExit)
+        PerantaTray(
+            onActivate = bringToFront,
+            onOpenSettings = {
+                showSettings = true
+                bringToFront()
             },
+            onOpenHealthCheck = {
+                showHealthCheck = true
+                bringToFront()
+            },
+            onExit = closeAndExit,
         )
 
         // 世代の変化を collectLatest で直列化する。新しい世代が来ると旧受信機の run() を
