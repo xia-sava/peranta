@@ -47,6 +47,7 @@ class PerantaUnifiedPushReceiver : MessagingReceiver() {
     override fun onMessage(context: Context, message: PushMessage, instance: String) {
         val appContext = context.applicationContext
         val rawMessage = message.content.decodeToString()
+        if (PerantaSelfTest.consumeMarker(rawMessage)) return
         val pendingResult = goAsync()
         scope.launch {
             try {
