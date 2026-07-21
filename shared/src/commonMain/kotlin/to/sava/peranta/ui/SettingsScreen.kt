@@ -1,7 +1,6 @@
 package to.sava.peranta.ui
 
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -14,10 +13,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,16 +27,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.text.KeyboardOptions
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.LaunchedEffect
 import to.sava.peranta.pairing.SettingsController
 import to.sava.peranta.pairing.SetupRole
 import to.sava.peranta.pairing.SetupStep
 import to.sava.peranta.pairing.SetupWizard
+import to.sava.peranta.ui.setup.DeviceNameField
+import to.sava.peranta.ui.setup.HostField
+import to.sava.peranta.ui.setup.KeyStatusText
+import to.sava.peranta.ui.setup.LabeledCheckbox
+import to.sava.peranta.ui.setup.PairingQrSection
+import to.sava.peranta.ui.setup.PortField
+import to.sava.peranta.ui.setup.TokenField
 
 /** QR の自動非表示までの既定時間（§6: 表示は時間制限つき）。 */
 private const val DEFAULT_QR_VISIBLE_MILLIS: Long = 60_000L
@@ -54,10 +55,6 @@ private const val AUTOSAVE_NOTE: String = "変更は自動的に保存され、�
 /** センシティブ通知の履歴保存トグルの説明文（§11: 既定 OFF が安全側）。 */
 private const val PERSIST_SENSITIVE_HISTORY_DESCRIPTION: String =
     "OFF のままだと OTP 等の本文はタイムラインに残しません。"
-
-/** QR 表示ブロックの案内文（§10.3）。 */
-private const val QR_HINT: String =
-    "この QR を新しい端末のカメラで読み取ってください。時間が経つと自動的に隠れます。"
 
 /** 共有鍵・トークン未設定で QR を作れないときの案内文。 */
 private const val PAIRING_PREREQUISITE_NOTICE: String = "先にトークンと共有鍵を設定してください。"
@@ -410,80 +407,6 @@ private fun stepTitle(step: SetupStep): String =
         SetupStep.PAIRING -> "端末の追加"
     }
 
-@Composable
-private fun HostField(value: String, onValueChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text("サーバホスト名") },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth().testTag(TAG_HOST),
-    )
-}
-
-@Composable
-private fun TokenField(value: String, onValueChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text("アクセストークン") },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth().testTag(TAG_TOKEN),
-    )
-}
-
-@Composable
-private fun DeviceNameField(value: String, onValueChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text("端末名") },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth().testTag(TAG_DEVICE_NAME),
-    )
-}
-
-@Composable
-private fun PortField(value: String, onValueChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { input -> onValueChange(input.filter { it.isDigit() }) },
-        label = { Text("ポート（任意）") },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = Modifier.fillMaxWidth().testTag(TAG_PORT),
-    )
-}
-
-@Composable
-private fun LabeledCheckbox(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    label: String,
-    tag: String,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.clickable { onCheckedChange(!checked) },
-    ) {
-        Checkbox(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            modifier = Modifier.testTag(tag),
-        )
-        Text(text = label)
-    }
-}
-
-@Composable
-private fun KeyStatusText(hasKey: Boolean, keyId: String?) {
-    Text(
-        text = if (hasKey) "共有鍵: 設定済み（keyId=${keyId ?: "?"}）" else "共有鍵: 未設定",
-        style = MaterialTheme.typography.bodyMedium,
-        fontWeight = FontWeight.Medium,
-    )
-}
-
 /** ウィザードの「戻る」「次へ」ボタン行（右寄せ）。ハンドラが null のボタンは表示しない。 */
 @Composable
 private fun WizardNavigation(
@@ -505,37 +428,6 @@ private fun WizardNavigation(
                 Text(text = "次へ")
             }
         }
-    }
-}
-
-/** QR 表示ブロック（案内文・QR・コピー・非表示）。フラット画面とウィザード PAIRING で共有する。 */
-@Composable
-private fun PairingQrSection(
-    uri: String,
-    qrContent: @Composable (uri: String) -> Unit,
-    onCopyPairingUri: ((String) -> Unit)?,
-    onCopied: () -> Unit,
-    onHide: () -> Unit,
-) {
-    Text(
-        text = QR_HINT,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    qrContent(uri)
-    if (onCopyPairingUri != null) {
-        OutlinedButton(
-            onClick = {
-                onCopyPairingUri(uri)
-                onCopied()
-            },
-            modifier = Modifier.testTag(TAG_COPY_PAIRING_URI),
-        ) {
-            Text(text = "文字列をコピー")
-        }
-    }
-    TextButton(onClick = onHide, modifier = Modifier.testTag(TAG_HIDE_QR)) {
-        Text(text = "QR を隠す")
     }
 }
 
