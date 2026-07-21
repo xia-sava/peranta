@@ -4,7 +4,7 @@ import to.sava.peranta.filter.FilterMode
 import to.sava.peranta.filter.FilterRule
 
 /** サーバホスト名の既定値。 */
-const val DEFAULT_HOST: String = "peranta.sava.to"
+const val DEFAULT_HOST: String = "peranta.example.com"
 
 /**
  * 端末のローカル設定。

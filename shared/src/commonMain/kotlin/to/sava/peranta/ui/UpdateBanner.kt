@@ -75,6 +75,7 @@ fun UpdateBanner(
 
 private fun statusText(status: UpdateStatus?): String = when (status) {
     null -> "更新を確認できます"
+    UpdateStatus.NotConfigured -> "初期設定が完了すると更新を確認できます"
     UpdateStatus.UpToDate -> "最新のバージョンです"
     is UpdateStatus.Available -> "更新があります"
     is UpdateStatus.Failed -> "更新確認に失敗しました: ${status.reason}"

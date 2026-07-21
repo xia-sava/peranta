@@ -7,6 +7,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
+import to.sava.peranta.config.DEFAULT_HOST
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.model.PerantaJson
 import to.sava.peranta.net.httpBaseUrl
@@ -31,6 +32,9 @@ class UpdateChecker(
     private val log: Logger = Logger.withTag("UpdateChecker"),
 ) {
     suspend fun check(): UpdateStatus {
+        if (config.host.isBlank() || config.host == DEFAULT_HOST) {
+            return UpdateStatus.NotConfigured
+        }
         val url = latestManifestUrl(config)
         val response = fetch(url)
             ?: return UpdateStatus.Failed("latest.json の取得に失敗しました")

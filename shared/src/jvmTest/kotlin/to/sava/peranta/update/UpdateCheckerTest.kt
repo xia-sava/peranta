@@ -98,6 +98,15 @@ class UpdateCheckerTest {
         assertTrue(status.reason.contains(PLATFORM_DESKTOP))
     }
 
+    /** 接続先が既定のプレースホルダのままなら、ネットワークへ出ずに NotConfigured。 */
+    @Test
+    fun notConfiguredWhenHostIsDefaultPlaceholder() = runTest {
+        val engine = MockEngine { throw IOException("network must not be touched") }
+        val checker = UpdateChecker(HttpClient(engine), PerantaConfig(), 1, PLATFORM_DESKTOP)
+
+        assertEquals(UpdateStatus.NotConfigured, checker.check())
+    }
+
     /** ネットワーク例外は握り潰さず Failed に変換する。 */
     @Test
     fun failedOnNetworkException() = runTest {
