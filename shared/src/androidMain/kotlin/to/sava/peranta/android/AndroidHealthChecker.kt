@@ -62,8 +62,9 @@ class AndroidHealthChecker(context: Context) : HealthChecker {
                         match = match,
                         onReregister = { PerantaUnifiedPush.reregister(appContext) },
                         fixAids = listOf(
-                            FixAid.Copy(label = "サーバーURL", value = config.httpBaseUrl()),
-                            FixAid.Copy(label = "認証ヘッダの値", value = "Bearer ${config.accessToken.orEmpty()}", sensitive = true),
+                            FixAid.Copy(label = "サーバーURL（既定のサーバー / サービスURL の2箇所）", value = config.httpBaseUrl()),
+                            FixAid.Copy(label = "ヘッダ名", value = "Authorization"),
+                            FixAid.Copy(label = "ヘッダ値", value = "Bearer ${config.accessToken.orEmpty()}", sensitive = true),
                             FixAid.Action(label = "ntfy を開く", onRun = ::openNtfyApp),
                         ),
                     ),
