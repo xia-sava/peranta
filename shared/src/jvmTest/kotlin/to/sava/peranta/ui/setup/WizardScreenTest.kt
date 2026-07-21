@@ -210,6 +210,57 @@ class WizardScreenTest {
         onNodeWithTag(TAG_WIZARD_TIMELINE).assertIsDisplayed()
     }
 
+    // --- onSaved 規律 ---
+
+    /** 編集ページの入力→「次へ」（dirty 時の保存）と、鍵作成の各操作で onSaved が呼ばれる。 */
+    @Test
+    fun editingNextAndKeyCreationInvokeOnSaved() = runComposeUiTest {
+        val controller = SettingsController(ConfigRepository(MapSettings()))
+        var savedCount = 0
+        setContent {
+            WizardScreen(
+                role = WizardRole.DESKTOP_SOURCE,
+                controller = controller,
+                provider = FakeProvider(),
+                healthChecker = emptyHealthChecker,
+                onSaved = { savedCount++ },
+            )
+        }
+
+        // 接続ページ: 入力して「次へ」で保存契機が 1 回。
+        onNodeWithTag("wizard-settings-token").performTextReplacement("tk")
+        onNodeWithTag(TAG_WIZARD_NEXT).performClick()
+        assertEquals(1, savedCount)
+
+        // 端末名ページ: 入力して「次へ」で保存契機が 1 回。
+        onNodeWithTag("wizard-settings-deviceName").performTextReplacement("desktop-1")
+        onNodeWithTag(TAG_WIZARD_NEXT).performClick()
+        assertEquals(2, savedCount)
+
+        // 共有鍵ページ: 「鍵を作る」で保存契機が 1 回。
+        onNodeWithTag(TAG_WIZARD_ROTATE).performClick()
+        assertEquals(3, savedCount)
+    }
+
+    /** ページを表示しただけ（編集・操作なし）では onSaved は呼ばれない。 */
+    @Test
+    fun displayingPageWithoutActionDoesNotInvokeOnSaved() = runComposeUiTest {
+        val controller = SettingsController(ConfigRepository(MapSettings()))
+        var savedCount = 0
+        setContent {
+            WizardScreen(
+                role = WizardRole.DESKTOP_SOURCE,
+                controller = controller,
+                provider = FakeProvider(),
+                healthChecker = emptyHealthChecker,
+                onSaved = { savedCount++ },
+            )
+        }
+
+        onNodeWithTag("wizard-settings-host").assertIsDisplayed()
+        assertEquals(0, savedCount)
+    }
+
     // --- 閉じる ---
 
     /** ヘッダの「閉じる」で onClose が呼ばれる。 */

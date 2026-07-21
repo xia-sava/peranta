@@ -38,7 +38,8 @@ private const val PAIRING_DEVICE_NAME_MISSING_NOTICE: String =
  * 手動貼り付けのみで動作する（カメラ非対応環境・ヘッドレステスト向け）。
  * 端末名欄が空欄なら端末名は既存値を引き継ぐ（§6）。[onOpenSettings] が非 null のときは、
  * この端末自身を設定元にするための設定画面への導線を表示する（取り込み成功後は隠す）。
- * 取り込み成功後は [onImported] が非 null ならタイムラインへ進む導線を表示する。
+ * [onOpenWizard] が非 null のときは、セットアップをページ列で案内するウィザードへ戻る導線を表示する
+ * （取り込み成功後は隠す）。取り込み成功後は [onImported] が非 null ならタイムラインへ進む導線を表示する。
  * [showHeader] が false のときは画面見出しと概要説明を出さない。外側（ウィザードのページ）が
  * 見出しを持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
  */
@@ -48,6 +49,7 @@ fun PairingScanScreen(
     modifier: Modifier = Modifier,
     onRequestScan: ((onResult: (String?) -> Unit) -> Unit)? = null,
     onOpenSettings: (() -> Unit)? = null,
+    onOpenWizard: (() -> Unit)? = null,
     onImported: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null,
     showHeader: Boolean = true,
@@ -61,6 +63,7 @@ fun PairingScanScreen(
                 controller = controller,
                 onRequestScan = onRequestScan,
                 onOpenSettings = onOpenSettings,
+                onOpenWizard = onOpenWizard,
                 onImported = onImported,
                 onBack = onBack,
                 showHeader = showHeader,
@@ -79,6 +82,7 @@ internal fun PairingScanContent(
     controller: PairingImportController,
     onRequestScan: ((onResult: (String?) -> Unit) -> Unit)? = null,
     onOpenSettings: (() -> Unit)? = null,
+    onOpenWizard: (() -> Unit)? = null,
     onImported: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null,
     showHeader: Boolean = true,
@@ -168,6 +172,12 @@ internal fun PairingScanContent(
         }
     }
 
+    if (!succeeded && onOpenWizard != null) {
+        TextButton(onClick = onOpenWizard, modifier = Modifier.testTag(TAG_PAIRING_OPEN_WIZARD)) {
+            Text(text = "ウィザードで設定する")
+        }
+    }
+
     if (!succeeded && onOpenSettings != null) {
         TextButton(onClick = onOpenSettings, modifier = Modifier.testTag(TAG_PAIRING_OPEN_SETTINGS)) {
             Text(text = "この端末を設定元にする")
@@ -188,4 +198,5 @@ const val TAG_PAIRING_IMPORT: String = "pairing-import"
 const val TAG_PAIRING_STATUS: String = "pairing-status"
 const val TAG_PAIRING_IMPORTED: String = "pairing-imported"
 const val TAG_PAIRING_OPEN_SETTINGS: String = "pairing-open-settings"
+const val TAG_PAIRING_OPEN_WIZARD: String = "pairing-open-wizard"
 const val TAG_PAIRING_BACK: String = "pairing-back"

@@ -181,10 +181,11 @@ fun main(args: Array<String>) {
         }
 
         var windowVisible by remember { mutableStateOf(!startMinimized) }
-        var showSettings by remember { mutableStateOf(!desktopSettings.config.isReadyForReceive) }
+        // 初回起動（受信の準備が未完了）はウィザードを自動で開始する。
+        var showWizard by remember { mutableStateOf(!desktopSettings.config.isReadyForReceive) }
+        var showSettings by remember { mutableStateOf(false) }
         var showAppFilter by remember { mutableStateOf(false) }
         var showHealthCheck by remember { mutableStateOf(false) }
-        var showWizard by remember { mutableStateOf(false) }
         val windowState = rememberWindowState()
 
         // トースト経由など Compose 外からの「ウィンドウを出す」要求を可視状態へ橋渡しする。

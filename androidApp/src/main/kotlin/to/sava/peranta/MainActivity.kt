@@ -179,7 +179,7 @@ class MainActivity : ComponentActivity() {
                     when {
                         sharedFiles.isNotEmpty() && config.hasSharedKey -> Screen.Share(sharedFiles)
                         config.hasSharedKey -> Screen.Main
-                        else -> Screen.Pairing
+                        else -> Screen.Wizard
                     },
                 )
             }
@@ -188,7 +188,7 @@ class MainActivity : ComponentActivity() {
             val healthChecker = remember { AndroidHealthChecker(this@MainActivity) { screen = Screen.ReceiveSetup } }
 
             // 起動時にペアリング済みなら健康診断を実行し、対処の要る未達があれば診断画面へ誘導する（§10.5）。
-            // ペアリング未完了（Pairing）が最優先のため、Main のときだけ遷移する。強制ブロックはしない。
+            // 未セットアップは初回ウィザードが最優先のため、Main のときだけ遷移する。強制ブロックはしない。
             LaunchedEffect(Unit) {
                 if (config.hasSharedKey && screen == Screen.Main &&
                     healthCheckNeedsAttention(healthChecker.check())
@@ -206,6 +206,11 @@ class MainActivity : ComponentActivity() {
                             null
                         } else {
                             { screen = Screen.Settings }
+                        },
+                        onOpenWizard = if (config.hasSharedKey) {
+                            null
+                        } else {
+                            { screen = Screen.Wizard }
                         },
                         onImported = { resetReceiveAndRecreate() },
                         onBack = if (config.hasSharedKey) {
@@ -279,7 +284,15 @@ class MainActivity : ComponentActivity() {
                         onCopyText = { text, sensitive -> copyText(text, sensitive) },
                         onRequestScan = { onResult -> requestScan(onResult) },
                         externalRefreshKey = resumeTick,
-                        onClose = { resetReceiveAndRecreate() },
+                        // ペアリング済みならタイムラインへ（再生成で最新設定を反映）、未ペアリングなら
+                        // ウィザード再開導線つきの待機画面（Pairing）へ着地する。
+                        onClose = {
+                            if (androidConfigRepository().load().hasSharedKey) {
+                                resetReceiveAndRecreate()
+                            } else {
+                                screen = Screen.Pairing
+                            }
+                        },
                     )
                 }
 

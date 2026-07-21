@@ -173,6 +173,54 @@ class PairingScanScreenTest {
         assertTrue(opened)
     }
 
+    /** ウィザードへの導線スロット未注入なら「ウィザードで設定する」ボタンを出さない。 */
+    @Test
+    fun openWizardButtonHiddenWhenNoSlotInjected() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+
+        setContent { PairingScanScreen(PairingImportController(repo)) }
+
+        onAllNodesWithTag(TAG_PAIRING_OPEN_WIZARD).assertCountEquals(0)
+    }
+
+    /** ウィザードへの導線スロットを注入するとボタンが出て、クリックでコールバックが呼ばれる。 */
+    @Test
+    fun openWizardButtonInvokesCallback() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        var opened = false
+
+        setContent {
+            PairingScanScreen(
+                controller = PairingImportController(repo),
+                onOpenWizard = { opened = true },
+            )
+        }
+
+        onNodeWithTag(TAG_PAIRING_OPEN_WIZARD).performClick()
+
+        assertTrue(opened)
+    }
+
+    /** 取り込み成功後は「ウィザードで設定する」導線を隠す（受信側になった後は意味を持たないため）。 */
+    @Test
+    fun openWizardButtonHidesAfterSuccessfulImport() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+
+        setContent {
+            PairingScanScreen(
+                controller = PairingImportController(repo),
+                onOpenWizard = { },
+            )
+        }
+
+        onNodeWithTag(TAG_PAIRING_OPEN_WIZARD).assertIsDisplayed()
+
+        onNodeWithTag(TAG_PAIRING_MANUAL_INPUT).performTextReplacement(validUri())
+        onNodeWithTag(TAG_PAIRING_IMPORT).performClick()
+
+        onAllNodesWithTag(TAG_PAIRING_OPEN_WIZARD).assertCountEquals(0)
+    }
+
     /**
      * 取り込み成功後は「タイムラインへ」導線を出し、クリックでコールバックを呼ぶ。
      * あわせて「設定元にする」導線は取り込み成功後に隠す（受信側になった後は意味を持たないため）。

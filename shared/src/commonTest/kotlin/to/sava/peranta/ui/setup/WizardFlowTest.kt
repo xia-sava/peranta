@@ -270,7 +270,50 @@ class WizardFlowTest {
         )
     }
 
+    /**
+     * 編集ページの否定側エッジ: 端末名が空白のみなら未完了、鍵なしなら鍵ページは未完了、
+     * 端末追加ページは鍵があっても controlTopic 未採番（isReadyForSend=false）なら未完了で、採番後に完了する。
+     */
+    @Test
+    fun editPageCompletionRejectsBlankDeviceNameAndMissingKeyAndUnsentPairing() {
+        val deviceNamePage = WizardPage(WizardFlow.PAGE_DEVICE_NAME, "端末名")
+        assertFalse(
+            WizardFlow.isPageComplete(deviceNamePage, PerantaConfig(deviceName = "  "), WizardAnswers(), emptyList()),
+        )
+        assertTrue(
+            WizardFlow.isPageComplete(deviceNamePage, PerantaConfig(deviceName = "d"), WizardAnswers(), emptyList()),
+        )
+
+        val keyPage = WizardPage(WizardFlow.PAGE_KEY, "共有鍵")
+        assertFalse(WizardFlow.isPageComplete(keyPage, PerantaConfig(), WizardAnswers(), emptyList()))
+        assertTrue(WizardFlow.isPageComplete(keyPage, paired(), WizardAnswers(), emptyList()))
+
+        val pairingPage = WizardPage(WizardFlow.PAGE_PAIRING, "端末の追加")
+        val keyOnly = paired(PerantaConfig(host = "h", accessToken = "tk"))
+        assertFalse(WizardFlow.isPageComplete(pairingPage, keyOnly, WizardAnswers(), emptyList()))
+        assertTrue(
+            WizardFlow.isPageComplete(
+                pairingPage,
+                keyOnly.copy(controlTopic = "control-topic"),
+                WizardAnswers(),
+                emptyList(),
+            ),
+        )
+    }
+
     // --- firstIncompletePage ---
+
+    /** BE_SOURCE 経路の中間再開: 接続だけ完了・端末名未設定なら、最初の未完了は端末名ページ。 */
+    @Test
+    fun firstIncompleteIsDeviceNameWhenBeSourceOnlyConnectionComplete() {
+        val config = PerantaConfig(host = "h", accessToken = "tk")
+        val answers = WizardAnswers(source = WizardSourceChoice.BE_SOURCE)
+        val pages = WizardFlow.pages(WizardRole.ANDROID, config, answers)
+        assertEquals(
+            WizardFlow.PAGE_DEVICE_NAME,
+            WizardFlow.firstIncompletePage(pages, config, answers, emptyList())?.id,
+        )
+    }
 
     /** 未取得・未回答なら最初の未完了は A1（設定の受け取り方）。 */
     @Test
