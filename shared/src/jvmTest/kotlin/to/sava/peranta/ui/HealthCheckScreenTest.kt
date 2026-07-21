@@ -128,6 +128,27 @@ class HealthCheckScreenTest {
         onAllNodesWithTag("${TAG_HEALTH_FIX_PREFIX}sms").assertCountEquals(0)
     }
 
+    /** INFO 状態の項目でも fixLabel と onFix が揃っていれば操作ボタンを表示し、押下で onFix が呼ばれる。 */
+    @Test
+    fun infoItemWithFixShowsFixButtonAndInvokesOnFix() = runComposeUiTest {
+        var fixed = false
+        setContent {
+            HealthCheckScreen(
+                checker = checker(
+                    HealthCheckItem(
+                        id = "up-self-test",
+                        label = "サーバ経由の受信テスト",
+                        state = HealthCheckState.INFO,
+                        fixLabel = "テスト実行",
+                        onFix = { fixed = true },
+                    ),
+                ),
+            )
+        }
+        onNodeWithTag("${TAG_HEALTH_FIX_PREFIX}up-self-test").performClick()
+        assertTrue(fixed)
+    }
+
     /** 対象外（NOT_APPLICABLE）項目は画面に描画しない。 */
     @Test
     fun notApplicableItemIsHidden() = runComposeUiTest {

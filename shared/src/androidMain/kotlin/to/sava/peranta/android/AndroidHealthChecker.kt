@@ -13,11 +13,13 @@ import android.provider.Settings
 import co.touchlab.kermit.Logger
 import org.unifiedpush.android.connector.UnifiedPush
 import to.sava.peranta.config.PerantaConfig
+import to.sava.peranta.net.EndpointServerMatch
 import to.sava.peranta.net.matchEndpointServer
 import to.sava.peranta.ui.HealthCheckItem
 import to.sava.peranta.ui.HealthCheckState
 import to.sava.peranta.ui.HealthChecker
 import to.sava.peranta.ui.endpointServerItem
+import to.sava.peranta.ui.selfTestItem
 
 /** ntfy アプリのパッケージ名。ディストリビュータ導入・省電力除外の点検対象。 */
 private const val NTFY_PACKAGE = "io.heckel.ntfy"
@@ -50,12 +52,17 @@ class AndroidHealthChecker(context: Context) : HealthChecker {
                 }
             }
             if (config.isReadyForUnifiedPushReceive) {
+                val match = config.unifiedPushEndpoint?.let { matchEndpointServer(it, config) }
                 add(ntfyInstalledItem(ntfyInstalled))
                 add(unifiedPushRegisteredItem(config))
+                add(endpointServerItem(match = match, onReregister = { PerantaUnifiedPush.reregister(appContext) }))
                 add(
-                    endpointServerItem(
-                        match = config.unifiedPushEndpoint?.let { matchEndpointServer(it, config) },
-                        onReregister = { PerantaUnifiedPush.reregister(appContext) },
+                    selfTestItem(
+                        status = PerantaSelfTest.status.value,
+                        runnable = config.unifiedPushEndpoint != null &&
+                            !config.accessToken.isNullOrBlank() && match == EndpointServerMatch.Match,
+                        serverMismatch = match is EndpointServerMatch.Mismatch,
+                        onRun = { PerantaSelfTest.start(appContext) },
                     ),
                 )
                 add(ntfyBatteryItem(ntfyInstalled))
