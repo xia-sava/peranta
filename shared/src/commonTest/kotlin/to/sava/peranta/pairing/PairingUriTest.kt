@@ -37,19 +37,17 @@ class PairingUriTest {
             token = "tk_abc123",
             keyId = "k1",
             key = key(),
-            tls = true,
             port = 8443,
         )
         assertEquals(data, decodeSuccess(PairingUri.encode(data)))
     }
 
-    /** port を省略した URI は port=null・tls は指定どおりに戻る。 */
+    /** port を省略した URI は port=null に戻る。 */
     @Test
     fun optionalPortAbsentDecodesToNull() {
-        val data = PairingData("h", "t", "k1", key(), tls = false, port = null)
+        val data = PairingData("h", "t", "k1", key(), port = null)
         val decoded = decodeSuccess(PairingUri.encode(data))
         assertEquals(null, decoded.port)
-        assertFalse(decoded.tls)
     }
 
     /** host・token・keyId に含まれる予約文字や日本語も URL エンコードで壊れずに往復する。 */
@@ -154,14 +152,13 @@ class PairingUriTest {
         assertEquals(16, error.actual)
     }
 
-    /** tls が真偽値でなければ InvalidTls。 */
+    /** 旧バージョンの URI に含まれる tls パラメータは値を問わず無視して受理する（§16）。 */
     @Test
-    fun invalidTlsFails() {
-        val error = decodeError(
+    fun legacyTlsParameterIsIgnored() {
+        val decoded = decodeSuccess(
             uri("v" to "1", "host" to "h", "token" to "t", "keyId" to "k", "key" to validKeyParam, "tls" to "maybe"),
         )
-        assertIs<PairingError.InvalidTls>(error)
-        assertEquals("maybe", error.value)
+        assertEquals("h", decoded.host)
     }
 
     /** port が整数でなければ InvalidPort。 */
@@ -292,7 +289,6 @@ class PairingUriTest {
         assertNotEquals(base, PairingData("h", "t2", "k", key()))
         assertNotEquals(base, PairingData("h", "t", "k2", key()))
         assertNotEquals(base, PairingData("h", "t", "k", key(9)))
-        assertNotEquals(base, PairingData("h", "t", "k", key(), tls = false))
         assertNotEquals(base, PairingData("h", "t", "k", key(), port = 1))
         assertFalse(base.equals("not-a-pairing"))
     }

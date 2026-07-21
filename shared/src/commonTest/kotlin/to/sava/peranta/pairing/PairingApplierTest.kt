@@ -20,7 +20,7 @@ class PairingApplierTest {
         repo.save(PerantaConfig(deviceName = "tablet"))
 
         PairingApplier(repo).apply(
-            PairingData(host = "peranta.sava.to", token = "tk", keyId = "k3", key = key(), tls = true, port = 8443),
+            PairingData(host = "peranta.sava.to", token = "tk", keyId = "k3", key = key(), port = 8443),
         )
 
         val loaded = repo.load()
@@ -50,7 +50,7 @@ class PairingApplierTest {
     fun applyPersistsKeyThroughKeyStoreSeam() {
         val settings = MapSettings()
         PairingApplier(ConfigRepository(settings)).apply(
-            PairingData("h", "tk", "k1", key(), tls = false, port = null),
+            PairingData("h", "tk", "k1", key(), port = null),
         )
 
         val reloaded = ConfigRepository(settings).load()
@@ -58,15 +58,16 @@ class PairingApplierTest {
         assertEquals(null, reloaded.port)
     }
 
-    /** QR が tls=false でも TLS を有効に強制する（§16）。 */
+    /** ペアリング適用は TLS 設定に触れず、開発向けリポジトリでは既存の保存値が保たれる（§16）。 */
     @Test
-    fun forcesTls() {
+    fun applyKeepsStoredTls() {
         val settings = MapSettings()
-        PairingApplier(ConfigRepository(settings)).apply(
-            PairingData("h", "tk", "k1", key(), tls = false, port = null),
-        )
+        val repo = ConfigRepository(settings, forceTls = false)
+        repo.save(PerantaConfig(useTls = true))
 
-        assertEquals(true, ConfigRepository(settings).load().useTls)
+        PairingApplier(repo).apply(PairingData("h", "tk", "k1", key(), port = null))
+
+        assertEquals(true, repo.load().useTls)
     }
 
     /** 端末名を渡すと設定へ適用される。 */

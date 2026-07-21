@@ -6,7 +6,7 @@ import kotlin.io.encoding.Base64
 /**
  * 復号済みの [PairingData] をローカル設定へ適用する（§6）。
  * 共有鍵は [ConfigRepository] を介して KeyStore シームに保存し、他項目は settings に保存する。
- * TLS は常に有効として保存する（§16）。
+ * TLS には触れない（有効/無効はビルド種別で決まる、§16）。
  *
  * 端末名は QR に含まれない。[deviceName] を渡した場合は空文字列でもそのまま適用し、
  * null のときは既存設定を引き継ぐ。共有鍵・keyId が揃い端末名が設定済みなら、
@@ -22,7 +22,6 @@ class PairingApplier(private val configRepository: ConfigRepository) {
                 accessToken = data.token,
                 keyId = data.keyId,
                 sharedKeyBase64 = Base64.encode(data.key),
-                useTls = true,
                 port = data.port,
                 deviceName = deviceName ?: current.deviceName,
                 controlTopic = data.controlTopic ?: current.controlTopic,

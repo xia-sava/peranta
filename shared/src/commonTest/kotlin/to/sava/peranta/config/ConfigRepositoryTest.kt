@@ -25,7 +25,7 @@ class ConfigRepositoryTest {
     @Test
     fun saveThenLoadRoundTrips() {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsKeyStore(settings), forceTls = false)
         val key = Base64.encode(generateKey())
         val config = PerantaConfig(
             host = "localhost",
@@ -41,6 +41,26 @@ class ConfigRepositoryTest {
         repo.save(config)
         assertEquals(config, repo.load())
         assertTrue(repo.load().isReadyForReceive)
+    }
+
+    /** リリース相当（forceTls）では TLS を常に有効として読み出し、保存値も書かない（§16）。 */
+    @Test
+    fun forceTlsAlwaysLoadsTrueAndSkipsPersisting() {
+        val settings = MapSettings()
+        val forced = ConfigRepository(settings, SettingsKeyStore(settings), forceTls = true)
+        forced.save(PerantaConfig(useTls = false))
+        assertTrue(forced.load().useTls)
+        assertFalse(settings.hasKey(ConfigRepository.KEY_USE_TLS))
+    }
+
+    /** 開発相当（forceTls 無効）では TLS の既定は無効で、保存値を尊重する（§16）。 */
+    @Test
+    fun devRepositoryDefaultsTlsOffAndHonorsStoredValue() {
+        val settings = MapSettings()
+        val dev = ConfigRepository(settings, SettingsKeyStore(settings), forceTls = false)
+        assertFalse(dev.load().useTls)
+        dev.save(PerantaConfig(useTls = true))
+        assertTrue(dev.load().useTls)
     }
 
     /** UnifiedPush 受信は端末名・共有鍵・keyId が揃えば成立し、topic/host は要件に含めない。 */

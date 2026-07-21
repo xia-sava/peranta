@@ -2,7 +2,8 @@ package to.sava.peranta.pairing
 
 /**
  * QR ペアリングで受け渡す設定一式（§6）。
- * host / token / keyId と 32 バイトの共有鍵、任意で TLS 可否・ポート・control topic を持つ。
+ * host / token / keyId と 32 バイトの共有鍵、任意でポート・control topic を持つ。
+ * TLS の有効/無効はビルド種別で決まるため運ばない（§16）。
  * [controlTopic] は全端末共有の presence/ロスター用 topic（§8）で、設定元端末が確定して配布する。
  * [blobTopic] は全端末共有の画像/ファイル転送用 topic（§8、§4.3）で、control topic と同様に配布する。
  * token と key は秘密の塊のため、[toString] では伏せてログ漏れを防ぐ。
@@ -12,7 +13,6 @@ class PairingData(
     val token: String,
     val keyId: String,
     val key: ByteArray,
-    val tls: Boolean = true,
     val port: Int? = null,
     val controlTopic: String? = null,
     val blobTopic: String? = null,
@@ -24,7 +24,6 @@ class PairingData(
             token == other.token &&
             keyId == other.keyId &&
             key.contentEquals(other.key) &&
-            tls == other.tls &&
             port == other.port &&
             controlTopic == other.controlTopic &&
             blobTopic == other.blobTopic
@@ -35,7 +34,6 @@ class PairingData(
         result = 31 * result + token.hashCode()
         result = 31 * result + keyId.hashCode()
         result = 31 * result + key.contentHashCode()
-        result = 31 * result + tls.hashCode()
         result = 31 * result + (port ?: 0)
         result = 31 * result + (controlTopic?.hashCode() ?: 0)
         result = 31 * result + (blobTopic?.hashCode() ?: 0)
@@ -43,7 +41,7 @@ class PairingData(
     }
 
     override fun toString(): String =
-        "PairingData(host=$host, token=***, keyId=$keyId, key=***, tls=$tls, port=$port, " +
+        "PairingData(host=$host, token=***, keyId=$keyId, key=***, port=$port, " +
             "controlTopic=$controlTopic, blobTopic=$blobTopic)"
 }
 
@@ -85,10 +83,6 @@ sealed class PairingError(val reason: String) {
     /** ポート指定が整数でない。 */
     class InvalidPort(val value: String) :
         PairingError("ポート指定が不正です: $value")
-
-    /** TLS 指定が真偽値でない。 */
-    class InvalidTls(val value: String) :
-        PairingError("TLS 指定が不正です: $value")
 }
 
 /** [PairingUri.decode] の結果。成功なら [PairingData]、失敗なら [PairingError] を保持する。 */

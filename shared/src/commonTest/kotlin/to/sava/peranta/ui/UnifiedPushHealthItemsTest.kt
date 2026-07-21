@@ -38,7 +38,7 @@ class UnifiedPushHealthItemsTest {
         assertEquals("登録し直す", item.fixLabel)
         assertTrue(item.detail!!.contains(mismatch.endpointOrigin))
         assertTrue(item.detail!!.contains(mismatch.configOrigin))
-        assertTrue(item.fixGuidance!!.contains(mismatch.configOrigin))
+        assertTrue(item.fixGuidance!!.contains("カスタムヘッダー"))
     }
 
     /** サーバ不一致では、渡した fixAids がそのまま項目に載る。 */

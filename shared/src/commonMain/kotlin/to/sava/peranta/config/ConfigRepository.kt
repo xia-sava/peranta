@@ -16,17 +16,22 @@ import kotlin.uuid.Uuid
 /**
  * [PerantaConfig] を multiplatform-settings に読み書きする。
  * 共有鍵の実体だけは [KeyStore] 経由で保管し、その他の項目は settings に直接保存する。
+ *
+ * [forceTls] が真（リリースビルド・既定）のとき TLS は常に有効として読み出し、保存もしない。
+ * 偽（Android の debug ビルド / Desktop の devMode）のときは保存値を尊重し、既定は無効
+ * （ローカル開発サーバ向け）。境界はビルド種別であり、実行時に切り替わることはない（§16）。
  */
 class ConfigRepository(
     private val settings: Settings,
     private val keyStore: KeyStore = createKeyStore(settings),
+    private val forceTls: Boolean = true,
 ) {
 
     fun load(): PerantaConfig {
         val sharedKeyBase64 = keyStore.loadKey()?.let { Base64.encode(it) }
         return PerantaConfig(
             host = settings.getString(KEY_HOST, DEFAULT_HOST),
-            useTls = settings.getBoolean(KEY_USE_TLS, true),
+            useTls = if (forceTls) true else settings.getBoolean(KEY_USE_TLS, false),
             port = if (settings.hasKey(KEY_PORT)) settings.getInt(KEY_PORT, 0) else null,
             accessToken = settings.getStringOrNull(KEY_TOKEN),
             deviceId = settings.getStringOrNull(KEY_DEVICE_ID),
@@ -60,7 +65,7 @@ class ConfigRepository(
 
     private fun saveLocked(config: PerantaConfig) {
         settings.putString(KEY_HOST, config.host)
-        settings.putBoolean(KEY_USE_TLS, config.useTls)
+        if (!forceTls) settings.putBoolean(KEY_USE_TLS, config.useTls)
         config.port?.let { settings.putInt(KEY_PORT, it) } ?: settings.remove(KEY_PORT)
         putOrRemove(KEY_TOKEN, config.accessToken)
         putOrRemove(KEY_DEVICE_ID, config.deviceId)

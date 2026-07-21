@@ -25,7 +25,6 @@ private const val PARAM_HOST: String = "host"
 private const val PARAM_TOKEN: String = "token"
 private const val PARAM_KEY_ID: String = "keyId"
 private const val PARAM_KEY: String = "key"
-private const val PARAM_TLS: String = "tls"
 private const val PARAM_PORT: String = "port"
 private const val PARAM_CONTROL_TOPIC: String = "ctl"
 private const val PARAM_BLOB_TOPIC: String = "blob"
@@ -47,7 +46,6 @@ object PairingUri {
             add(PARAM_TOKEN to data.token)
             add(PARAM_KEY_ID to data.keyId)
             add(PARAM_KEY to base64.encode(data.key))
-            add(PARAM_TLS to data.tls.toString())
             data.port?.let { add(PARAM_PORT to it.toString()) }
             data.controlTopic?.let { add(PARAM_CONTROL_TOPIC to it) }
             data.blobTopic?.let { add(PARAM_BLOB_TOPIC to it) }
@@ -94,12 +92,7 @@ object PairingUri {
             return PairingResult.Failure(PairingError.InvalidKeyLength(key.size))
         }
 
-        val tls = when (val raw = params[PARAM_TLS]) {
-            null, "true" -> true
-            "false" -> false
-            else -> return PairingResult.Failure(PairingError.InvalidTls(raw))
-        }
-
+        // 旧バージョンの URI に含まれる tls パラメータは互換のため受理して無視する（§16）。
         val port = params[PARAM_PORT]?.let { raw ->
             val parsed = raw.toIntOrNull() ?: return PairingResult.Failure(PairingError.InvalidPort(raw))
             if (parsed !in VALID_PORT_RANGE) {
@@ -117,7 +110,6 @@ object PairingUri {
                 token = token,
                 keyId = keyId,
                 key = key,
-                tls = tls,
                 port = port,
                 controlTopic = controlTopic,
                 blobTopic = blobTopic,

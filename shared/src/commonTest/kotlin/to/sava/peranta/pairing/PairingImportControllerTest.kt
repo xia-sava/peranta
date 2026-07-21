@@ -20,7 +20,6 @@ class PairingImportControllerTest {
                 token = "tk",
                 keyId = "k5",
                 key = key(),
-                tls = true,
                 port = 8443,
                 controlTopic = "peranta-control-abc",
             ),

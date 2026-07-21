@@ -32,7 +32,6 @@ class QrRoundTripTest {
             token = "tk_secret_ABC-123",
             keyId = "k1",
             key = ByteArray(32) { (it * 7 + 1).toByte() },
-            tls = true,
             port = 8443,
         )
         val uri = PairingUri.encode(data)

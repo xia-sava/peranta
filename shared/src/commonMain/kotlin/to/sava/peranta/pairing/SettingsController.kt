@@ -28,7 +28,7 @@ class SettingsController(private val repository: ConfigRepository) {
 
     /**
      * 接続まわりの設定を保存する。空文字の token/deviceName は未設定（null）として扱う。
-     * 鍵・keyId・topic などは既存値を引き継ぐ。TLS は常に有効として保存する。
+     * 鍵・keyId・topic・TLS などは既存値を引き継ぐ。
      */
     fun saveConnectionSettings(
         host: String,
@@ -42,7 +42,6 @@ class SettingsController(private val repository: ConfigRepository) {
             host = host,
             accessToken = accessToken?.takeIf { it.isNotBlank() },
             deviceName = deviceName?.takeIf { it.isNotBlank() },
-            useTls = true,
             port = port,
             persistSensitiveHistory = persistSensitiveHistory,
             attachFullTextWhenTruncated = attachFullTextWhenTruncated,
@@ -105,7 +104,6 @@ class SettingsController(private val repository: ConfigRepository) {
             token = token,
             keyId = keyId,
             key = Base64.decode(keyBase64),
-            tls = config.useTls,
             port = config.port,
             controlTopic = controlTopic,
             blobTopic = blobTopic,

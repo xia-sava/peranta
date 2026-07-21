@@ -83,12 +83,19 @@ private fun enrichConfig(repository: ConfigRepository, devMode: Boolean): Perant
 }
 
 /**
+ * Desktop 用の [ConfigRepository] を生成する。
+ * 配布物（devMode 偽）では TLS を常に有効へ強制し、devMode では保存値（既定は無効）を尊重する（§16）。
+ */
+private fun desktopConfigRepository(settings: Settings, devMode: Boolean): ConfigRepository =
+    ConfigRepository(settings, forceTls = !devMode)
+
+/**
  * Desktop の設定を settings から読む。[enrichConfig] に委譲する薄いエントリポイント。
  */
 fun loadDesktopConfig(
     settings: Settings = Settings(),
     devMode: Boolean = isDevMode(),
-): PerantaConfig = enrichConfig(ConfigRepository(settings), devMode)
+): PerantaConfig = enrichConfig(desktopConfigRepository(settings, devMode), devMode)
 
 /**
  * Desktop 起動時の設定読み込みと、設定画面コントローラを同一の settings 実体から作る。
@@ -99,7 +106,7 @@ class DesktopSettings(
     val devMode: Boolean = isDevMode(),
 ) {
     /** 設定ストアに紐づくリポジトリ。設定画面・アプリフィルタ画面の永続化で共有する。 */
-    val repository: ConfigRepository = ConfigRepository(settings)
+    val repository: ConfigRepository = desktopConfigRepository(settings, devMode)
 
     /** 起動時に一度だけ読み込んだ設定。初期表示の判定に使う。 */
     val config: PerantaConfig = enrichConfig(repository, devMode)
