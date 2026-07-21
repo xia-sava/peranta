@@ -26,9 +26,9 @@ class SettingsScreenTest {
 
     // --- フラットモード（初期設定完了済み）の挙動 ---
 
-    /** 保存ボタン押下で入力値が ConfigRepository に反映される。 */
+    /** テキスト欄への入力がそのまま ConfigRepository に即時反映される（保存ボタンなしの自動保存）。 */
     @Test
-    fun saveButtonPersistsInputToRepository() = runComposeUiTest {
+    fun editingTextFieldsPersistsImmediately() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
         repo.save(readyConfig())
         val controller = SettingsController(repo)
@@ -38,7 +38,6 @@ class SettingsScreenTest {
         onNodeWithTag(TAG_HOST).performTextReplacement("example.test")
         onNodeWithTag(TAG_TOKEN).performTextReplacement("tk")
         onNodeWithTag(TAG_DEVICE_NAME).performTextReplacement("desktop-2")
-        onNodeWithTag(TAG_SAVE).performClick()
 
         val loaded = repo.load()
         assertEquals("example.test", loaded.host)
@@ -81,9 +80,9 @@ class SettingsScreenTest {
         onNodeWithTag(QR_SLOT_TAG).assertIsDisplayed()
     }
 
-    /** 保存済み設定が TLS 無効でも、保存時は常に TLS 有効を書き込む。 */
+    /** 保存済み設定が TLS 無効でも、自動保存時は常に TLS 有効を書き込む。 */
     @Test
-    fun saveAlwaysPersistsTlsEnabled() = runComposeUiTest {
+    fun autoSaveAlwaysPersistsTlsEnabled() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
         repo.save(readyConfig().copy(useTls = false))
         val controller = SettingsController(repo)
@@ -91,7 +90,6 @@ class SettingsScreenTest {
         setContent { SettingsScreen(controller) }
 
         onNodeWithTag(TAG_DEVICE_NAME).performTextReplacement("desktop-2")
-        onNodeWithTag(TAG_SAVE).performClick()
 
         assertEquals(true, repo.load().useTls)
     }
@@ -122,9 +120,9 @@ class SettingsScreenTest {
         onNodeWithTag(TAG_ATTACH_FULL_TEXT).assertIsOff()
     }
 
-    /** チェックボックスをトグルして保存すると、値が ConfigRepository に反映される。 */
+    /** チェックボックスをトグルすると、即座に値が ConfigRepository に反映される。 */
     @Test
-    fun togglingSensitiveHistoryAndFullTextCheckboxesPersistsOnSave() = runComposeUiTest {
+    fun togglingSensitiveHistoryAndFullTextCheckboxesPersistsImmediately() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
         repo.save(readyConfig())
         val controller = SettingsController(repo)
@@ -133,7 +131,6 @@ class SettingsScreenTest {
 
         onNodeWithTag(TAG_PERSIST_SENSITIVE).performClick()
         onNodeWithTag(TAG_ATTACH_FULL_TEXT).performClick()
-        onNodeWithTag(TAG_SAVE).performClick()
 
         val loaded = repo.load()
         assertEquals(true, loaded.persistSensitiveHistory)
@@ -209,9 +206,9 @@ class SettingsScreenTest {
         onNodeWithText("ペアリング文字列をコピーしました。").assertExists()
     }
 
-    /** フラットモードの保存・鍵ローテーションで onSaved コールバックが呼ばれる。 */
+    /** フラットモードの鍵ローテーションは即座に onSaved を呼ぶ。 */
     @Test
-    fun onSavedInvokedOnFlatSaveAndRotate() = runComposeUiTest {
+    fun onSavedInvokedOnRotate() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
         repo.save(readyConfig())
         val controller = SettingsController(repo)
@@ -219,28 +216,84 @@ class SettingsScreenTest {
 
         setContent { SettingsScreen(controller, onSaved = { savedCount++ }) }
 
-        onNodeWithTag(TAG_SAVE).performClick()
-        assertEquals(1, savedCount)
-
         onNodeWithTag(TAG_ROTATE).performClick()
         onNodeWithTag(TAG_ROTATE_CONFIRM).performClick()
-        assertEquals(2, savedCount)
+        assertEquals(1, savedCount)
     }
 
-    /** showSendRoleOptions=true のフラット保存でも、両保存の後に onSaved は1回だけ呼ばれる。 */
+    /** フラットモードで入力欄・チェックボックスを編集しただけでは onSaved は呼ばれない。 */
     @Test
-    fun flatSaveInvokesOnSavedOnceWithSendRoleOptions() = runComposeUiTest {
+    fun editingAloneDoesNotInvokeOnSaved() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
         repo.save(readyConfig())
         val controller = SettingsController(repo)
         var savedCount = 0
 
+        setContent { SettingsScreen(controller, onSaved = { savedCount++ }) }
+
+        onNodeWithTag(TAG_DEVICE_NAME).performTextReplacement("desktop-2")
+        onNodeWithTag(TAG_PERSIST_SENSITIVE).performClick()
+
+        assertEquals(0, savedCount)
+    }
+
+    /** 編集後に「タイムラインへ」を押すと onSaved が1回呼ばれてから onOpenTimeline が呼ばれる。 */
+    @Test
+    fun openTimelineAfterEditingInvokesOnSavedThenOpensTimeline() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+        var savedCount = 0
+        var timelineOpened = false
+
         setContent {
-            SettingsScreen(controller, showSendRoleOptions = true, onSaved = { savedCount++ })
+            SettingsScreen(
+                controller,
+                onOpenTimeline = { timelineOpened = true },
+                onSaved = { savedCount++ },
+            )
         }
 
-        onNodeWithTag(TAG_SAVE).performClick()
+        onNodeWithTag(TAG_DEVICE_NAME).performTextReplacement("desktop-2")
+        onNodeWithText("タイムラインへ").performClick()
+
         assertEquals(1, savedCount)
+        assertEquals(true, timelineOpened)
+    }
+
+    /** 編集せずに「タイムラインへ」を押しても onSaved は呼ばれない。 */
+    @Test
+    fun openTimelineWithoutEditingDoesNotInvokeOnSaved() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+        var savedCount = 0
+        var timelineOpened = false
+
+        setContent {
+            SettingsScreen(
+                controller,
+                onOpenTimeline = { timelineOpened = true },
+                onSaved = { savedCount++ },
+            )
+        }
+
+        onNodeWithText("タイムラインへ").performClick()
+
+        assertEquals(0, savedCount)
+        assertEquals(true, timelineOpened)
+    }
+
+    /** フラット画面の見出し直下に自動保存の説明文が表示される。 */
+    @Test
+    fun autosaveNoteIsDisplayedOnFlatScreen() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_AUTOSAVE_NOTE).assertIsDisplayed()
     }
 
     // --- 送信ロールトグル（showSendRoleOptions） ---
@@ -258,7 +311,7 @@ class SettingsScreenTest {
         onNodeWithTag(TAG_SMS_DIRECT_RECEIVE).assertDoesNotExist()
     }
 
-    /** showSendRoleOptions=true なら送信ロールのトグルが出て、保存時に sendEnabled/smsDirectReceive へ反映される。 */
+    /** showSendRoleOptions=true なら送信ロールのトグルが出て、トグル時に即座に sendEnabled/smsDirectReceive へ反映される。 */
     @Test
     fun sendRoleOptionsShownAndPersistedWhenEnabled() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
@@ -272,7 +325,6 @@ class SettingsScreenTest {
 
         onNodeWithTag(TAG_SEND_ENABLED).performClick()
         onNodeWithTag(TAG_SMS_DIRECT_RECEIVE).performClick()
-        onNodeWithTag(TAG_SAVE).performClick()
 
         val loaded = repo.load()
         assertEquals(true, loaded.sendEnabled)
@@ -316,7 +368,7 @@ class SettingsScreenTest {
         onNodeWithTag(TAG_ADD_DEVICE).assertIsDisplayed()
         onNodeWithTag(TAG_ADD_DEVICE).performClick()
         onNodeWithTag(QR_SLOT_TAG).assertIsDisplayed()
-        onNodeWithTag(TAG_SAVE).assertIsDisplayed()
+        onNodeWithTag(TAG_AUTOSAVE_NOTE).assertIsDisplayed()
         onNodeWithTag(TAG_DEVICE_NAME).assertIsDisplayed()
     }
 

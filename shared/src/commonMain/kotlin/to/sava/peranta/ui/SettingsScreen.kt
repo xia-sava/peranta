@@ -22,6 +22,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,8 +48,8 @@ private const val DEFAULT_QR_VISIBLE_MILLIS: Long = 60_000L
 private const val ROTATE_WARNING_BODY: String =
     "前の鍵は破棄され、全端末で QR の読み直しが必要になります。続けますか？"
 
-/** 保存完了を知らせる文言（設定変更は自動反映される）。 */
-private const val SAVE_NOTICE: String = "設定を保存しました。"
+/** フラット画面で変更が自動保存される旨を伝える説明文。 */
+private const val AUTOSAVE_NOTE: String = "変更は自動的に保存され、この画面を離れたときに反映されます。"
 
 /** センシティブ通知の履歴保存トグルの説明文（§11: 既定 OFF が安全側）。 */
 private const val PERSIST_SENSITIVE_HISTORY_DESCRIPTION: String =
@@ -105,6 +106,7 @@ fun SettingsScreen(
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var showRotateWarning by remember { mutableStateOf(false) }
     var pairingUri by remember { mutableStateOf<String?>(null) }
+    var dirty by remember { mutableStateOf(false) }
 
     /** ウィザードの表示ステップを最新の保存状態で更新し、SENDER の全ステップ完了ならフラット画面へ移る。 */
     fun refreshWizard() {
@@ -122,6 +124,7 @@ fun SettingsScreen(
             persistSensitiveHistory = persistSensitiveHistory,
             attachFullTextWhenTruncated = attachFullTextWhenTruncated,
         )
+        dirty = true
     }
 
     fun saveConnection() {
@@ -156,6 +159,12 @@ fun SettingsScreen(
         pairingUri = null
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            if (dirty) onSaved?.invoke()
+        }
+    }
+
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         val scrollState = rememberScrollState()
         Column(modifier = Modifier.fillMaxSize()) {
@@ -172,18 +181,35 @@ fun SettingsScreen(
                         ) {
                             Text(text = "設定", style = MaterialTheme.typography.titleLarge)
                             if (onOpenTimeline != null) {
-                                TextButton(onClick = onOpenTimeline) { Text(text = "タイムラインへ") }
+                                TextButton(
+                                    onClick = {
+                                        if (dirty) {
+                                            onSaved?.invoke()
+                                            dirty = false
+                                        }
+                                        onOpenTimeline()
+                                    },
+                                ) { Text(text = "タイムラインへ") }
                             }
                         }
+                        Text(
+                            text = AUTOSAVE_NOTE,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag(TAG_AUTOSAVE_NOTE),
+                        )
 
-                        HostField(value = host, onValueChange = { host = it })
-                        TokenField(value = accessToken, onValueChange = { accessToken = it })
-                        DeviceNameField(value = deviceName, onValueChange = { deviceName = it })
-                        PortField(value = port, onValueChange = { port = it })
+                        HostField(value = host, onValueChange = { host = it; persistConnection() })
+                        TokenField(value = accessToken, onValueChange = { accessToken = it; persistConnection() })
+                        DeviceNameField(
+                            value = deviceName,
+                            onValueChange = { deviceName = it; persistConnection() },
+                        )
+                        PortField(value = port, onValueChange = { port = it; persistConnection() })
 
                         LabeledCheckbox(
                             checked = persistSensitiveHistory,
-                            onCheckedChange = { persistSensitiveHistory = it },
+                            onCheckedChange = { persistSensitiveHistory = it; persistConnection() },
                             label = "センシティブな通知の本文を履歴に保存する",
                             tag = TAG_PERSIST_SENSITIVE,
                         )
@@ -194,7 +220,7 @@ fun SettingsScreen(
                         )
                         LabeledCheckbox(
                             checked = attachFullTextWhenTruncated,
-                            onCheckedChange = { attachFullTextWhenTruncated = it },
+                            onCheckedChange = { attachFullTextWhenTruncated = it; persistConnection() },
                             label = "長文本文の全文をシームレスに添付・展開する",
                             tag = TAG_ATTACH_FULL_TEXT,
                         )
@@ -202,30 +228,24 @@ fun SettingsScreen(
                         if (showSendRoleOptions) {
                             LabeledCheckbox(
                                 checked = sendEnabled,
-                                onCheckedChange = { sendEnabled = it },
+                                onCheckedChange = {
+                                    sendEnabled = it
+                                    controller.saveSendRoleSettings(sendEnabled, smsDirectReceive)
+                                    dirty = true
+                                },
                                 label = "この端末から通知・SMS を送信する",
                                 tag = TAG_SEND_ENABLED,
                             )
                             LabeledCheckbox(
                                 checked = smsDirectReceive,
-                                onCheckedChange = { smsDirectReceive = it },
+                                onCheckedChange = {
+                                    smsDirectReceive = it
+                                    controller.saveSendRoleSettings(sendEnabled, smsDirectReceive)
+                                    dirty = true
+                                },
                                 label = "SMS を直接受信して転送する",
                                 tag = TAG_SMS_DIRECT_RECEIVE,
                             )
-                        }
-
-                        Button(
-                            onClick = {
-                                persistConnection()
-                                if (showSendRoleOptions) {
-                                    controller.saveSendRoleSettings(sendEnabled, smsDirectReceive)
-                                }
-                                onSaved?.invoke()
-                                statusMessage = SAVE_NOTICE
-                            },
-                            modifier = Modifier.testTag(TAG_SAVE),
-                        ) {
-                            Text(text = "保存")
                         }
 
                         KeyStatusText(hasKey = hasKey, keyId = keyId)
@@ -519,6 +539,7 @@ private fun PairingQrSection(
     }
 }
 
+const val TAG_AUTOSAVE_NOTE: String = "settings-autosave-note"
 const val TAG_HOST: String = "settings-host"
 const val TAG_TOKEN: String = "settings-token"
 const val TAG_DEVICE_NAME: String = "settings-deviceName"
@@ -527,7 +548,6 @@ const val TAG_PERSIST_SENSITIVE: String = "settings-persist-sensitive"
 const val TAG_ATTACH_FULL_TEXT: String = "settings-attach-full-text"
 const val TAG_SEND_ENABLED: String = "settings-send-enabled"
 const val TAG_SMS_DIRECT_RECEIVE: String = "settings-sms-direct-receive"
-const val TAG_SAVE: String = "settings-save"
 const val TAG_ROTATE: String = "settings-rotate"
 const val TAG_ROTATE_CONFIRM: String = "settings-rotate-confirm"
 const val TAG_ADD_DEVICE: String = "settings-add-device"
