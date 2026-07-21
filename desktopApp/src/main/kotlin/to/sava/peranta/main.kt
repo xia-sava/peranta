@@ -32,6 +32,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.snapshotFlow
 import to.sava.peranta.autostart.AutoStartManager
+import to.sava.peranta.autostart.AutoStartStatus
 import to.sava.peranta.autostart.DesktopHealthChecker
 import to.sava.peranta.autostart.WindowsRunRegistry
 import to.sava.peranta.pairing.pairingQrMatrix
@@ -42,6 +43,13 @@ import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.QrCodeCanvas
 import to.sava.peranta.ui.SettingsScreen
+import to.sava.peranta.ui.setup.SetupAction
+import to.sava.peranta.ui.setup.SetupItemUi
+import to.sava.peranta.ui.setup.SetupItemsProvider
+import to.sava.peranta.ui.setup.SetupStatus
+import to.sava.peranta.ui.setup.WizardFlow
+import to.sava.peranta.ui.setup.WizardRole
+import to.sava.peranta.ui.setup.WizardScreen
 import to.sava.peranta.update.DesktopUpdater
 import java.awt.EventQueue
 import java.awt.Frame
@@ -76,6 +84,40 @@ private fun BoxScope.DesktopScrollbar(scrollState: ScrollState) {
         modifier = Modifier.align(Alignment.CenterEnd),
     )
 }
+
+/**
+ * ウィザードの自動起動ページへ渡す項目供給元。[AutoStartManager] を直接使い、
+ * 配布物でない開発実行（NOT_SUPPORTED）は扱えないため自動的に DONE 扱いにする。
+ */
+private fun desktopWizardSetupProvider(autoStart: AutoStartManager): SetupItemsProvider =
+    SetupItemsProvider {
+        val status = autoStart.status()
+        listOf(
+            SetupItemUi(
+                id = WizardFlow.ITEM_AUTOSTART,
+                title = "ログオン時の自動起動",
+                description = "サインイン後すぐに受信を始められるよう、ログオン時にトレイ常駐で自動起動します。",
+                status = if (status == AutoStartStatus.DISABLED) SetupStatus.TODO else SetupStatus.DONE,
+                statusDetail = when (status) {
+                    AutoStartStatus.NOT_SUPPORTED -> "この実行環境では自動起動を設定できません。"
+                    AutoStartStatus.ENABLED -> "サインイン時にトレイ常駐で自動起動します。"
+                    AutoStartStatus.DISABLED -> null
+                },
+                action = if (status == AutoStartStatus.DISABLED) {
+                    SetupAction(
+                        label = "登録する",
+                        run = {
+                            if (!autoStart.enable()) {
+                                Logger.withTag("Wizard").w { "自動起動の登録に失敗しました。" }
+                            }
+                        },
+                    )
+                } else {
+                    null
+                },
+            ),
+        )
+    }
 
 /** ペアリング文字列をシステムクリップボードにコピーする。 */
 private fun copyToClipboard(text: String) {
@@ -142,6 +184,7 @@ fun main(args: Array<String>) {
         var showSettings by remember { mutableStateOf(!desktopSettings.config.isReadyForReceive) }
         var showAppFilter by remember { mutableStateOf(false) }
         var showHealthCheck by remember { mutableStateOf(false) }
+        var showWizard by remember { mutableStateOf(false) }
         val windowState = rememberWindowState()
 
         // トースト経由など Compose 外からの「ウィンドウを出す」要求を可視状態へ橋渡しする。
@@ -215,6 +258,18 @@ fun main(args: Array<String>) {
             LaunchedEffect(window) { mainWindow.set(window) }
             val currentReceiver = receiver
             when {
+                showWizard -> PerantaTheme {
+                    WizardScreen(
+                        role = WizardRole.DESKTOP_SOURCE,
+                        controller = settingsController,
+                        provider = desktopWizardSetupProvider(autoStart),
+                        healthChecker = DesktopHealthChecker(autoStart),
+                        qrContent = { uri -> DesktopQrCode(uri) },
+                        onCopyPairingUri = ::copyToClipboard,
+                        onClose = { showWizard = false },
+                        onSaved = { configGeneration++ },
+                    )
+                }
                 showHealthCheck -> PerantaTheme {
                     HealthCheckScreen(
                         checker = DesktopHealthChecker(autoStart),
@@ -233,6 +288,7 @@ fun main(args: Array<String>) {
                         scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
                         onCopyPairingUri = ::copyToClipboard,
                         onSaved = { configGeneration++ },
+                        onOpenWizard = { showWizard = true },
                     )
                 }
                 showAppFilter && currentReceiver != null -> PerantaTheme {

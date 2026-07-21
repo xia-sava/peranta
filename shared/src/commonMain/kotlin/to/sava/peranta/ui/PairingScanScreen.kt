@@ -39,6 +39,8 @@ private const val PAIRING_DEVICE_NAME_MISSING_NOTICE: String =
  * 端末名欄が空欄なら端末名は既存値を引き継ぐ（§6）。[onOpenSettings] が非 null のときは、
  * この端末自身を設定元にするための設定画面への導線を表示する（取り込み成功後は隠す）。
  * 取り込み成功後は [onImported] が非 null ならタイムラインへ進む導線を表示する。
+ * [showHeader] が false のときは画面見出しと概要説明を出さない。外側（ウィザードのページ）が
+ * 見出しを持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
  */
 @Composable
 fun PairingScanScreen(
@@ -48,6 +50,39 @@ fun PairingScanScreen(
     onOpenSettings: (() -> Unit)? = null,
     onImported: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null,
+    showHeader: Boolean = true,
+) {
+    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            PairingScanContent(
+                controller = controller,
+                onRequestScan = onRequestScan,
+                onOpenSettings = onOpenSettings,
+                onImported = onImported,
+                onBack = onBack,
+                showHeader = showHeader,
+            )
+        }
+    }
+}
+
+/**
+ * QR 取り込みの中身（見出し・スキャン・貼り付け・状態表示・各導線）だけを描く。
+ * スクロールコンテナ・[Surface] を持たないため、外側にスクロール可能な [Column] を持つ画面
+ * （ウィザードの QR 取り込みページなど）へそのまま埋め込める。単独画面は [PairingScanScreen] が包む。
+ */
+@Composable
+internal fun PairingScanContent(
+    controller: PairingImportController,
+    onRequestScan: ((onResult: (String?) -> Unit) -> Unit)? = null,
+    onOpenSettings: (() -> Unit)? = null,
+    onImported: (() -> Unit)? = null,
+    onBack: (() -> Unit)? = null,
+    showHeader: Boolean = true,
+    onApplied: (() -> Unit)? = null,
 ) {
     var manualInput by remember { mutableStateOf("") }
     var deviceNameInput by remember { mutableStateOf("") }
@@ -65,6 +100,7 @@ fun PairingScanScreen(
                 } else {
                     "設定を取り込みました（keyId=${result.keyId}）。"
                 }
+                onApplied?.invoke()
             }
 
             is PairingImportResult.Failed -> {
@@ -74,90 +110,73 @@ fun PairingScanScreen(
         }
     }
 
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+    if (showHeader) {
+        Text(text = "設定の取り込み", style = MaterialTheme.typography.titleLarge)
+        Text(
+            text = "設定元の端末が表示した QR を読み取ると、サーバ・トークン・共有鍵をまとめて取り込みます。",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    if (onRequestScan != null) {
+        Button(
+            onClick = { onRequestScan { scanned -> scanned?.let(::importRaw) } },
+            modifier = Modifier.testTag(TAG_PAIRING_SCAN),
         ) {
-            Text(text = "設定の取り込み", style = MaterialTheme.typography.titleLarge)
-            Text(
-                text = "設定元の端末が表示した QR を読み取ると、サーバ・トークン・共有鍵をまとめて取り込みます。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text(text = "QR をスキャン")
+        }
+    }
 
-            if (onRequestScan != null) {
-                Button(
-                    onClick = {
-                        onRequestScan { scanned -> scanned?.let(::importRaw) }
-                    },
-                    modifier = Modifier.testTag(TAG_PAIRING_SCAN),
-                ) {
-                    Text(text = "QR をスキャン")
-                }
-            }
+    OutlinedTextField(
+        value = deviceNameInput,
+        onValueChange = { deviceNameInput = it },
+        label = { Text("端末名（任意）") },
+        modifier = Modifier.fillMaxWidth().testTag(TAG_PAIRING_DEVICE_NAME),
+    )
 
-            OutlinedTextField(
-                value = deviceNameInput,
-                onValueChange = { deviceNameInput = it },
-                label = { Text("端末名（任意）") },
-                modifier = Modifier.fillMaxWidth().testTag(TAG_PAIRING_DEVICE_NAME),
-            )
+    Text(
+        text = "カメラが使えないときは、ペアリング文字列を貼り付けて取り込めます。",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    OutlinedTextField(
+        value = manualInput,
+        onValueChange = { manualInput = it },
+        label = { Text("ペアリング文字列") },
+        modifier = Modifier.fillMaxWidth().testTag(TAG_PAIRING_MANUAL_INPUT),
+    )
+    Button(
+        onClick = { importRaw(manualInput) },
+        modifier = Modifier.testTag(TAG_PAIRING_IMPORT),
+    ) {
+        Text(text = "取り込む")
+    }
 
-            Text(
-                text = "カメラが使えないときは、ペアリング文字列を貼り付けて取り込めます。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedTextField(
-                value = manualInput,
-                onValueChange = { manualInput = it },
-                label = { Text("ペアリング文字列") },
-                modifier = Modifier.fillMaxWidth().testTag(TAG_PAIRING_MANUAL_INPUT),
-            )
-            Button(
-                onClick = { importRaw(manualInput) },
-                modifier = Modifier.testTag(TAG_PAIRING_IMPORT),
-            ) {
-                Text(text = "取り込む")
-            }
+    statusMessage?.let {
+        Text(
+            text = it,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (succeeded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            modifier = Modifier.testTag(TAG_PAIRING_STATUS),
+        )
+    }
 
-            statusMessage?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (succeeded) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.error
-                    },
-                    modifier = Modifier.testTag(TAG_PAIRING_STATUS),
-                )
-            }
+    if (succeeded && onImported != null) {
+        Button(onClick = onImported, modifier = Modifier.testTag(TAG_PAIRING_IMPORTED)) {
+            Text(text = "タイムラインへ")
+        }
+    }
 
-            if (succeeded && onImported != null) {
-                Button(
-                    onClick = onImported,
-                    modifier = Modifier.testTag(TAG_PAIRING_IMPORTED),
-                ) {
-                    Text(text = "タイムラインへ")
-                }
-            }
+    if (!succeeded && onOpenSettings != null) {
+        TextButton(onClick = onOpenSettings, modifier = Modifier.testTag(TAG_PAIRING_OPEN_SETTINGS)) {
+            Text(text = "この端末を設定元にする")
+        }
+    }
 
-            if (!succeeded && onOpenSettings != null) {
-                TextButton(
-                    onClick = onOpenSettings,
-                    modifier = Modifier.testTag(TAG_PAIRING_OPEN_SETTINGS),
-                ) {
-                    Text(text = "この端末を設定元にする")
-                }
-            }
-
-            if (onBack != null) {
-                TextButton(onClick = onBack, modifier = Modifier.testTag(TAG_PAIRING_BACK)) {
-                    Text(text = "戻る")
-                }
-            }
+    if (onBack != null) {
+        TextButton(onClick = onBack, modifier = Modifier.testTag(TAG_PAIRING_BACK)) {
+            Text(text = "戻る")
         }
     }
 }

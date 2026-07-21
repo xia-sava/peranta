@@ -35,6 +35,7 @@ import to.sava.peranta.android.AndroidHealthChecker
 import to.sava.peranta.android.AndroidInstalledAppsProvider
 import to.sava.peranta.android.AndroidReceiveSetupProvider
 import to.sava.peranta.android.AndroidSetupProbe
+import to.sava.peranta.android.AndroidWizardSetupProvider
 import to.sava.peranta.android.AttachmentTransferService
 import to.sava.peranta.android.PerantaReceive
 import to.sava.peranta.android.PerantaUnifiedPush
@@ -58,6 +59,8 @@ import to.sava.peranta.ui.QrCodeCanvas
 import to.sava.peranta.ui.SettingsScreen
 import to.sava.peranta.ui.ShareScreen
 import to.sava.peranta.ui.setup.ReceiveSetupScreen
+import to.sava.peranta.ui.setup.WizardRole
+import to.sava.peranta.ui.setup.WizardScreen
 import to.sava.peranta.update.AndroidUpdater
 
 /** 通知権限が拒否されたときにタイムラインへ出す文言（§10.5）。 */
@@ -75,7 +78,8 @@ private const val KEY_PENDING_SAVE_BLOB_ID = "pendingSaveBlobId"
  * MainActivity が表示する画面（§10）。
  * [Main] はロール（受信/送信）に応じて本体を出し、[Pairing] は QR 取り込み画面、
  * [Settings] は設定画面（§10.2）、[AppFilter] はアプリフィルタ画面（§10.4）、
- * [HealthCheck] は健康診断画面（§10.5）、[ReceiveSetup] は受信のセットアップ常設画面を出す。
+ * [HealthCheck] は健康診断画面（§10.5）、[ReceiveSetup] は受信のセットアップ常設画面、
+ * [Wizard] は設定・診断をページ列で案内するウィザードを出す。
  */
 private sealed interface Screen {
     data object Main : Screen
@@ -84,6 +88,7 @@ private sealed interface Screen {
     data object AppFilter : Screen
     data object HealthCheck : Screen
     data object ReceiveSetup : Screen
+    data object Wizard : Screen
     data class Share(val files: List<Uri>) : Screen
 }
 
@@ -162,6 +167,7 @@ class MainActivity : ComponentActivity() {
         }
 
         val receiveSetupProvider = AndroidReceiveSetupProvider(this)
+        val wizardSetupProvider = AndroidWizardSetupProvider(this)
         // 受信のセットアップは受信ロールの設定が揃うか、UnifiedPush 登録済みのとき入れる。
         // 登録済みなら config が欠けても修復の作業台へ戻れるようにする。
         val showReceiveSetup = config.isReadyForUnifiedPushReceive || AndroidSetupProbe(this).unifiedPushRegistered()
@@ -255,6 +261,25 @@ class MainActivity : ComponentActivity() {
                         onCopyPairingUri = { text -> copyPairingUri(text) },
                         showSendRoleOptions = true,
                         onOpenTimeline = { resetReceiveAndRecreate() },
+                        onOpenWizard = { screen = Screen.Wizard },
+                    )
+                }
+
+                Screen.Wizard -> PerantaTheme {
+                    WizardScreen(
+                        role = WizardRole.ANDROID,
+                        controller = SettingsController(androidConfigRepository()),
+                        provider = wizardSetupProvider,
+                        healthChecker = healthChecker,
+                        importController = importController,
+                        qrContent = { uri ->
+                            QrCodeCanvas(pairingQrMatrix(uri), modifier = Modifier.size(240.dp))
+                        },
+                        onCopyPairingUri = { text -> copyPairingUri(text) },
+                        onCopyText = { text, sensitive -> copyText(text, sensitive) },
+                        onRequestScan = { onResult -> requestScan(onResult) },
+                        externalRefreshKey = resumeTick,
+                        onClose = { resetReceiveAndRecreate() },
                     )
                 }
 

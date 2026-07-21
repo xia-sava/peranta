@@ -26,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
-import to.sava.peranta.ui.FixAid
 
 /** 画面冒頭の説明文（未達でも操作を妨げず、いつでも設定できる旨を示す）。 */
 private const val RECEIVE_SETUP_DESCRIPTION: String =
@@ -129,25 +128,6 @@ private fun Header(onBack: (() -> Unit)?) {
         }
     }
 }
-
-/**
- * 状態を変える操作（主操作・[FixAid.Action]）の実行後に [onActionInvoked] を続けて呼ぶよう包む。
- * 値のコピー（[FixAid.Copy]）は状態を変えないため包まない。
- */
-private fun withRecheckOnAction(items: List<SetupItemUi>, onActionInvoked: () -> Unit): List<SetupItemUi> =
-    items.map { item ->
-        item.copy(
-            aids = item.aids.map { aid ->
-                when (aid) {
-                    is FixAid.Action -> aid.copy(onRun = { aid.onRun(); onActionInvoked() })
-                    is FixAid.Copy -> aid
-                }
-            },
-            action = item.action?.let { action ->
-                action.copy(run = { action.run(); onActionInvoked() })
-            },
-        )
-    }
 
 /** 画面タイトルのタグ。 */
 const val TAG_RECEIVE_SETUP_TITLE: String = "receive-setup-title"

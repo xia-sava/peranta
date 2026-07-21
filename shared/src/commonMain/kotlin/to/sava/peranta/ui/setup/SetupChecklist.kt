@@ -186,6 +186,26 @@ private fun SetupAids(
     }
 }
 
+/**
+ * 状態を変える操作（主操作・[FixAid.Action]）の実行後に [onActionInvoked] を続けて呼ぶよう包む。
+ * 値のコピー（[FixAid.Copy]）は状態を変えないため包まない。受信のセットアップ常設画面とウィザードの
+ * 項目ページが、操作直後の自動再チェックのために共用する。
+ */
+internal fun withRecheckOnAction(items: List<SetupItemUi>, onActionInvoked: () -> Unit): List<SetupItemUi> =
+    items.map { item ->
+        item.copy(
+            aids = item.aids.map { aid ->
+                when (aid) {
+                    is FixAid.Action -> aid.copy(onRun = { aid.onRun(); onActionInvoked() })
+                    is FixAid.Copy -> aid
+                }
+            },
+            action = item.action?.let { action ->
+                action.copy(run = { action.run(); onActionInvoked() })
+            },
+        )
+    }
+
 /** 状態を表すマーカー記号。合格 ✓ / 未達 ✗ / 未確認 ─。 */
 private fun badgeGlyph(status: SetupStatus): String = when (status) {
     SetupStatus.DONE -> "✓"

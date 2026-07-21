@@ -28,47 +28,47 @@ private const val QR_HINT: String =
     "この QR を新しい端末のカメラで読み取ってください。時間が経つと自動的に隠れます。"
 
 @Composable
-internal fun HostField(value: String, onValueChange: (String) -> Unit) {
+internal fun HostField(value: String, onValueChange: (String) -> Unit, tag: String = TAG_HOST) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text("サーバホスト名") },
         singleLine = true,
-        modifier = Modifier.fillMaxWidth().testTag(TAG_HOST),
+        modifier = Modifier.fillMaxWidth().testTag(tag),
     )
 }
 
 @Composable
-internal fun TokenField(value: String, onValueChange: (String) -> Unit) {
+internal fun TokenField(value: String, onValueChange: (String) -> Unit, tag: String = TAG_TOKEN) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text("アクセストークン") },
         singleLine = true,
-        modifier = Modifier.fillMaxWidth().testTag(TAG_TOKEN),
+        modifier = Modifier.fillMaxWidth().testTag(tag),
     )
 }
 
 @Composable
-internal fun DeviceNameField(value: String, onValueChange: (String) -> Unit) {
+internal fun DeviceNameField(value: String, onValueChange: (String) -> Unit, tag: String = TAG_DEVICE_NAME) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text("端末名") },
         singleLine = true,
-        modifier = Modifier.fillMaxWidth().testTag(TAG_DEVICE_NAME),
+        modifier = Modifier.fillMaxWidth().testTag(tag),
     )
 }
 
 @Composable
-internal fun PortField(value: String, onValueChange: (String) -> Unit) {
+internal fun PortField(value: String, onValueChange: (String) -> Unit, tag: String = TAG_PORT) {
     OutlinedTextField(
         value = value,
         onValueChange = { input -> onValueChange(input.filter { it.isDigit() }) },
         label = { Text("ポート（任意）") },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = Modifier.fillMaxWidth().testTag(TAG_PORT),
+        modifier = Modifier.fillMaxWidth().testTag(tag),
     )
 }
 

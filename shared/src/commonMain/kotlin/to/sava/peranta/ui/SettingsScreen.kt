@@ -82,6 +82,7 @@ fun SettingsScreen(
     onCopyPairingUri: ((String) -> Unit)? = null,
     showSendRoleOptions: Boolean = false,
     onSaved: (() -> Unit)? = null,
+    onOpenWizard: (() -> Unit)? = null,
 ) {
     val initial = remember { controller.load() }
     var host by remember { mutableStateOf(initial.host) }
@@ -195,6 +196,12 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.testTag(TAG_AUTOSAVE_NOTE),
                         )
+                        if (onOpenWizard != null) {
+                            TextButton(
+                                onClick = onOpenWizard,
+                                modifier = Modifier.testTag(TAG_OPEN_WIZARD),
+                            ) { Text(text = "ウィザードで設定する") }
+                        }
 
                         HostField(value = host, onValueChange = { host = it; persistConnection() })
                         TokenField(value = accessToken, onValueChange = { accessToken = it; persistConnection() })
@@ -432,6 +439,7 @@ private fun WizardNavigation(
 }
 
 const val TAG_AUTOSAVE_NOTE: String = "settings-autosave-note"
+const val TAG_OPEN_WIZARD: String = "settings-open-wizard"
 const val TAG_HOST: String = "settings-host"
 const val TAG_TOKEN: String = "settings-token"
 const val TAG_DEVICE_NAME: String = "settings-deviceName"
