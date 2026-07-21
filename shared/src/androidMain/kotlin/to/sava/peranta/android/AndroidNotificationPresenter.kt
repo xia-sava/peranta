@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -69,6 +70,7 @@ class AndroidNotificationPresenter(
             .setStyle(Notification.BigTextStyle().bigText(display.body))
             .setSmallIcon(R.drawable.ic_notification)
             .setAutoCancel(true)
+            .applyContentIntent()
             .applyExpiry(display)
             .build()
         notify(notificationId, notification)
@@ -93,8 +95,25 @@ class AndroidNotificationPresenter(
             .setStyle(Notification.BigTextStyle().bigText(item.message))
             .setSmallIcon(R.drawable.ic_notification)
             .setAutoCancel(true)
+            .applyContentIntent()
             .build()
         notify(idAllocator.idFor(item.id), notification)
+    }
+
+    /** タップでアプリ本体を開く PendingIntent を付ける。起動 Intent を引けない場合は付けない。 */
+    private fun Notification.Builder.applyContentIntent(): Notification.Builder {
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?: run {
+                log.w { "launch intent not found; notification tap will do nothing" }
+                return this
+            }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        return setContentIntent(pendingIntent)
     }
 
     private fun Notification.Builder.applyExpiry(display: NotificationDisplay): Notification.Builder {
