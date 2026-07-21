@@ -27,6 +27,7 @@ dependencies {
     implementation(projects.shared)
 
     implementation(compose.desktop.currentOs)
+    implementation(compose.material3)
     implementation(libs.kotlinx.coroutinesSwing)
     implementation(libs.kermit)
 

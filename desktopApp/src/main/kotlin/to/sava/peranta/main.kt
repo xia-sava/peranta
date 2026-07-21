@@ -1,10 +1,13 @@
 package to.sava.peranta
 
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.ScrollbarStyle
 import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.defaultScrollbarStyle
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -76,12 +79,23 @@ private fun DesktopQrCode(uri: String, modifier: Modifier = Modifier) {
     QrCodeCanvas(matrix, modifier = modifier.size(240.dp))
 }
 
+/** ダーク/ライト両テーマで視認できるよう、onSurface 由来の色で明示したスクロールバー配色。 */
+@Composable
+private fun desktopScrollbarStyle(): ScrollbarStyle {
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    return defaultScrollbarStyle().copy(
+        unhoverColor = onSurface.copy(alpha = 0.3f),
+        hoverColor = onSurface.copy(alpha = 0.6f),
+    )
+}
+
 /** スクロール位置に追従する縦スクロールバー。commonMain の設定画面・ウィザードへスロットとして注入する。 */
 @Composable
 private fun BoxScope.DesktopScrollbar(scrollState: ScrollState) {
     VerticalScrollbar(
         adapter = rememberScrollbarAdapter(scrollState),
         modifier = Modifier.align(Alignment.CenterEnd),
+        style = desktopScrollbarStyle(),
     )
 }
 

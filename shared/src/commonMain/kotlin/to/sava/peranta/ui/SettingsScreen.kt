@@ -407,6 +407,7 @@ private fun UpdateSection(controller: UpdateController, onInstall: ((String) -> 
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
+            color = if (status is UpdateStatus.Failed) MaterialTheme.colorScheme.error else Color.Unspecified,
             modifier = Modifier.testTag(TAG_UPDATE_STATUS),
         )
     }
