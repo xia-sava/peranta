@@ -151,9 +151,9 @@ fun WizardScreen(
         }
     }
 
-    fun chooseRole(chosen: WizardDeviceRole) {
-        answers = answers.copy(role = chosen)
-        controller.saveSendRoleSettings(chosen != WizardDeviceRole.RECEIVE, config.smsDirectReceive)
+    fun chooseForward(forward: Boolean) {
+        answers = answers.copy(forward = forward)
+        controller.saveSendRoleSettings(forward, config.smsDirectReceive)
         reload()
         onSaved?.invoke()
     }
@@ -246,7 +246,7 @@ fun WizardScreen(
                             if (index < pages.lastIndex) currentIndex = index + 1
                         },
                         onChooseSource = { answers = answers.copy(source = it) },
-                        onChooseRole = { chooseRole(it) },
+                        onChooseForward = { chooseForward(it) },
                         onSmsDirectReceiveChange = { setSmsDirectReceive(it) },
                         onActionInvoked = ::onActionInvoked,
                         onOpenTimeline = onClose,
@@ -360,14 +360,14 @@ private fun WizardPageBody(
     onHidePairingQr: () -> Unit,
     onImported: () -> Unit,
     onChooseSource: (WizardSourceChoice) -> Unit,
-    onChooseRole: (WizardDeviceRole) -> Unit,
+    onChooseForward: (Boolean) -> Unit,
     onSmsDirectReceiveChange: (Boolean) -> Unit,
     onActionInvoked: () -> Unit,
     onOpenTimeline: (() -> Unit)?,
 ) {
     when {
         page.id == WizardFlow.PAGE_SOURCE -> SourceChoiceBody(answers, onChooseSource)
-        page.id == WizardFlow.PAGE_ROLE -> RoleChoiceBody(config, answers, onChooseRole, onSmsDirectReceiveChange)
+        page.id == WizardFlow.PAGE_ROLE -> RoleChoiceBody(config, answers, onChooseForward, onSmsDirectReceiveChange)
         page.id == WizardFlow.PAGE_DONE -> DoneBody(doneItems, onOpenTimeline)
         page.id == WizardFlow.PAGE_QR_IMPORT ->
             QrImportBody(importController, onRequestScan, onImported)
@@ -506,29 +506,26 @@ private fun SourceChoiceBody(answers: WizardAnswers, onChooseSource: (WizardSour
 private fun RoleChoiceBody(
     config: PerantaConfig,
     answers: WizardAnswers,
-    onChooseRole: (WizardDeviceRole) -> Unit,
+    onChooseForward: (Boolean) -> Unit,
     onSmsDirectReceiveChange: (Boolean) -> Unit,
 ) {
-    Text(text = "この端末で何をするか選んでください。", style = MaterialTheme.typography.bodyMedium)
+    Text(
+        text = "この端末に届く通知や SMS を、他の端末へ自動転送しますか？",
+        style = MaterialTheme.typography.bodyMedium,
+    )
     ChoiceCard(
-        label = "通知やSMSを送る",
-        selected = answers.role == WizardDeviceRole.SEND,
+        label = "自動転送する（このスマホに届く通知や SMS を他の端末へ送る）",
+        selected = answers.forward == true,
         tag = TAG_WIZARD_ROLE_SEND,
-        onClick = { onChooseRole(WizardDeviceRole.SEND) },
+        onClick = { onChooseForward(true) },
     )
     ChoiceCard(
-        label = "他の端末の通知を受け取る",
-        selected = answers.role == WizardDeviceRole.RECEIVE,
+        label = "転送しない（受け取り専用にする。他の端末から転送された通知を受け取る）",
+        selected = answers.forward == false,
         tag = TAG_WIZARD_ROLE_RECEIVE,
-        onClick = { onChooseRole(WizardDeviceRole.RECEIVE) },
+        onClick = { onChooseForward(false) },
     )
-    ChoiceCard(
-        label = "通知やSMSを送りつつ、他の端末からの操作も受け取る",
-        selected = answers.role == WizardDeviceRole.BOTH,
-        tag = TAG_WIZARD_ROLE_BOTH,
-        onClick = { onChooseRole(WizardDeviceRole.BOTH) },
-    )
-    if (answers.role == WizardDeviceRole.SEND || answers.role == WizardDeviceRole.BOTH) {
+    if (answers.forward == true) {
         LabeledCheckbox(
             checked = config.smsDirectReceive,
             onCheckedChange = onSmsDirectReceiveChange,
@@ -658,7 +655,6 @@ const val TAG_WIZARD_SOURCE_JOIN: String = "wizard-source-join"
 const val TAG_WIZARD_SOURCE_BE: String = "wizard-source-be"
 const val TAG_WIZARD_ROLE_SEND: String = "wizard-role-send"
 const val TAG_WIZARD_ROLE_RECEIVE: String = "wizard-role-receive"
-const val TAG_WIZARD_ROLE_BOTH: String = "wizard-role-both"
 const val TAG_WIZARD_SMS_DIRECT_RECEIVE: String = "wizard-sms-direct-receive"
 const val TAG_WIZARD_TIMELINE: String = "wizard-timeline"
 const val TAG_WIZARD_ALL_CLEAR: String = "wizard-all-clear"

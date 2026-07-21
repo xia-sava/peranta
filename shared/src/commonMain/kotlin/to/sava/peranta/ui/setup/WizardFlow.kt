@@ -17,21 +17,16 @@ enum class WizardSourceChoice {
     BE_SOURCE,
 }
 
-/** この端末の役割（Android の役割選択）。[SEND] は送信、[RECEIVE] は受信、[BOTH] は両方。 */
-enum class WizardDeviceRole {
-    SEND,
-    RECEIVE,
-    BOTH,
-}
-
 /**
- * ウィザード内の回答。実設定へ写せない選択だけを保持する（[WizardSourceChoice] の経路と、
- * 送信/両方を区別する [WizardDeviceRole]）。役割の sendEnabled 等の実設定は選択時に直ちに config へ書くため、
- * ここには持たない。ページ列の分岐と選択ページの完了判定にのみ使う。
+ * ウィザード内の回答。実設定へ一意に写せない選択だけを保持する。
+ * [source] は設定の受け取り方（QR 参加／設定元）の経路、[forward] は通知の自動転送の可否
+ * （未回答なら null）。転送の可否は選択時に sendEnabled として直ちに config へ書くが、未回答か否かの
+ * 区別（再入時の再質問要否）は config から復元できないためここに保持する。
+ * 送信機能そのものは全端末が持つ前提で、ウィザードが問うのは通知の自動転送だけ。
  */
 data class WizardAnswers(
     val source: WizardSourceChoice? = null,
-    val role: WizardDeviceRole? = null,
+    val forward: Boolean? = null,
 )
 
 /**
@@ -114,11 +109,10 @@ object WizardFlow {
                     add(WizardPage(PAGE_DEVICE_NAME, "端末名"))
                 }
             }
-            add(WizardPage(PAGE_ROLE, "この端末の役割"))
-            when (answers.role) {
-                WizardDeviceRole.SEND -> addAll(sendPages(config))
-                WizardDeviceRole.RECEIVE -> addAll(receivePages())
-                WizardDeviceRole.BOTH -> addAll(bothPages(config))
+            add(WizardPage(PAGE_ROLE, "通知の自動転送"))
+            when (answers.forward) {
+                true -> addAll(sendPages(config))
+                false -> addAll(receivePages())
                 null -> Unit
             }
         }
@@ -143,18 +137,6 @@ object WizardFlow {
 
     private fun receivePages(): List<WizardPage> =
         buildList {
-            add(WizardPage(PAGE_PERM_POST_NOTIFICATIONS, "通知の表示", itemIds = listOf(ITEM_POST_NOTIFICATIONS)))
-            addAll(receiveStepPages())
-            add(WizardPage(PAGE_DONE, "完了"))
-        }
-
-    private fun bothPages(config: PerantaConfig): List<WizardPage> =
-        buildList {
-            add(WizardPage(PAGE_PERM_NLS, "通知へのアクセス", itemIds = listOf(ITEM_NLS)))
-            add(WizardPage(PAGE_PERM_SELF_BATTERY, "バッテリー最適化の除外", itemIds = listOf(ITEM_SELF_BATTERY)))
-            if (config.smsDirectReceive) {
-                add(WizardPage(PAGE_PERM_SMS, "SMS の受信", itemIds = listOf(ITEM_SMS)))
-            }
             add(WizardPage(PAGE_PERM_POST_NOTIFICATIONS, "通知の表示", itemIds = listOf(ITEM_POST_NOTIFICATIONS)))
             addAll(receiveStepPages())
             add(WizardPage(PAGE_DONE, "完了"))
@@ -188,7 +170,7 @@ object WizardFlow {
     ): Boolean =
         when {
             page.id == PAGE_SOURCE -> config.hasSharedKey || answers.source != null
-            page.id == PAGE_ROLE -> answers.role != null
+            page.id == PAGE_ROLE -> answers.forward != null
             page.id == PAGE_DONE -> false
             page.itemIds.isNotEmpty() ->
                 page.itemIds.all { id -> items.firstOrNull { it.id == id }?.let(::itemPasses) ?: false }

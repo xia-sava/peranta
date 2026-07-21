@@ -96,9 +96,9 @@ class WizardScreenTest {
 
     // --- 選択ページの即時保存 ---
 
-    /** 役割カード「送る」を選ぶと sendEnabled が即座に保存される。 */
+    /** 自動転送 2 択の「自動転送する」で sendEnabled=true、「転送しない」で sendEnabled=false が即座に保存される。 */
     @Test
-    fun choosingSendRolePersistsSendEnabledImmediately() = runComposeUiTest {
+    fun choosingForwardPersistsSendEnabledImmediately() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
         repo.save(pairedConfig())
         val controller = SettingsController(repo)
@@ -111,10 +111,11 @@ class WizardScreenTest {
             )
         }
 
-        onNodeWithTag(TAG_WIZARD_ROLE_SEND).assertIsDisplayed()
         onNodeWithTag(TAG_WIZARD_ROLE_SEND).performClick()
-
         assertEquals(true, repo.load().sendEnabled)
+
+        onNodeWithTag(TAG_WIZARD_ROLE_RECEIVE).performClick()
+        assertEquals(false, repo.load().sendEnabled)
     }
 
     /**
@@ -161,9 +162,9 @@ class WizardScreenTest {
 
     // --- 再入時 firstIncompletePage ---
 
-    /** 取得済みで役割未回答なら、再入時は役割ページから始まる。 */
+    /** 取得済みで自動転送が未回答なら、再入時は自動転送ページ（2 択）から始まる。 */
     @Test
-    fun reentryStartsAtRolePageWhenPairedButRoleUnanswered() = runComposeUiTest {
+    fun reentryStartsAtForwardPageWhenPairedButForwardUnanswered() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
         repo.save(pairedConfig())
         val controller = SettingsController(repo)
@@ -178,7 +179,6 @@ class WizardScreenTest {
 
         onNodeWithTag(TAG_WIZARD_ROLE_SEND).assertIsDisplayed()
         onNodeWithTag(TAG_WIZARD_ROLE_RECEIVE).assertIsDisplayed()
-        onNodeWithTag(TAG_WIZARD_ROLE_BOTH).assertIsDisplayed()
     }
 
     // --- skippable ---

@@ -98,13 +98,13 @@ class WizardFlowTest {
 
     // --- A4 役割 3 択による分岐 ---
 
-    /** 「送る」は権限系 3 ページ＋逆方向チャネル（S4）で終わる。 */
+    /** 自動転送 ON は権限系 3 ページ＋逆方向チャネル（S4）で終わる。 */
     @Test
-    fun sendRoleShowsPermissionsAndReverseChannel() {
+    fun forwardOnShowsPermissionsAndReverseChannel() {
         val ids = pageIds(
             WizardRole.ANDROID,
             paired(PerantaConfig(smsDirectReceive = true)),
-            WizardAnswers(source = WizardSourceChoice.JOIN, role = WizardDeviceRole.SEND),
+            WizardAnswers(source = WizardSourceChoice.JOIN, forward = true),
         )
         assertTrue(
             ids.containsAll(
@@ -118,42 +118,24 @@ class WizardFlowTest {
         )
     }
 
-    /** SMS 直接受信が OFF なら送信ロールでも SMS ページは出ない。 */
+    /** SMS 直接受信が OFF なら自動転送 ON でも SMS ページは出ない。 */
     @Test
-    fun sendRoleOmitsSmsPageWhenSmsDirectReceiveOff() {
+    fun forwardOnOmitsSmsPageWhenSmsDirectReceiveOff() {
         val ids = pageIds(
             WizardRole.ANDROID,
             paired(PerantaConfig(smsDirectReceive = false)),
-            WizardAnswers(source = WizardSourceChoice.JOIN, role = WizardDeviceRole.SEND),
+            WizardAnswers(source = WizardSourceChoice.JOIN, forward = true),
         )
         assertFalse(ids.contains(WizardFlow.PAGE_PERM_SMS))
     }
 
-    /** 「受け取る」は通知表示＋受信手順で、S4 は出ない。 */
+    /** 自動転送 OFF は通知表示＋受信手順で、S4 は出ない。 */
     @Test
-    fun receiveRoleShowsPostNotificationsAndReceiveStepsWithoutReverseChannel() {
+    fun forwardOffShowsPostNotificationsAndReceiveStepsWithoutReverseChannel() {
         val ids = pageIds(
             WizardRole.ANDROID,
             paired(),
-            WizardAnswers(source = WizardSourceChoice.JOIN, role = WizardDeviceRole.RECEIVE),
-        )
-        assertTrue(ids.contains(WizardFlow.PAGE_PERM_POST_NOTIFICATIONS))
-        assertTrue(ids.containsAll(ReceiveSetupSteps.orderedIds))
-        assertFalse(ids.contains(WizardFlow.PAGE_REVERSE_CHANNEL))
-    }
-
-    /** 「両方」は送信の権限（S1〜S3）と受信手順（R1〜R6）を連結し、S4 は出現しない。 */
-    @Test
-    fun bothRoleConcatenatesSendAndReceivePagesWithoutReverseChannel() {
-        val ids = pageIds(
-            WizardRole.ANDROID,
-            paired(PerantaConfig(smsDirectReceive = true)),
-            WizardAnswers(source = WizardSourceChoice.JOIN, role = WizardDeviceRole.BOTH),
-        )
-        assertTrue(
-            ids.containsAll(
-                listOf(WizardFlow.PAGE_PERM_NLS, WizardFlow.PAGE_PERM_SELF_BATTERY, WizardFlow.PAGE_PERM_SMS),
-            ),
+            WizardAnswers(source = WizardSourceChoice.JOIN, forward = false),
         )
         assertTrue(ids.contains(WizardFlow.PAGE_PERM_POST_NOTIFICATIONS))
         assertTrue(ids.containsAll(ReceiveSetupSteps.orderedIds))
@@ -168,7 +150,7 @@ class WizardFlowTest {
         val send = WizardFlow.pages(
             WizardRole.ANDROID,
             paired(PerantaConfig(smsDirectReceive = true)),
-            WizardAnswers(source = WizardSourceChoice.JOIN, role = WizardDeviceRole.SEND),
+            WizardAnswers(source = WizardSourceChoice.JOIN, forward = true),
         )
         assertTrue(send.first { it.id == WizardFlow.PAGE_REVERSE_CHANNEL }.skippable)
         assertFalse(send.first { it.id == WizardFlow.PAGE_PERM_NLS }.skippable)
@@ -176,7 +158,7 @@ class WizardFlowTest {
         val receive = WizardFlow.pages(
             WizardRole.ANDROID,
             paired(),
-            WizardAnswers(source = WizardSourceChoice.JOIN, role = WizardDeviceRole.RECEIVE),
+            WizardAnswers(source = WizardSourceChoice.JOIN, forward = false),
         )
         assertTrue(receive.first { it.id == ReceiveSetupSteps.NTFY_BATTERY_ID }.skippable)
         assertTrue(receive.first { it.id == ReceiveSetupSteps.SELF_TEST_ID }.skippable)
@@ -244,10 +226,10 @@ class WizardFlowTest {
         )
         assertTrue(WizardFlow.isPageComplete(source, paired(), WizardAnswers(), emptyList()))
 
-        val rolePage = WizardPage(WizardFlow.PAGE_ROLE, "この端末の役割")
+        val rolePage = WizardPage(WizardFlow.PAGE_ROLE, "通知の自動転送")
         assertFalse(WizardFlow.isPageComplete(rolePage, paired(), WizardAnswers(), emptyList()))
         assertTrue(
-            WizardFlow.isPageComplete(rolePage, paired(), WizardAnswers(role = WizardDeviceRole.SEND), emptyList()),
+            WizardFlow.isPageComplete(rolePage, paired(), WizardAnswers(forward = true), emptyList()),
         )
     }
 
@@ -327,29 +309,25 @@ class WizardFlowTest {
         val scenarios = listOf(
             Scenario(
                 paired(PerantaConfig(sendEnabled = true, smsDirectReceive = true)),
-                WizardAnswers(source = WizardSourceChoice.JOIN, role = WizardDeviceRole.SEND),
+                WizardAnswers(source = WizardSourceChoice.JOIN, forward = true),
             ),
             Scenario(
                 paired(PerantaConfig(sendEnabled = false)),
-                WizardAnswers(source = WizardSourceChoice.JOIN, role = WizardDeviceRole.RECEIVE),
-            ),
-            Scenario(
-                paired(PerantaConfig(sendEnabled = true, smsDirectReceive = true)),
-                WizardAnswers(source = WizardSourceChoice.JOIN, role = WizardDeviceRole.BOTH),
+                WizardAnswers(source = WizardSourceChoice.JOIN, forward = false),
             ),
         )
         scenarios.forEach { (config, answers) ->
             val pages = WizardFlow.pages(WizardRole.ANDROID, config, answers)
             val healthIds = expectedHealthIds(config)
             val allItemIds = pages.flatMap { it.itemIds }.toSet()
-            assertTrue(allItemIds.containsAll(healthIds), "被覆漏れ: ${healthIds - allItemIds} (role=${answers.role})")
+            assertTrue(allItemIds.containsAll(healthIds), "被覆漏れ: ${healthIds - allItemIds} (forward=${answers.forward})")
 
             val nonSkippableIds = pages.filterNot { it.skippable }.flatMap { it.itemIds }.toSet()
             val skippableIds = pages.filter { it.skippable }.flatMap { it.itemIds }.toSet()
             val remainingAfterRequired = healthIds - nonSkippableIds
             assertTrue(
                 skippableIds.containsAll(remainingAfterRequired),
-                "必須ページ完走後の残り ${remainingAfterRequired} が skippable 上に無い (role=${answers.role})",
+                "必須ページ完走後の残り $remainingAfterRequired が skippable 上に無い (forward=${answers.forward})",
             )
         }
     }
@@ -394,14 +372,14 @@ class WizardFlowTest {
             val items = doneIds.map { item(it, SetupStatus.DONE) }
             assertTrue(
                 WizardFlow.isPageComplete(page, config, answers, items),
-                "ページ ${page.id} が、そこまでの状態で完了できない (role=$role, source=${answers.source}, dev-role=${answers.role})",
+                "ページ ${page.id} が、そこまでの状態で完了できない (role=$role, source=${answers.source}, forward=${answers.forward})",
             )
         }
         val finalItems = doneIds.map { item(it, SetupStatus.DONE) }
         assertEquals(
             WizardFlow.PAGE_DONE,
             WizardFlow.firstIncompletePage(pages, config, answers, finalItems)?.id,
-            "全ページ完了後の着地点が完了ページでない (role=$role, dev-role=${answers.role})",
+            "全ページ完了後の着地点が完了ページでない (role=$role, forward=${answers.forward})",
         )
     }
 
@@ -411,29 +389,20 @@ class WizardFlowTest {
     }
 
     @Test
-    fun androidJoinSendFlowWalksToDone() {
+    fun androidJoinForwardOnFlowWalksToDone() {
         assertWalkReachesDone(
             WizardRole.ANDROID,
             PerantaConfig(smsDirectReceive = true),
-            WizardAnswers(source = WizardSourceChoice.JOIN, role = WizardDeviceRole.SEND),
+            WizardAnswers(source = WizardSourceChoice.JOIN, forward = true),
         )
     }
 
     @Test
-    fun androidJoinReceiveFlowWalksToDone() {
+    fun androidJoinForwardOffFlowWalksToDone() {
         assertWalkReachesDone(
             WizardRole.ANDROID,
             PerantaConfig(),
-            WizardAnswers(source = WizardSourceChoice.JOIN, role = WizardDeviceRole.RECEIVE),
-        )
-    }
-
-    @Test
-    fun androidJoinBothFlowWalksToDone() {
-        assertWalkReachesDone(
-            WizardRole.ANDROID,
-            PerantaConfig(smsDirectReceive = true),
-            WizardAnswers(source = WizardSourceChoice.JOIN, role = WizardDeviceRole.BOTH),
+            WizardAnswers(source = WizardSourceChoice.JOIN, forward = false),
         )
     }
 
@@ -442,7 +411,7 @@ class WizardFlowTest {
         assertWalkReachesDone(
             WizardRole.ANDROID,
             PerantaConfig(smsDirectReceive = true),
-            WizardAnswers(source = WizardSourceChoice.BE_SOURCE, role = WizardDeviceRole.SEND),
+            WizardAnswers(source = WizardSourceChoice.BE_SOURCE, forward = true),
         )
     }
 }
