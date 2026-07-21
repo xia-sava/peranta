@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -130,9 +131,20 @@ fun main(args: Array<String>) {
         var showSettings by remember { mutableStateOf(!desktopSettings.config.isReadyForReceive) }
         var showAppFilter by remember { mutableStateOf(false) }
         var showHealthCheck by remember { mutableStateOf(false) }
+        val windowState = rememberWindowState()
 
         // トースト経由など Compose 外からの「ウィンドウを出す」要求を可視状態へ橋渡しする。
         LaunchedEffect(Unit) { showWindowRequest.set { windowVisible = true } }
+
+        // 最小化はタスクバーでなくトレイへ格納する。復帰時に備えて最小化フラグは戻しておく。
+        LaunchedEffect(Unit) {
+            snapshotFlow { windowState.isMinimized }.collectLatest { minimized ->
+                if (minimized) {
+                    windowVisible = false
+                    windowState.isMinimized = false
+                }
+            }
+        }
 
         Tray(
             icon = perantaIcon,
@@ -187,6 +199,7 @@ fun main(args: Array<String>) {
 
         Window(
             onCloseRequest = closeAndExit,
+            state = windowState,
             visible = windowVisible,
             icon = perantaIcon,
             title = "Peranta",
