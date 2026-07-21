@@ -109,8 +109,8 @@ class HealthCheckScreenTest {
             HealthCheckScreen(
                 checker = checker(
                     HealthCheckItem(
-                        id = "up-endpoint-server",
-                        label = "受信エンドポイントのサーバ",
+                        id = "guided-fix",
+                        label = "コピー補助つきの修復項目",
                         state = HealthCheckState.FAILING,
                         fixLabel = "登録し直す",
                         onFix = { fixed = true },
@@ -128,19 +128,19 @@ class HealthCheckScreenTest {
                 },
             )
         }
-        onNodeWithTag("${TAG_HEALTH_FIX_PREFIX}up-endpoint-server").performClick()
+        onNodeWithTag("${TAG_HEALTH_FIX_PREFIX}guided-fix").performClick()
 
-        onNodeWithTag("${TAG_HEALTH_FIX_AID_PREFIX}up-endpoint-server-1").performClick()
+        onNodeWithTag("${TAG_HEALTH_FIX_AID_PREFIX}guided-fix-1").performClick()
         assertEquals("Bearer token", copiedValue)
         assertEquals(true, copiedSensitive)
         assertFalse(fixed)
 
-        onNodeWithTag("${TAG_HEALTH_FIX_AID_PREFIX}up-endpoint-server-2").performClick()
+        onNodeWithTag("${TAG_HEALTH_FIX_AID_PREFIX}guided-fix-2").performClick()
         assertTrue(actionRun)
-        onNodeWithTag("${TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX}up-endpoint-server").assertIsDisplayed()
+        onNodeWithTag("${TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX}guided-fix").assertIsDisplayed()
         assertFalse(fixed)
 
-        onNodeWithTag("${TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX}up-endpoint-server").performClick()
+        onNodeWithTag("${TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX}guided-fix").performClick()
         assertTrue(fixed)
     }
 
@@ -148,8 +148,8 @@ class HealthCheckScreenTest {
     @Test
     fun guidanceDialogSurvivesRecheckWithChangedItemList() = runComposeUiTest {
         val guidanceItem = HealthCheckItem(
-            id = "up-endpoint-server",
-            label = "受信エンドポイントのサーバ",
+            id = "guided-fix",
+            label = "コピー補助つきの修復項目",
             state = HealthCheckState.FAILING,
             fixLabel = "登録し直す",
             onFix = {},
@@ -167,11 +167,11 @@ class HealthCheckScreenTest {
         val key = mutableStateOf(0)
         setContent { HealthCheckScreen(checker = checker, externalRefreshKey = key.value) }
 
-        onNodeWithTag("${TAG_HEALTH_FIX_PREFIX}up-endpoint-server").performClick()
-        onNodeWithTag("${TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX}up-endpoint-server").assertIsDisplayed()
+        onNodeWithTag("${TAG_HEALTH_FIX_PREFIX}guided-fix").performClick()
+        onNodeWithTag("${TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX}guided-fix").assertIsDisplayed()
 
         runOnIdle { key.value = 1 }
-        onNodeWithTag("${TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX}up-endpoint-server").assertIsDisplayed()
+        onNodeWithTag("${TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX}guided-fix").assertIsDisplayed()
     }
 
     /** onFix が成功すると、項目に実行済みの案内文を出す。 */
@@ -271,6 +271,45 @@ class HealthCheckScreenTest {
         onAllNodesWithTag("${TAG_HEALTH_FIX_PREFIX}unifiedpush").assertCountEquals(0)
         onNodeWithTag(TAG_HEALTH_ALL_CLEAR).assertIsDisplayed()
         assertEquals(2, checker.calls)
+    }
+
+    /** 誘導リンクを持つ項目は「直す」ボタンを出さず、リンクを押すと onOpen が呼ばれる。 */
+    @Test
+    fun linkItemShowsLinkAndInvokesOnOpen() = runComposeUiTest {
+        var opened = false
+        setContent {
+            HealthCheckScreen(
+                checker = checker(
+                    HealthCheckItem(
+                        id = "unifiedpush",
+                        label = "3. UnifiedPush の登録",
+                        state = HealthCheckState.FAILING,
+                        link = HealthCheckLink(label = "セットアップを開く", onOpen = { opened = true }),
+                    ),
+                ),
+            )
+        }
+        onAllNodesWithTag("${TAG_HEALTH_FIX_PREFIX}unifiedpush").assertCountEquals(0)
+        onNodeWithTag("${TAG_HEALTH_LINK_PREFIX}unifiedpush").performClick()
+        assertTrue(opened)
+    }
+
+    /** 誘導リンクの押下は実行済み案内も自動再チェックも起こさない（onFix と挙動が異なる）。 */
+    @Test
+    fun linkTapDoesNotShowDoneOrRecheck() = runComposeUiTest {
+        val checker = checker(
+            HealthCheckItem(
+                id = "up-self-test",
+                label = "5. 受信テスト",
+                state = HealthCheckState.INFO,
+                link = HealthCheckLink(label = "セットアップを開く", onOpen = {}),
+            ),
+        )
+        setContent { HealthCheckScreen(checker = checker) }
+
+        onNodeWithTag("${TAG_HEALTH_LINK_PREFIX}up-self-test").performClick()
+        onAllNodesWithTag("${TAG_HEALTH_FIX_PENDING_PREFIX}up-self-test").assertCountEquals(0)
+        assertEquals(1, checker.calls)
     }
 
     /** externalRefreshKey が変わると再チェックする（Android の ON_RESUME 再チェック相当）。 */

@@ -5,9 +5,10 @@ import to.sava.peranta.net.SelfTestResult
 import to.sava.peranta.net.SelfTestStatus
 import to.sava.peranta.ui.FixAid
 
-/** 手順2が不一致のとき、下の値を設定するよう促す事実記述。 */
+/** 手順2が不一致のときの事実と影響の記述。 */
 private const val SERVER_CONFIG_MISMATCH_DETAIL: String =
-    "手順3の照合で不一致。下の値を ntfy に設定してください"
+    "手順3の照合で不一致です。ntfy の既定のサーバーがこのアプリの設定サーバと一致していないため、" +
+        "転送された通知がこの端末に届きません。"
 
 /**
  * probe が判定した実状態から受信のセットアップ手順の [SetupItemUi] 列を組む純関数。
@@ -61,9 +62,9 @@ private fun serverConfigItem(id: String, match: EndpointServerMatch?, ntfyServer
         title = ReceiveSetupSteps.titleOf(id),
         description = ReceiveSetupSteps.descriptionOf(id),
         status = when (match) {
-            null, EndpointServerMatch.Unparseable -> SetupStatus.UNKNOWN
+            null -> SetupStatus.UNKNOWN
             EndpointServerMatch.Match -> SetupStatus.DONE
-            is EndpointServerMatch.Mismatch -> SetupStatus.TODO
+            EndpointServerMatch.Unparseable, is EndpointServerMatch.Mismatch -> SetupStatus.TODO
         },
         statusDetail = when (match) {
             null, EndpointServerMatch.Match -> null
@@ -125,9 +126,10 @@ private fun ntfyBatteryItem(
     )
 
 /**
- * 手順5: 受信テスト。実行の前提（エンドポイント払い出し・トークン）が欠けるときは前提未達（BLOCKED）にし、
- * 押しても空振りする状態であることを事実として示す。前提が揃えば結果で状態を分け、ラベルは実行有無で
- * 入れ替える。失敗時の対処は自手順参照に留める。ボタンは状態に依らず常設する。
+ * 手順5: 受信テスト。エンドポイント未払い出しは前提未達（BLOCKED）として手順3を参照させる。
+ * アクセストークン未設定は受信自体を妨げない構成なので合否を出さず（UNKNOWN）、実行に必要な旨だけ示す。
+ * 前提が揃えば結果で状態を分け、ラベルは実行有無で入れ替える。失敗時の対処は自手順参照に留める。
+ * ボタンは状態に依らず常設する。
  */
 private fun selfTestItem(
     id: String,
@@ -140,7 +142,11 @@ private fun selfTestItem(
         id = id,
         title = ReceiveSetupSteps.titleOf(id),
         description = ReceiveSetupSteps.descriptionOf(id),
-        status = if (runnable) selfTestStatusOf(status) else SetupStatus.BLOCKED,
+        status = when {
+            runnable -> selfTestStatusOf(status)
+            endpointMatch == null -> SetupStatus.BLOCKED
+            else -> SetupStatus.UNKNOWN
+        },
         statusDetail = if (runnable) selfTestDetailOf(status) else selfTestBlockedDetail(endpointMatch),
         action = SetupAction(
             label = if (status == SelfTestStatus.NotRun) "テスト実行" else "再実行",

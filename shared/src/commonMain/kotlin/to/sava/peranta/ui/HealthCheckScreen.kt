@@ -273,6 +273,15 @@ private fun HealthItemRow(
                 )
             }
         }
+        // 誘導リンクは修復手段を持つ別画面へ渡すだけで、done 表示・自動再チェックは伴わない（onFix と排他）。
+        item.link?.let { link ->
+            TextButton(
+                onClick = link.onOpen,
+                modifier = Modifier.testTag("$TAG_HEALTH_LINK_PREFIX${item.id}"),
+            ) {
+                Text(text = link.label)
+            }
+        }
     }
 }
 

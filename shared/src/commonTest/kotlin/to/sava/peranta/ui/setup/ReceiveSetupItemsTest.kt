@@ -65,15 +65,19 @@ class ReceiveSetupItemsTest {
             endpointMatch = EndpointServerMatch.Mismatch("https://a", "https://b"),
         ).byId(ReceiveSetupSteps.SERVER_CONFIG_ID)
         assertEquals(SetupStatus.TODO, mismatch.status)
-        assertEquals("手順3の照合で不一致。下の値を ntfy に設定してください", mismatch.statusDetail)
+        assertEquals(
+            "手順3の照合で不一致です。ntfy の既定のサーバーがこのアプリの設定サーバと一致していないため、" +
+                "転送された通知がこの端末に届きません。",
+            mismatch.statusDetail,
+        )
     }
 
-    /** 手順2の Unparseable は「不一致」ではなく照合不能（UNKNOWN）とし、登録し直しへ誘導する。 */
+    /** 手順2の Unparseable は不一致とは別の事実（解釈不能）を示し、要対処（TODO）として登録し直しへ誘導する。 */
     @Test
-    fun serverConfigUnparseableIsUnknownNotMismatch() {
+    fun serverConfigUnparseableIsActionableWithOwnDetail() {
         val item = build(endpointMatch = EndpointServerMatch.Unparseable)
             .byId(ReceiveSetupSteps.SERVER_CONFIG_ID)
-        assertEquals(SetupStatus.UNKNOWN, item.status)
+        assertEquals(SetupStatus.TODO, item.status)
         assertTrue(item.statusDetail!!.contains("解釈できません"))
         assertTrue(item.statusDetail!!.contains("手順3"))
         assertTrue(!item.statusDetail!!.contains("不一致"))
@@ -138,9 +142,12 @@ class ReceiveSetupItemsTest {
         assertTrue(failed.statusDetail!!.contains("手順2〜4"))
     }
 
-    /** 手順5は実行前提が欠けると前提未達（BLOCKED）にし、押しても空振りする状態を事実で示す。 */
+    /**
+     * 手順5の実行前提欠落は二値 — エンドポイント未払い出しは前提未達（BLOCKED）で手順3を参照、
+     * トークン未設定は受信を妨げない構成なので合否を出さず（UNKNOWN）必要な旨だけ示す。
+     */
     @Test
-    fun selfTestBlockedWhenNotRunnable() {
+    fun selfTestPrerequisitesSplitBlockedAndUnknown() {
         val noEndpoint = build(endpointMatch = null, selfTestRunnable = false, upRegistered = false)
             .byId(ReceiveSetupSteps.SELF_TEST_ID)
         assertEquals(SetupStatus.BLOCKED, noEndpoint.status)
@@ -149,7 +156,7 @@ class ReceiveSetupItemsTest {
 
         val noToken = build(endpointMatch = EndpointServerMatch.Match, selfTestRunnable = false)
             .byId(ReceiveSetupSteps.SELF_TEST_ID)
-        assertEquals(SetupStatus.BLOCKED, noToken.status)
+        assertEquals(SetupStatus.UNKNOWN, noToken.status)
         assertTrue(noToken.statusDetail!!.contains("アクセストークン"))
         assertNotNull(noToken.action)
     }

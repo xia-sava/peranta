@@ -1,187 +1,124 @@
 package to.sava.peranta.ui
 
-import to.sava.peranta.net.EndpointServerMatch
-import to.sava.peranta.net.SelfTestResult
-import to.sava.peranta.net.SelfTestStatus
+import to.sava.peranta.ui.setup.ReceiveSetupSteps
+import to.sava.peranta.ui.setup.SetupItemUi
+import to.sava.peranta.ui.setup.SetupStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class UnifiedPushHealthItemsTest {
 
-    /** endpoint 未払い出し（match が null）は対象外項目になる。 */
-    @Test
-    fun nullMatchIsNotApplicable() {
-        val item = endpointServerItem(match = null, onReregister = null)
-        assertEquals(HealthCheckState.NOT_APPLICABLE, item.state)
-    }
-
-    /** 一致していれば合格で「直す」導線は無い。 */
-    @Test
-    fun matchIsPassWithoutFix() {
-        val item = endpointServerItem(match = EndpointServerMatch.Match, onReregister = {})
-        assertEquals(HealthCheckState.PASS, item.state)
-        assertNull(item.fixLabel)
-    }
-
-    /** サーバ不一致は不合格になり、案内文に両方の origin が含まれ「登録し直す」導線を持つ。 */
-    @Test
-    fun mismatchIsFailingWithBothOriginsInGuidance() {
-        val mismatch = EndpointServerMatch.Mismatch(
-            endpointOrigin = "https://other.example.com",
-            configOrigin = "https://peranta.example.com",
+    private fun setupItem(
+        id: String = ReceiveSetupSteps.UNIFIED_PUSH_ID,
+        status: SetupStatus,
+        statusDetail: String? = null,
+    ): SetupItemUi =
+        SetupItemUi(
+            id = id,
+            title = ReceiveSetupSteps.titleOf(id),
+            description = ReceiveSetupSteps.descriptionOf(id),
+            status = status,
+            statusDetail = statusDetail,
         )
-        val item = endpointServerItem(match = mismatch, onReregister = {})
-        assertEquals(HealthCheckState.FAILING, item.state)
-        assertEquals("登録し直す", item.fixLabel)
-        assertTrue(item.detail!!.contains(mismatch.endpointOrigin))
-        assertTrue(item.detail!!.contains(mismatch.configOrigin))
-        assertTrue(item.fixGuidance!!.contains("カスタムヘッダ"))
+
+    private fun convert(item: SetupItemUi, onOpenSetup: () -> Unit = {}): HealthCheckItem =
+        receiveSetupHealthItems(listOf(item), onOpenSetup).single()
+
+    /** 各 SetupStatus は既存の診断状態へ写る（TODO/BLOCKED は不合格、UNKNOWN は情報、DONE は合格）。 */
+    @Test
+    fun statusMappingCoversAllStatuses() {
+        val expected = mapOf(
+            SetupStatus.DONE to HealthCheckState.PASS,
+            SetupStatus.TODO to HealthCheckState.FAILING,
+            SetupStatus.BLOCKED to HealthCheckState.FAILING,
+            SetupStatus.UNKNOWN to HealthCheckState.INFO,
+        )
+        expected.forEach { (status, state) ->
+            assertEquals(state, convert(setupItem(status = status)).state, "status=$status")
+        }
     }
 
-    /** サーバ不一致では、渡した fixAids がそのまま項目に載る。 */
+    /** ラベルは受信のセットアップ手順の「番号. タイトル」で組む。 */
     @Test
-    fun mismatchCarriesFixAidsThrough() {
-        val mismatch = EndpointServerMatch.Mismatch(
-            endpointOrigin = "https://other.example.com",
-            configOrigin = "https://peranta.example.com",
-        )
-        val fixAids = listOf(
-            FixAid.Copy(label = "サーバーURL", value = "https://peranta.example.com"),
-            FixAid.Action(label = "ntfy を開く", onRun = {}),
-        )
-        val item = endpointServerItem(match = mismatch, onReregister = {}, fixAids = fixAids)
-        assertEquals(fixAids, item.fixAids)
+    fun labelIsNumberedStepTitle() {
+        val item = convert(setupItem(id = ReceiveSetupSteps.NTFY_INSTALLED_ID, status = SetupStatus.TODO))
+        assertEquals("1. ntfy アプリの導入", item.label)
     }
 
-    /** URL を解釈できない場合も不合格で「登録し直す」導線を持つ。 */
+    /** UnifiedPush 系は診断では修復手段を持たず、誘導リンクだけを担う。 */
     @Test
-    fun unparseableIsFailing() {
-        val item = endpointServerItem(match = EndpointServerMatch.Unparseable, onReregister = {})
-        assertEquals(HealthCheckState.FAILING, item.state)
-        assertEquals("登録し直す", item.fixLabel)
-    }
-
-    /** 実行不能かつサーバ不一致が原因なら、情報項目としてその旨を案内し「直す」導線は出さない。 */
-    @Test
-    fun notRunnableDueToMismatchIsInfoWithoutFix() {
-        val item = selfTestItem(
-            status = SelfTestStatus.NotRun,
-            runnable = false,
-            serverMismatch = true,
-            onRun = {},
-        )
-        assertEquals(HealthCheckState.INFO, item.state)
+    fun hasNoDirectFix() {
+        val item = convert(setupItem(status = SetupStatus.TODO))
         assertNull(item.fixLabel)
         assertNull(item.onFix)
+        assertNull(item.fixGuidance)
     }
 
-    /** 実行不能でもサーバ不一致が原因でなければ（endpoint 未払い出し等）対象外項目になる。 */
+    /** 直接の操作が要る未達（TODO）は、状態の事実に自手順への誘導文を添える。 */
     @Test
-    fun notRunnableWithoutMismatchIsNotApplicable() {
-        val item = selfTestItem(
-            status = SelfTestStatus.NotRun,
-            runnable = false,
-            serverMismatch = false,
-            onRun = {},
-        )
-        assertEquals(HealthCheckState.NOT_APPLICABLE, item.state)
+    fun todoDetailAppendsGuidance() {
+        val fact = "受信エンドポイントが向いている先が不一致です。"
+        val item = convert(setupItem(status = SetupStatus.TODO, statusDetail = fact))
+        assertTrue(item.detail!!.contains(fact))
+        assertTrue(item.detail!!.contains(ReceiveSetupSteps.guidanceTo(ReceiveSetupSteps.UNIFIED_PUSH_ID)))
     }
 
-    /** 未実行は情報項目として案内し、「テスト実行」導線を持つ。 */
+    /** 事実が無い未達でも、誘導文だけは detail に出す。 */
     @Test
-    fun notRunIsInfoWithRunFix() {
-        val item = selfTestItem(
-            status = SelfTestStatus.NotRun,
-            runnable = true,
-            serverMismatch = false,
-            onRun = {},
-        )
-        assertEquals(HealthCheckState.INFO, item.state)
-        assertEquals("テスト実行", item.fixLabel)
-        assertNotNull(item.onFix)
+    fun todoWithoutFactStillHasGuidance() {
+        val item = convert(setupItem(id = ReceiveSetupSteps.NTFY_INSTALLED_ID, status = SetupStatus.TODO))
+        assertEquals(ReceiveSetupSteps.guidanceTo(ReceiveSetupSteps.NTFY_INSTALLED_ID), item.detail)
     }
 
-    /** 実行中は情報項目として案内し、「直す」導線は出さない。 */
+    /** 前提未達（BLOCKED）は事実が既に先行手順を指すため、自手順の誘導文を重ねない。 */
     @Test
-    fun runningIsInfoWithoutFix() {
-        val item = selfTestItem(
-            status = SelfTestStatus.Running,
-            runnable = true,
-            serverMismatch = false,
-            onRun = {},
-        )
-        assertEquals(HealthCheckState.INFO, item.state)
-        assertNull(item.fixLabel)
-        assertNull(item.onFix)
+    fun blockedDetailKeepsFactsWithoutOwnGuidance() {
+        val fact = "先に手順1で ntfy を導入してください。"
+        val item = convert(setupItem(id = ReceiveSetupSteps.NTFY_BATTERY_ID, status = SetupStatus.BLOCKED, statusDetail = fact))
+        assertEquals(fact, item.detail)
     }
 
-    /** 配送確認できれば合格で、「再実行」導線を持つ。 */
+    /** 未確認（UNKNOWN）は事実だけを示し、誘導文は添えない。 */
     @Test
-    fun deliveredIsPassWithRerunFix() {
-        val item = selfTestItem(
-            status = SelfTestStatus.Done(SelfTestResult.Delivered, atEpochMillis = 0L),
-            runnable = true,
-            serverMismatch = false,
-            onRun = {},
-        )
-        assertEquals(HealthCheckState.PASS, item.state)
-        assertEquals("再実行", item.fixLabel)
+    fun unknownDetailKeepsFactsOnly() {
+        val fact = "まだ実行していません。"
+        val item = convert(setupItem(id = ReceiveSetupSteps.SELF_TEST_ID, status = SetupStatus.UNKNOWN, statusDetail = fact))
+        assertEquals(fact, item.detail)
     }
 
-    /** 403 拒否は不合格で、ACL 設定と up* トピックの案内を含む。 */
+    /** 合格（DONE）は事実のみで、誘導文も誘導リンクも持たない。 */
     @Test
-    fun publishRejected403MentionsAclAndTopicPattern() {
-        val item = selfTestItem(
-            status = SelfTestStatus.Done(SelfTestResult.PublishRejected(403), atEpochMillis = 0L),
-            runnable = true,
-            serverMismatch = false,
-            onRun = {},
-        )
-        assertEquals(HealthCheckState.FAILING, item.state)
-        assertTrue(item.detail!!.contains("ACL"))
-        assertTrue(item.detail!!.contains("up*"))
+    fun doneHasFactsAndNoLink() {
+        val fact = "サーバ経由の配送を確認しました。"
+        val item = convert(setupItem(id = ReceiveSetupSteps.SELF_TEST_ID, status = SetupStatus.DONE, statusDetail = fact))
+        assertEquals(fact, item.detail)
+        assertNull(item.link)
     }
 
-    /** 403 以外の拒否は不合格で、実際の HTTP ステータスを案内に含む。 */
+    /** 未達の項目は「セットアップを開く」誘導リンクを持ち、押すと onOpenSetup が呼ばれる。 */
     @Test
-    fun publishRejected500MentionsStatus() {
-        val item = selfTestItem(
-            status = SelfTestStatus.Done(SelfTestResult.PublishRejected(500), atEpochMillis = 0L),
-            runnable = true,
-            serverMismatch = false,
-            onRun = {},
-        )
-        assertEquals(HealthCheckState.FAILING, item.state)
-        assertTrue(item.detail!!.contains("500"))
+    fun nonDoneCarriesSetupLink() {
+        var opened = false
+        val item = convert(setupItem(status = SetupStatus.TODO), onOpenSetup = { opened = true })
+        assertEquals("セットアップを開く", item.link!!.label)
+        item.link!!.onOpen()
+        assertTrue(opened)
     }
 
-    /** 送信自体に失敗した場合も不合格になる。 */
+    /** 情報項目（UNKNOWN）にも誘導リンクを出す。 */
     @Test
-    fun publishFailedIsFailing() {
-        val item = selfTestItem(
-            status = SelfTestStatus.Done(SelfTestResult.PublishFailed, atEpochMillis = 0L),
-            runnable = true,
-            serverMismatch = false,
-            onRun = {},
-        )
-        assertEquals(HealthCheckState.FAILING, item.state)
+    fun unknownAlsoCarriesSetupLink() {
+        val item = convert(setupItem(id = ReceiveSetupSteps.SELF_TEST_ID, status = SetupStatus.UNKNOWN))
+        assertEquals("セットアップを開く", item.link!!.label)
     }
 
-    /** タイムアウトは不合格で、ntfy アプリ側の点検観点（ログイン情報・バッテリー最適化・購読）を案内する。 */
+    /** 5 手順の列は同じ順序・id で診断項目列へ写る。 */
     @Test
-    fun timeoutMentionsNtfySideCauses() {
-        val item = selfTestItem(
-            status = SelfTestStatus.Done(SelfTestResult.Timeout, atEpochMillis = 0L),
-            runnable = true,
-            serverMismatch = false,
-            onRun = {},
-        )
-        assertEquals(HealthCheckState.FAILING, item.state)
-        assertTrue(item.detail!!.contains("ユーザーの管理"))
-        assertTrue(item.detail!!.contains("バッテリー最適化"))
-        assertTrue(item.detail!!.contains("購読"))
+    fun preservesOrderAndIds() {
+        val items = ReceiveSetupSteps.orderedIds.map { setupItem(id = it, status = SetupStatus.TODO) }
+        val converted = receiveSetupHealthItems(items, {})
+        assertEquals(ReceiveSetupSteps.orderedIds, converted.map { it.id })
     }
 }

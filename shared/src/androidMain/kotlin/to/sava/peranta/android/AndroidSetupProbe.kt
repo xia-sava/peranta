@@ -184,10 +184,5 @@ class AndroidSetupProbe(context: Context) {
         /** SMS 権限を許可へ変更する手順（アプリ情報画面へ飛ばすだけでは分かりにくいため案内する）。 */
         const val SMS_FIX_GUIDANCE: String =
             "アプリ情報画面が開きます。「権限」から「SMS」を選んで許可に変更し、この画面に戻ってください。"
-
-        /** ntfy 導入後に一度開いて通知許可まで済ませる手順。 */
-        const val NTFY_INSTALLED_FIX_GUIDANCE: String =
-            "ストアが開きます。ntfy をインストールしたら一度 ntfy を開いて通知の許可を済ませ、" +
-                "この画面に戻って再チェックしてください。"
     }
 }

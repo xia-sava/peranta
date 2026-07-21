@@ -21,6 +21,8 @@ enum class HealthCheckState {
  * [fixGuidance] があると「直す」の実行前に案内ダイアログを挟み、移動先で行う操作を説明してから実行する
  * （システム設定へ飛ばすだけでは次の操作が分かりにくい項目に使う）。
  * [fixAids] は fixGuidance のダイアログ内に補助ボタンとして並べる。fixGuidance が null のときは使わない。
+ * [link] は修復手段を持つ別画面への誘導で、実行系の [onFix] とは意味論が異なるため排他とする
+ * （両方を指定することはできない）。
  */
 data class HealthCheckItem(
     val id: String,
@@ -31,7 +33,17 @@ data class HealthCheckItem(
     val onFix: (() -> Unit)? = null,
     val fixGuidance: String? = null,
     val fixAids: List<FixAid> = emptyList(),
-)
+    val link: HealthCheckLink? = null,
+) {
+    init {
+        require(link == null || (fixLabel == null && onFix == null)) {
+            "link と fixLabel/onFix は同時に指定できない"
+        }
+    }
+}
+
+/** 修復手段を持つ画面への誘導。実行系の [HealthCheckItem.onFix] と異なり done 表示・自動再チェックを伴わない。 */
+data class HealthCheckLink(val label: String, val onOpen: () -> Unit)
 
 /** 「直す」前の案内ダイアログに並べる補助操作。 */
 sealed interface FixAid {
@@ -79,6 +91,9 @@ const val TAG_HEALTH_STATE_PREFIX: String = "health-state-"
 
 /** 項目行の「直す」ボタンのタグ接頭辞（末尾に item id を付ける）。 */
 const val TAG_HEALTH_FIX_PREFIX: String = "health-fix-"
+
+/** 項目行の誘導リンクボタンのタグ接頭辞（末尾に item id を付ける）。 */
+const val TAG_HEALTH_LINK_PREFIX: String = "health-link-"
 
 /** 「直す」操作が失敗したときのエラー文のタグ接頭辞（末尾に item id を付ける）。 */
 const val TAG_HEALTH_FIX_ERROR_PREFIX: String = "health-fix-error-"

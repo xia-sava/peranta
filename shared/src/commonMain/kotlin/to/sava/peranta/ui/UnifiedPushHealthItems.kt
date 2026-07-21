@@ -1,169 +1,50 @@
 package to.sava.peranta.ui
 
-import to.sava.peranta.net.EndpointServerMatch
-import to.sava.peranta.net.SelfTestResult
-import to.sava.peranta.net.SelfTestStatus
+import to.sava.peranta.ui.setup.ReceiveSetupSteps
+import to.sava.peranta.ui.setup.SetupItemUi
+import to.sava.peranta.ui.setup.SetupStatus
 
-/** 受信エンドポイントのサーバ照合項目の id。 */
-private const val ENDPOINT_SERVER_ITEM_ID: String = "up-endpoint-server"
-
-/** 受信エンドポイントのサーバ照合項目のラベル。 */
-private const val ENDPOINT_SERVER_ITEM_LABEL: String = "受信エンドポイントのサーバ"
-
-/** 自己疎通テストの診断項目の id。 */
-private const val SELF_TEST_ITEM_ID: String = "up-self-test"
-
-/** 自己疎通テストの診断項目のラベル。 */
-private const val SELF_TEST_ITEM_LABEL: String = "サーバ経由の受信テスト"
+/** 健康診断から受信のセットアップ画面を開く誘導リンクのラベル。 */
+private const val OPEN_SETUP_LABEL: String = "セットアップを開く"
 
 /**
- * エンドポイント整合の診断項目を組む（§10.5）。
- * UnifiedPush 払い出しエンドポイントがこのアプリの設定サーバを向いているかの静的照合結果を項目へ写す。
- * [match] が null（endpoint 未払い出し）のときは対象外にする。
- * [fixAids] は不合格（Mismatch / Unparseable）の項目にそのまま載せる、案内ダイアログの補助操作。
+ * 受信のセットアップ手順の [SetupItemUi] 列を、健康診断の [HealthCheckItem] 列へ機械変換する（§10.5）。
+ * UnifiedPush 系の項目は診断では修復手段（onFix）を持たず、受信のセットアップ画面への誘導だけを担う。
+ * 状態は [SetupStatus] を写し取り、ラベルは「N. タイトル」、[detail] は状態の事実
+ * （[SetupItemUi.statusDetail]）を基に、直接の操作が要る未達の項目にだけ [ReceiveSetupSteps.guidanceTo]
+ * の誘導文を添える。合格（DONE）の項目には誘導リンクを出さない。
  */
-fun endpointServerItem(
-    match: EndpointServerMatch?,
-    onReregister: (() -> Unit)?,
-    fixAids: List<FixAid> = emptyList(),
-): HealthCheckItem {
-    if (match == null) {
-        return HealthCheckItem(
-            id = ENDPOINT_SERVER_ITEM_ID,
-            label = ENDPOINT_SERVER_ITEM_LABEL,
-            state = HealthCheckState.NOT_APPLICABLE,
+fun receiveSetupHealthItems(
+    items: List<SetupItemUi>,
+    onOpenSetup: () -> Unit,
+): List<HealthCheckItem> =
+    items.map { item ->
+        HealthCheckItem(
+            id = item.id,
+            label = "${ReceiveSetupSteps.numberOf(item.id)}. ${item.title}",
+            state = healthStateOf(item.status),
+            detail = healthDetailOf(item),
+            link = if (item.status == SetupStatus.DONE) null else HealthCheckLink(OPEN_SETUP_LABEL, onOpenSetup),
         )
     }
-    return when (match) {
-        EndpointServerMatch.Match -> HealthCheckItem(
-            id = ENDPOINT_SERVER_ITEM_ID,
-            label = ENDPOINT_SERVER_ITEM_LABEL,
-            state = HealthCheckState.PASS,
-        )
-
-        is EndpointServerMatch.Mismatch -> HealthCheckItem(
-            id = ENDPOINT_SERVER_ITEM_ID,
-            label = ENDPOINT_SERVER_ITEM_LABEL,
-            state = HealthCheckState.FAILING,
-            detail = "受信エンドポイントが ${match.endpointOrigin} を向いています。" +
-                "このアプリの設定サーバ（${match.configOrigin}）と一致しないため、" +
-                "転送された通知はこの端末に届きません。" +
-                "ntfy アプリの既定のサーバーを変更し、UnifiedPush を登録し直してください。",
-            fixLabel = "登録し直す",
-            onFix = onReregister,
-            fixGuidance = "先に ntfy アプリ側の設定が必要です。下の値をコピーして ntfy アプリに貼り付けてください。\n" +
-                "1. ntfy の 設定 →「既定のサーバー」に、サーバーURL を貼り付ける\n" +
-                "2. 設定 →「カスタムヘッダを追加」で、サービスURL に同じサーバーURL を、" +
-                "ヘッダ名・ヘッダ値にそれぞれの値を貼り付ける" +
-                "（「ユーザーの管理」でこのサーバーのユーザーを登録済みの場合、この手順は不要）\n" +
-                "3. ここへ戻って「続ける」を押すと、UnifiedPush を登録し直して新しいエンドポイントを受け取ります。",
-            fixAids = fixAids,
-        )
-
-        EndpointServerMatch.Unparseable -> HealthCheckItem(
-            id = ENDPOINT_SERVER_ITEM_ID,
-            label = ENDPOINT_SERVER_ITEM_LABEL,
-            state = HealthCheckState.FAILING,
-            detail = "受信エンドポイント URL を解釈できません。UnifiedPush を登録し直してください。",
-            fixLabel = "登録し直す",
-            onFix = onReregister,
-            fixAids = fixAids,
-        )
-    }
-}
 
 /**
- * 自己疎通テストの診断項目を組む（§10.5）。
- * テスト通知を自分宛にサーバ経由で送り、受信できるかを [SelfTestProbe] の結果から項目へ写す。
- * [runnable] が false の項目は「直す」導線を持たず、実行前提（endpoint・トークン・サーバ照合）が
- * 整っていない理由を、可能なら案内する。
+ * セットアップ項目の状態を診断の状態へ写す。要件充足（DONE）は合格に、直接の操作が要る未達（TODO）と
+ * 前提未達（BLOCKED）は対処を促す不合格に、直接検査できない未確認（UNKNOWN）は合否を出さない情報にする。
  */
-fun selfTestItem(
-    status: SelfTestStatus,
-    runnable: Boolean,
-    serverMismatch: Boolean,
-    onRun: (() -> Unit)?,
-): HealthCheckItem {
-    if (!runnable) {
-        if (serverMismatch) {
-            return HealthCheckItem(
-                id = SELF_TEST_ITEM_ID,
-                label = SELF_TEST_ITEM_LABEL,
-                state = HealthCheckState.INFO,
-                detail = "サーバ不一致（上の項目）を解消してから実行してください。",
-            )
-        }
-        return HealthCheckItem(
-            id = SELF_TEST_ITEM_ID,
-            label = SELF_TEST_ITEM_LABEL,
-            state = HealthCheckState.NOT_APPLICABLE,
-        )
+private fun healthStateOf(status: SetupStatus): HealthCheckState =
+    when (status) {
+        SetupStatus.DONE -> HealthCheckState.PASS
+        SetupStatus.TODO, SetupStatus.BLOCKED -> HealthCheckState.FAILING
+        SetupStatus.UNKNOWN -> HealthCheckState.INFO
     }
-    return when (status) {
-        SelfTestStatus.NotRun -> HealthCheckItem(
-            id = SELF_TEST_ITEM_ID,
-            label = SELF_TEST_ITEM_LABEL,
-            state = HealthCheckState.INFO,
-            detail = "テスト通知を自分宛にサーバ経由で送り、実際に受信できるかを確認します。",
-            fixLabel = "テスト実行",
-            onFix = onRun,
-        )
 
-        SelfTestStatus.Running -> HealthCheckItem(
-            id = SELF_TEST_ITEM_ID,
-            label = SELF_TEST_ITEM_LABEL,
-            state = HealthCheckState.INFO,
-            detail = "確認中です。数秒お待ちください（自動で再チェックされます）。",
-        )
-
-        is SelfTestStatus.Done -> selfTestDoneItem(status.result, onRun)
-    }
+/**
+ * 診断行の説明文。状態の事実（[SetupItemUi.statusDetail]）を基に、直接の操作が要る未達（TODO）では
+ * 自手順への誘導文を添える。前提未達（BLOCKED）は事実が既に先行手順を指すため誘導を重ねず、
+ * 未確認（UNKNOWN）・合格（DONE）は事実だけを示す。
+ */
+private fun healthDetailOf(item: SetupItemUi): String? {
+    val guidance = if (item.status == SetupStatus.TODO) ReceiveSetupSteps.guidanceTo(item.id) else null
+    return listOfNotNull(item.statusDetail, guidance).joinToString("\n").ifEmpty { null }
 }
-
-/** [SelfTestStatus.Done] の結果を診断項目へ写す。 */
-private fun selfTestDoneItem(result: SelfTestResult, onRun: (() -> Unit)?): HealthCheckItem =
-    when (result) {
-        SelfTestResult.Delivered -> HealthCheckItem(
-            id = SELF_TEST_ITEM_ID,
-            label = SELF_TEST_ITEM_LABEL,
-            state = HealthCheckState.PASS,
-            detail = "サーバ経由の配送を確認しました。",
-            fixLabel = "再実行",
-            onFix = onRun,
-        )
-
-        is SelfTestResult.PublishRejected -> HealthCheckItem(
-            id = SELF_TEST_ITEM_ID,
-            label = SELF_TEST_ITEM_LABEL,
-            state = HealthCheckState.FAILING,
-            detail = if (result.status == 403) {
-                "サーバが送信を拒否しました（403）。サーバの ACL で、アクセストークンのユーザーに " +
-                    "up で始まるトピックへの書き込み権限が必要です（例: ntfy access <ユーザー名> 'up*' write-only）。"
-            } else {
-                "サーバがエラーを返しました（HTTP ${result.status}）。サーバの状態を確認してください。"
-            },
-            fixLabel = "再実行",
-            onFix = onRun,
-        )
-
-        SelfTestResult.PublishFailed -> HealthCheckItem(
-            id = SELF_TEST_ITEM_ID,
-            label = SELF_TEST_ITEM_LABEL,
-            state = HealthCheckState.FAILING,
-            detail = "サーバに接続できませんでした。サーバのホスト名とネットワーク接続を確認してください。",
-            fixLabel = "再実行",
-            onFix = onRun,
-        )
-
-        SelfTestResult.Timeout -> HealthCheckItem(
-            id = SELF_TEST_ITEM_ID,
-            label = SELF_TEST_ITEM_LABEL,
-            state = HealthCheckState.FAILING,
-            detail = "テスト通知を送信しましたが、5 秒以内に届きませんでした。ntfy アプリ側の受信に問題があります。" +
-                "考えられる原因: (1) ntfy アプリにこのサーバーのログイン情報が未登録（ntfy の 設定 →" +
-                "「ユーザーの管理」で追加） (2) ntfy アプリが省電力の影響でポーリング受信になっている" +
-                "（バッテリー最適化の除外を確認） (3) ntfy アプリの購読が切れている（ntfy アプリを一度開く）。",
-            fixLabel = "再実行",
-            onFix = onRun,
-        )
-    }

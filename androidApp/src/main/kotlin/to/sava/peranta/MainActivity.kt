@@ -161,7 +161,6 @@ class MainActivity : ComponentActivity() {
             primeAttachmentCache(config)
         }
 
-        val healthChecker = AndroidHealthChecker(this)
         val receiveSetupProvider = AndroidReceiveSetupProvider(this)
         // 受信のセットアップは受信ロールの設定が揃うか、UnifiedPush 登録済みのとき入れる。
         // 登録済みなら config が欠けても修復の作業台へ戻れるようにする。
@@ -178,6 +177,9 @@ class MainActivity : ComponentActivity() {
                     },
                 )
             }
+
+            // 健康診断の UnifiedPush 系項目は受信のセットアップ画面へ誘導する。onOpen で診断からその画面へ移す。
+            val healthChecker = remember { AndroidHealthChecker(this@MainActivity) { screen = Screen.ReceiveSetup } }
 
             // 起動時にペアリング済みなら健康診断を実行し、対処の要る未達があれば診断画面へ誘導する（§10.5）。
             // ペアリング未完了（Pairing）が最優先のため、Main のときだけ遷移する。強制ブロックはしない。
