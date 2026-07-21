@@ -16,7 +16,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -196,147 +201,147 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            when (screen) {
-                Screen.Pairing -> PerantaTheme {
-                    PairingScanScreen(
-                        controller = importController,
-                        onRequestScan = { onResult -> requestScan(onResult) },
-                        onOpenSettings = if (config.hasSharedKey) {
-                            null
-                        } else {
-                            { screen = Screen.Settings }
-                        },
-                        onOpenWizard = if (config.hasSharedKey) {
-                            null
-                        } else {
-                            { screen = Screen.Wizard }
-                        },
-                        onImported = { resetReceiveAndRecreate() },
-                        onBack = if (config.hasSharedKey) {
-                            { resetReceiveAndRecreate() }
-                        } else {
-                            null
-                        },
-                    )
-                }
-
-                Screen.Main -> if (receiveRole) {
-                    App(
-                        items = PerantaReceive.items,
-                        receiveEndpoint = config.unifiedPushEndpoint,
-                        onOpenSettings = { screen = Screen.Settings },
-                        onOpenPairing = { screen = Screen.Pairing },
-                        onOpenAppFilter = { screen = Screen.AppFilter },
-                        onOpenReceiveSetup = if (showReceiveSetup) {
-                            { screen = Screen.ReceiveSetup }
-                        } else {
-                            null
-                        },
-                        onOpenHealthCheck = { screen = Screen.HealthCheck },
-                        timelineActions = PerantaReceive.timelineActions(this@MainActivity),
-                        attachmentUi = attachmentUi,
-                        fullTextUi = AndroidAttachmentReceive.fullTextUi(this@MainActivity, config),
-                    )
-                } else {
-                    SendRoleApp(
-                        sendEnabled = config.sendEnabled,
-                        onOpenSettings = { screen = Screen.Settings },
-                        onOpenPairing = { screen = Screen.Pairing },
-                        onOpenAppFilter = { screen = Screen.AppFilter },
-                        onOpenReceiveSetup = if (showReceiveSetup) {
-                            { screen = Screen.ReceiveSetup }
-                        } else {
-                            null
-                        },
-                        onOpenHealthCheck = { screen = Screen.HealthCheck },
-                    )
-                }
-
-                Screen.Settings -> PerantaTheme {
-                    SettingsScreen(
-                        controller = SettingsController(androidConfigRepository()),
-                        qrContent = { uri ->
-                            QrCodeCanvas(pairingQrMatrix(uri), modifier = Modifier.size(240.dp))
-                        },
-                        onCopyPairingUri = { text -> copyPairingUri(text) },
-                        showSendRoleOptions = true,
-                        onOpenTimeline = { resetReceiveAndRecreate() },
-                        onOpenWizard = { screen = Screen.Wizard },
-                        updateController = updater.controller,
-                        onInstallUpdate = { url -> updater.install(url) },
-                    )
-                }
-
-                Screen.Wizard -> PerantaTheme {
-                    WizardScreen(
-                        role = WizardRole.ANDROID,
-                        controller = SettingsController(androidConfigRepository()),
-                        provider = wizardSetupProvider,
-                        healthChecker = healthChecker,
-                        importController = importController,
-                        qrContent = { uri ->
-                            QrCodeCanvas(pairingQrMatrix(uri), modifier = Modifier.size(240.dp))
-                        },
-                        onCopyPairingUri = { text -> copyPairingUri(text) },
-                        onCopyText = { text, sensitive -> copyText(text, sensitive) },
-                        onRequestScan = { onResult -> requestScan(onResult) },
-                        externalRefreshKey = resumeTick,
-                        // ペアリング済みならタイムラインへ（再生成で最新設定を反映）、未ペアリングなら
-                        // ウィザード再開導線つきの待機画面（Pairing）へ着地する。
-                        onClose = {
-                            if (androidConfigRepository().load().hasSharedKey) {
-                                resetReceiveAndRecreate()
+            // システムバー（ステータスバー・ナビゲーションバー）と重ならないよう、全画面共通で安全領域の
+            // 余白を入れる（enableEdgeToEdge によりコンテンツがシステムバー裏まで描くため）。没入型にはせず、
+            // 背景色をシステムバー裏まで塗った上でコンテンツだけを内側へ寄せる。
+            PerantaTheme {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                        .safeDrawingPadding(),
+                ) {
+                    when (screen) {
+                        Screen.Pairing -> PairingScanScreen(
+                            controller = importController,
+                            onRequestScan = { onResult -> requestScan(onResult) },
+                            onOpenSettings = if (config.hasSharedKey) {
+                                null
                             } else {
-                                screen = Screen.Pairing
-                            }
-                        },
-                    )
-                }
+                                { screen = Screen.Settings }
+                            },
+                            onOpenWizard = if (config.hasSharedKey) {
+                                null
+                            } else {
+                                { screen = Screen.Wizard }
+                            },
+                            onImported = { resetReceiveAndRecreate() },
+                            onBack = if (config.hasSharedKey) {
+                                { resetReceiveAndRecreate() }
+                            } else {
+                                null
+                            },
+                        )
 
-                Screen.AppFilter -> PerantaTheme {
-                    if (receiveRole) {
-                        AppFilterScreen(
-                            controller = PerantaReceive.appFilterController(this@MainActivity),
-                            items = PerantaReceive.items,
-                            onBack = { screen = Screen.Main },
+                        Screen.Main -> if (receiveRole) {
+                            App(
+                                items = PerantaReceive.items,
+                                receiveEndpoint = config.unifiedPushEndpoint,
+                                onOpenSettings = { screen = Screen.Settings },
+                                onOpenPairing = { screen = Screen.Pairing },
+                                onOpenAppFilter = { screen = Screen.AppFilter },
+                                onOpenReceiveSetup = if (showReceiveSetup) {
+                                    { screen = Screen.ReceiveSetup }
+                                } else {
+                                    null
+                                },
+                                onOpenHealthCheck = { screen = Screen.HealthCheck },
+                                timelineActions = PerantaReceive.timelineActions(this@MainActivity),
+                                attachmentUi = attachmentUi,
+                                fullTextUi = AndroidAttachmentReceive.fullTextUi(this@MainActivity, config),
+                            )
+                        } else {
+                            SendRoleApp(
+                                sendEnabled = config.sendEnabled,
+                                onOpenSettings = { screen = Screen.Settings },
+                                onOpenPairing = { screen = Screen.Pairing },
+                                onOpenAppFilter = { screen = Screen.AppFilter },
+                                onOpenReceiveSetup = if (showReceiveSetup) {
+                                    { screen = Screen.ReceiveSetup }
+                                } else {
+                                    null
+                                },
+                                onOpenHealthCheck = { screen = Screen.HealthCheck },
+                            )
+                        }
+
+                        Screen.Settings -> SettingsScreen(
+                            controller = SettingsController(androidConfigRepository()),
+                            qrContent = { uri ->
+                                QrCodeCanvas(pairingQrMatrix(uri), modifier = Modifier.size(240.dp))
+                            },
+                            onCopyPairingUri = { text -> copyPairingUri(text) },
+                            showSendRoleOptions = true,
+                            onOpenTimeline = { resetReceiveAndRecreate() },
+                            onOpenWizard = { screen = Screen.Wizard },
+                            updateController = updater.controller,
+                            onInstallUpdate = { url -> updater.install(url) },
                         )
-                    } else {
-                        AppFilterScreen(
-                            controller = AppFilterController(androidConfigRepository()),
-                            installedAppsProvider = AndroidInstalledAppsProvider(this@MainActivity),
-                            onBack = { screen = Screen.Main },
+
+                        Screen.Wizard -> WizardScreen(
+                            role = WizardRole.ANDROID,
+                            controller = SettingsController(androidConfigRepository()),
+                            provider = wizardSetupProvider,
+                            healthChecker = healthChecker,
+                            importController = importController,
+                            qrContent = { uri ->
+                                QrCodeCanvas(pairingQrMatrix(uri), modifier = Modifier.size(240.dp))
+                            },
+                            onCopyPairingUri = { text -> copyPairingUri(text) },
+                            onCopyText = { text, sensitive -> copyText(text, sensitive) },
+                            onRequestScan = { onResult -> requestScan(onResult) },
+                            externalRefreshKey = resumeTick,
+                            // ペアリング済みならタイムラインへ（再生成で最新設定を反映）、未ペアリングなら
+                            // ウィザード再開導線つきの待機画面（Pairing）へ着地する。
+                            onClose = {
+                                if (androidConfigRepository().load().hasSharedKey) {
+                                    resetReceiveAndRecreate()
+                                } else {
+                                    screen = Screen.Pairing
+                                }
+                            },
                         )
+
+                        Screen.AppFilter -> if (receiveRole) {
+                            AppFilterScreen(
+                                controller = PerantaReceive.appFilterController(this@MainActivity),
+                                items = PerantaReceive.items,
+                                onBack = { screen = Screen.Main },
+                            )
+                        } else {
+                            AppFilterScreen(
+                                controller = AppFilterController(androidConfigRepository()),
+                                installedAppsProvider = AndroidInstalledAppsProvider(this@MainActivity),
+                                onBack = { screen = Screen.Main },
+                            )
+                        }
+
+                        Screen.HealthCheck -> HealthCheckScreen(
+                            checker = healthChecker,
+                            onBack = { screen = Screen.Main },
+                            externalRefreshKey = resumeTick,
+                            onCopyText = { text, sensitive -> copyText(text, sensitive) },
+                        )
+
+                        Screen.ReceiveSetup -> ReceiveSetupScreen(
+                            provider = receiveSetupProvider,
+                            onBack = { screen = Screen.Main },
+                            externalRefreshKey = resumeTick,
+                            onCopyText = { text, sensitive -> copyText(text, sensitive) },
+                        )
+
+                        is Screen.Share -> {
+                            val files = (screen as Screen.Share).files
+                            ShareScreen(
+                                itemCount = files.size,
+                                onSend = { caption ->
+                                    AttachmentTransferService.enqueueUpload(this@MainActivity, files, caption)
+                                    finish()
+                                },
+                                onCancel = { finish() },
+                            )
+                        }
                     }
-                }
-
-                Screen.HealthCheck -> PerantaTheme {
-                    HealthCheckScreen(
-                        checker = healthChecker,
-                        onBack = { screen = Screen.Main },
-                        externalRefreshKey = resumeTick,
-                        onCopyText = { text, sensitive -> copyText(text, sensitive) },
-                    )
-                }
-
-                Screen.ReceiveSetup -> PerantaTheme {
-                    ReceiveSetupScreen(
-                        provider = receiveSetupProvider,
-                        onBack = { screen = Screen.Main },
-                        externalRefreshKey = resumeTick,
-                        onCopyText = { text, sensitive -> copyText(text, sensitive) },
-                    )
-                }
-
-                is Screen.Share -> PerantaTheme {
-                    val files = (screen as Screen.Share).files
-                    ShareScreen(
-                        itemCount = files.size,
-                        onSend = { caption ->
-                            AttachmentTransferService.enqueueUpload(this@MainActivity, files, caption)
-                            finish()
-                        },
-                        onCancel = { finish() },
-                    )
                 }
             }
         }

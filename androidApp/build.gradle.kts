@@ -16,6 +16,7 @@ dependencies {
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.compose.foundation)
+    implementation(compose.material3)
     implementation(libs.zxing.android.embedded)
 
     implementation(libs.compose.uiToolingPreview)
