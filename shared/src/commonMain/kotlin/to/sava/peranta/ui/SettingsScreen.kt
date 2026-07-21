@@ -158,197 +158,201 @@ fun SettingsScreen(
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         val scrollState = rememberScrollState()
-        Box(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (setupComplete) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(text = "設定", style = MaterialTheme.typography.titleLarge)
-                        if (onOpenTimeline != null) {
-                            TextButton(onClick = onOpenTimeline) { Text(text = "タイムラインへ") }
-                        }
-                    }
-
-                    HostField(value = host, onValueChange = { host = it })
-                    TokenField(value = accessToken, onValueChange = { accessToken = it })
-                    DeviceNameField(value = deviceName, onValueChange = { deviceName = it })
-                    PortField(value = port, onValueChange = { port = it })
-
-                    LabeledCheckbox(
-                        checked = persistSensitiveHistory,
-                        onCheckedChange = { persistSensitiveHistory = it },
-                        label = "センシティブな通知の本文を履歴に保存する",
-                        tag = TAG_PERSIST_SENSITIVE,
-                    )
-                    Text(
-                        text = PERSIST_SENSITIVE_HISTORY_DESCRIPTION,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    LabeledCheckbox(
-                        checked = attachFullTextWhenTruncated,
-                        onCheckedChange = { attachFullTextWhenTruncated = it },
-                        label = "長文本文の全文をシームレスに添付・展開する",
-                        tag = TAG_ATTACH_FULL_TEXT,
-                    )
-
-                    if (showSendRoleOptions) {
-                        LabeledCheckbox(
-                            checked = sendEnabled,
-                            onCheckedChange = { sendEnabled = it },
-                            label = "この端末から通知・SMS を送信する",
-                            tag = TAG_SEND_ENABLED,
-                        )
-                        LabeledCheckbox(
-                            checked = smsDirectReceive,
-                            onCheckedChange = { smsDirectReceive = it },
-                            label = "SMS を直接受信して転送する",
-                            tag = TAG_SMS_DIRECT_RECEIVE,
-                        )
-                    }
-
-                    Button(
-                        onClick = {
-                            persistConnection()
-                            if (showSendRoleOptions) {
-                                controller.saveSendRoleSettings(sendEnabled, smsDirectReceive)
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (setupComplete) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(text = "設定", style = MaterialTheme.typography.titleLarge)
+                            if (onOpenTimeline != null) {
+                                TextButton(onClick = onOpenTimeline) { Text(text = "タイムラインへ") }
                             }
-                            onSaved?.invoke()
-                            statusMessage = SAVE_NOTICE
-                        },
-                        modifier = Modifier.testTag(TAG_SAVE),
-                    ) {
-                        Text(text = "保存")
-                    }
-
-                    KeyStatusText(hasKey = hasKey, keyId = keyId)
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedButton(
-                            onClick = { if (hasKey) showRotateWarning = true else rotateKey() },
-                            modifier = Modifier.testTag(TAG_ROTATE),
-                        ) {
-                            Text(text = "鍵を作る")
                         }
-                        OutlinedButton(
-                            onClick = { showPairingQr() },
-                            modifier = Modifier.testTag(TAG_ADD_DEVICE),
-                        ) {
-                            Text(text = "新しい端末を追加")
-                        }
-                    }
 
-                    pairingUri?.let { uri ->
-                        PairingQrSection(
-                            uri = uri,
-                            qrContent = qrContent,
-                            onCopyPairingUri = onCopyPairingUri,
-                            onCopied = { statusMessage = "ペアリング文字列をコピーしました。" },
-                            onHide = { pairingUri = null },
+                        HostField(value = host, onValueChange = { host = it })
+                        TokenField(value = accessToken, onValueChange = { accessToken = it })
+                        DeviceNameField(value = deviceName, onValueChange = { deviceName = it })
+                        PortField(value = port, onValueChange = { port = it })
+
+                        LabeledCheckbox(
+                            checked = persistSensitiveHistory,
+                            onCheckedChange = { persistSensitiveHistory = it },
+                            label = "センシティブな通知の本文を履歴に保存する",
+                            tag = TAG_PERSIST_SENSITIVE,
                         )
-                    }
-                } else {
-                    val senderSteps = SetupWizard.steps(SetupRole.SENDER)
-                    val stepIndex = senderSteps.indexOf(currentStep)
-                    Text(
-                        text = "ステップ ${stepIndex + 1}/${senderSteps.size}: ${stepTitle(currentStep)}",
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                        Text(
+                            text = PERSIST_SENSITIVE_HISTORY_DESCRIPTION,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        LabeledCheckbox(
+                            checked = attachFullTextWhenTruncated,
+                            onCheckedChange = { attachFullTextWhenTruncated = it },
+                            label = "長文本文の全文をシームレスに添付・展開する",
+                            tag = TAG_ATTACH_FULL_TEXT,
+                        )
 
-                    when (currentStep) {
-                        SetupStep.CONNECTION -> {
-                            Text(
-                                text = "接続先のサーバとアクセストークンを入力します。",
-                                style = MaterialTheme.typography.bodyMedium,
+                        if (showSendRoleOptions) {
+                            LabeledCheckbox(
+                                checked = sendEnabled,
+                                onCheckedChange = { sendEnabled = it },
+                                label = "この端末から通知・SMS を送信する",
+                                tag = TAG_SEND_ENABLED,
                             )
-                            HostField(value = host, onValueChange = { host = it })
-                            TokenField(value = accessToken, onValueChange = { accessToken = it })
-                            PortField(value = port, onValueChange = { port = it })
-                            WizardNavigation(
-                                onBack = null,
-                                onNext = { saveConnection(); refreshWizard() },
+                            LabeledCheckbox(
+                                checked = smsDirectReceive,
+                                onCheckedChange = { smsDirectReceive = it },
+                                label = "SMS を直接受信して転送する",
+                                tag = TAG_SMS_DIRECT_RECEIVE,
                             )
                         }
 
-                        SetupStep.DEVICE -> {
-                            Text(
-                                text = "この端末の表示名を入力します。",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            DeviceNameField(value = deviceName, onValueChange = { deviceName = it })
-                            WizardNavigation(
-                                onBack = { currentStep = SetupWizard.previous(currentStep, SetupRole.SENDER)!! },
-                                onNext = { saveConnection(); refreshWizard() },
-                            )
-                        }
-
-                        SetupStep.KEY -> {
-                            Text(
-                                text = "全端末で共有する暗号鍵を作成します。作成した鍵は次のステップで QR として配布します。",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            KeyStatusText(hasKey = hasKey, keyId = keyId)
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                OutlinedButton(
-                                    onClick = { if (hasKey) showRotateWarning = true else rotateKey() },
-                                    modifier = Modifier.testTag(TAG_ROTATE),
-                                ) {
-                                    Text(text = "鍵を作る")
+                        Button(
+                            onClick = {
+                                persistConnection()
+                                if (showSendRoleOptions) {
+                                    controller.saveSendRoleSettings(sendEnabled, smsDirectReceive)
                                 }
-                            }
-                            WizardNavigation(
-                                onBack = { currentStep = SetupWizard.previous(currentStep, SetupRole.SENDER)!! },
-                                onNext = if (hasKey) {
-                                    { currentStep = SetupWizard.next(SetupStep.KEY, SetupRole.SENDER)!! }
-                                } else {
-                                    null
-                                },
-                            )
+                                onSaved?.invoke()
+                                statusMessage = SAVE_NOTICE
+                            },
+                            modifier = Modifier.testTag(TAG_SAVE),
+                        ) {
+                            Text(text = "保存")
                         }
 
-                        SetupStep.PAIRING -> {
-                            Text(
-                                text = "QR を表示し、他の端末のカメラで読み取ってペアリングします。",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
+                        KeyStatusText(hasKey = hasKey, keyId = keyId)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(
+                                onClick = { if (hasKey) showRotateWarning = true else rotateKey() },
+                                modifier = Modifier.testTag(TAG_ROTATE),
+                            ) {
+                                Text(text = "鍵を作る")
+                            }
                             OutlinedButton(
                                 onClick = { showPairingQr() },
                                 modifier = Modifier.testTag(TAG_ADD_DEVICE),
                             ) {
-                                Text(text = "QR を表示する")
+                                Text(text = "新しい端末を追加")
                             }
-                            pairingUri?.let { uri ->
-                                PairingQrSection(
-                                    uri = uri,
-                                    qrContent = qrContent,
-                                    onCopyPairingUri = onCopyPairingUri,
-                                    onCopied = { statusMessage = "ペアリング文字列をコピーしました。" },
-                                    onHide = { pairingUri = null },
-                                )
-                            }
-                            WizardNavigation(
-                                onBack = { currentStep = SetupWizard.previous(currentStep, SetupRole.SENDER)!! },
-                                onNext = null,
+                        }
+
+                        pairingUri?.let { uri ->
+                            PairingQrSection(
+                                uri = uri,
+                                qrContent = qrContent,
+                                onCopyPairingUri = onCopyPairingUri,
+                                onCopied = { statusMessage = "ペアリング文字列をコピーしました。" },
+                                onHide = { pairingUri = null },
                             )
                         }
+                    } else {
+                        val senderSteps = SetupWizard.steps(SetupRole.SENDER)
+                        val stepIndex = senderSteps.indexOf(currentStep)
+                        Text(text = "初期設定", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            text = "ステップ ${stepIndex + 1}/${senderSteps.size}: ${stepTitle(currentStep)}",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+
+                        when (currentStep) {
+                            SetupStep.CONNECTION -> {
+                                Text(
+                                    text = "接続先のサーバとアクセストークンを入力します。",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                HostField(value = host, onValueChange = { host = it })
+                                TokenField(value = accessToken, onValueChange = { accessToken = it })
+                                PortField(value = port, onValueChange = { port = it })
+                            }
+
+                            SetupStep.DEVICE -> {
+                                Text(
+                                    text = "この端末の表示名を入力します。",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                DeviceNameField(value = deviceName, onValueChange = { deviceName = it })
+                            }
+
+                            SetupStep.KEY -> {
+                                Text(
+                                    text = "全端末で共有する暗号鍵を作成します。作成した鍵は次のステップで QR として配布します。",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                KeyStatusText(hasKey = hasKey, keyId = keyId)
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    OutlinedButton(
+                                        onClick = { if (hasKey) showRotateWarning = true else rotateKey() },
+                                        modifier = Modifier.testTag(TAG_ROTATE),
+                                    ) {
+                                        Text(text = "鍵を作る")
+                                    }
+                                }
+                            }
+
+                            SetupStep.PAIRING -> {
+                                Text(
+                                    text = "QR を表示し、他の端末のカメラで読み取ってペアリングします。",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                OutlinedButton(
+                                    onClick = { showPairingQr() },
+                                    modifier = Modifier.testTag(TAG_ADD_DEVICE),
+                                ) {
+                                    Text(text = "QR を表示する")
+                                }
+                                pairingUri?.let { uri ->
+                                    PairingQrSection(
+                                        uri = uri,
+                                        qrContent = qrContent,
+                                        onCopyPairingUri = onCopyPairingUri,
+                                        onCopied = { statusMessage = "ペアリング文字列をコピーしました。" },
+                                        onHide = { pairingUri = null },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    statusMessage?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.testTag(TAG_STATUS),
+                        )
                     }
                 }
-
-                statusMessage?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.testTag(TAG_STATUS),
-                    )
-                }
+                scrollbarContent(scrollState)
             }
-            scrollbarContent(scrollState)
+
+            if (!setupComplete) {
+                val wizardBack: (() -> Unit)? = when (currentStep) {
+                    SetupStep.CONNECTION -> null
+                    else -> ({ currentStep = SetupWizard.previous(currentStep, SetupRole.SENDER)!! })
+                }
+                val wizardNext: (() -> Unit)? = when (currentStep) {
+                    SetupStep.CONNECTION, SetupStep.DEVICE -> ({ saveConnection(); refreshWizard() })
+                    SetupStep.KEY -> if (hasKey) {
+                        { currentStep = SetupWizard.next(SetupStep.KEY, SetupRole.SENDER)!! }
+                    } else {
+                        null
+                    }
+                    SetupStep.PAIRING -> null
+                }
+                WizardNavigation(
+                    onBack = wizardBack,
+                    onNext = wizardNext,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+                )
+            }
         }
     }
 
@@ -460,10 +464,17 @@ private fun KeyStatusText(hasKey: Boolean, keyId: String?) {
     )
 }
 
-/** ウィザードの「戻る」「次へ」ボタン行。ハンドラが null のボタンは表示しない。 */
+/** ウィザードの「戻る」「次へ」ボタン行（右寄せ）。ハンドラが null のボタンは表示しない。 */
 @Composable
-private fun WizardNavigation(onBack: (() -> Unit)?, onNext: (() -> Unit)?) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+private fun WizardNavigation(
+    onBack: (() -> Unit)?,
+    onNext: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+    ) {
         if (onBack != null) {
             OutlinedButton(onClick = onBack, modifier = Modifier.testTag(TAG_WIZARD_BACK)) {
                 Text(text = "戻る")
