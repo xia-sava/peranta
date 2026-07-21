@@ -26,7 +26,7 @@ import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.send.attachFullTextIfNeeded
 import to.sava.peranta.send.resolveSendTopics
 import to.sava.peranta.send.SmsDedupeTracker
-import to.sava.peranta.send.NotificationUpdateTracker
+import to.sava.peranta.send.NotificationRepostTracker
 import to.sava.peranta.timeline.JsonlTimelineStore
 import to.sava.peranta.timeline.TimelineStore
 import to.sava.peranta.timeline.defaultTimelineFile
