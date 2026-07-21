@@ -2,6 +2,8 @@
 # 起動:      docker compose up -d
 # ユーザー:   docker compose exec -e NTFY_PASSWORD=<pw> ntfy ntfy user add peranta
 # ACL:       docker compose exec ntfy ntfy access peranta "peranta-*" rw
+#            docker compose exec ntfy ntfy access peranta "up*" rw
+#            （up* は UnifiedPush 用。ntfy アプリが払い出す upXXXX トピックの購読/配送に必要）
 # トークン:   docker compose exec ntfy ntfy token add peranta
 # 発行したトークン等は server/.local/ に保存する（gitignore 済み）
 services:
