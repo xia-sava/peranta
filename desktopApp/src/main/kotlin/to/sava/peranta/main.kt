@@ -196,8 +196,9 @@ fun main(args: Array<String>) {
             }
         }
 
+        // トレイ常駐アプリの作法に合わせ、×はトレイ格納にする。終了はトレイメニューから行う。
         Window(
-            onCloseRequest = closeAndExit,
+            onCloseRequest = { windowVisible = false },
             state = windowState,
             visible = windowVisible,
             icon = perantaIcon,

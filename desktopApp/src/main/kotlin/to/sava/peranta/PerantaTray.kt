@@ -8,6 +8,7 @@ import java.awt.Color
 import java.awt.RenderingHints
 import java.awt.SystemTray
 import java.awt.TrayIcon
+import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.image.BufferedImage
@@ -40,10 +41,25 @@ fun PerantaTray(
         }
 
         val popup = JPopupMenu().apply {
-            add(JMenuItem("設定").apply { addActionListener { openSettings() } })
-            add(JMenuItem("健康診断").apply { addActionListener { openHealthCheck() } })
+            add(
+                JMenuItem("設定(S)").apply {
+                    mnemonic = KeyEvent.VK_S
+                    addActionListener { openSettings() }
+                },
+            )
+            add(
+                JMenuItem("健康診断(H)").apply {
+                    mnemonic = KeyEvent.VK_H
+                    addActionListener { openHealthCheck() }
+                },
+            )
             addSeparator()
-            add(JMenuItem("終了").apply { addActionListener { exit() } })
+            add(
+                JMenuItem("終了(X)").apply {
+                    mnemonic = KeyEvent.VK_X
+                    addActionListener { exit() }
+                },
+            )
         }
         // JPopupMenu はフォーカス可能な親が無いと外側クリックで閉じられないため、
         // 不可視の 1px ダイアログを親にする定石を使う。
