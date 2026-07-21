@@ -210,11 +210,14 @@ private fun InteractiveReceivedBubble(
     SwipeToDismissBox(
         state = dismissState,
         backgroundContent = {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.errorContainer),
-            )
+            // 静止時に吹出しの背後へ赤が透けないよう、スワイプ中だけ描く。
+            if (dismissState.dismissDirection != SwipeToDismissBoxValue.Settled) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.errorContainer),
+                )
+            }
         },
     ) {
         var menuOpen by remember { mutableStateOf(false) }
