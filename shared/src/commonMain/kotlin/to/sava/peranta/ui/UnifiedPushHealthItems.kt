@@ -20,10 +20,12 @@ private const val SELF_TEST_ITEM_LABEL: String = "サーバ経由の受信テス
  * エンドポイント整合の診断項目を組む（§10.5）。
  * UnifiedPush 払い出しエンドポイントがこのアプリの設定サーバを向いているかの静的照合結果を項目へ写す。
  * [match] が null（endpoint 未払い出し）のときは対象外にする。
+ * [fixAids] は不合格（Mismatch / Unparseable）の項目にそのまま載せる、案内ダイアログの補助操作。
  */
 fun endpointServerItem(
     match: EndpointServerMatch?,
     onReregister: (() -> Unit)?,
+    fixAids: List<FixAid> = emptyList(),
 ): HealthCheckItem {
     if (match == null) {
         return HealthCheckItem(
@@ -49,12 +51,12 @@ fun endpointServerItem(
                 "ntfy アプリの既定のサーバーを変更し、UnifiedPush を登録し直してください。",
             fixLabel = "登録し直す",
             onFix = onReregister,
-            fixGuidance = "先に ntfy アプリ側の設定変更が必要です。\n" +
-                "1. ntfy アプリの 設定 →「既定のサーバー」に ${match.configOrigin} を入力する\n" +
-                "2. 同じく 設定 →「ユーザーの管理」で、このサーバーのユーザー名とパスワードを追加する\n" +
-                "ここまで済んでいれば「続ける」で UnifiedPush を登録し直し、" +
-                "新しいサーバーのエンドポイントを受け取ります。" +
-                "まだの場合は「やめる」で戻り、ntfy アプリで設定してから再度実行してください。",
+            fixGuidance = "先に ntfy アプリ側の設定が必要です。下の値をコピーして ntfy アプリに貼り付けてください。\n" +
+                "1. ntfy の 設定 →「既定のサーバー」に、サーバーURL を貼り付ける\n" +
+                "2. 設定 → このサーバーの「カスタムヘッダー」で、ヘッダー名 Authorization に認証ヘッダの値を貼り付ける" +
+                "（「ユーザーの管理」でこのサーバーのユーザーを登録済みの場合、この手順は不要）\n" +
+                "3. ここへ戻って「続ける」を押すと、UnifiedPush を登録し直して新しいエンドポイントを受け取ります。",
+            fixAids = fixAids,
         )
 
         EndpointServerMatch.Unparseable -> HealthCheckItem(
@@ -64,6 +66,7 @@ fun endpointServerItem(
             detail = "受信エンドポイント URL を解釈できません。UnifiedPush を登録し直してください。",
             fixLabel = "登録し直す",
             onFix = onReregister,
+            fixAids = fixAids,
         )
     }
 }

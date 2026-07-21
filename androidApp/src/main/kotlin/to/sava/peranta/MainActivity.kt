@@ -259,6 +259,7 @@ class MainActivity : ComponentActivity() {
                         checker = healthChecker,
                         onBack = { screen = Screen.Main },
                         externalRefreshKey = resumeTick,
+                        onCopyText = { text, sensitive -> copyText(text, sensitive) },
                     )
                 }
 
@@ -367,19 +368,26 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * ペアリング文字列をシステムクリップボードへコピーする（設定画面のコピー導線、§10.3）。
-     * 共有鍵・トークンを含む機密情報のため、Android 13+ ではクリップボード履歴・プレビューから伏せる。
+     * 任意のテキストをシステムクリップボードへコピーする（健康診断の案内ダイアログのコピー導線・
+     * 設定画面のペアリング文字列コピーで共用、§10.3/§10.5）。[sensitive] が真のときだけ、
+     * Android 13+ でクリップボード履歴・プレビューから伏せる。
      */
-    private fun copyPairingUri(text: String) {
+    private fun copyText(text: String, sensitive: Boolean, label: String = "Peranta") {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("Peranta pairing", text)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val clip = ClipData.newPlainText(label, text)
+        if (sensitive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             clip.description.extras = PersistableBundle().apply {
                 putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
             }
         }
         clipboard.setPrimaryClip(clip)
     }
+
+    /**
+     * ペアリング文字列をシステムクリップボードへコピーする（設定画面のコピー導線、§10.3）。
+     * 共有鍵・トークンを含む機密情報のため常に伏せ字対象にする。
+     */
+    private fun copyPairingUri(text: String) = copyText(text, sensitive = true, label = "Peranta pairing")
 
     /** カメラ権限を確かめてから QR スキャナを起動する（§10.5: 起動時ではなく必要時に要求）。 */
     private fun requestScan(onResult: (String?) -> Unit) {

@@ -25,7 +25,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
@@ -45,6 +47,9 @@ private const val HEALTH_FIX_FAILED_DEFAULT: String = "操作に失敗しまし�
 /** 「直す」操作が成功した直後に項目へ添える案内文。 */
 private const val HEALTH_FIX_DONE: String = "操作を実行しました。"
 
+/** 案内ダイアログの補助コピー操作を押した直後に添える案内文。 */
+private const val HEALTH_FIX_AID_COPIED: String = "コピーしました"
+
 /** 「直す」実行後に反映を追いかける自動再チェックの回数と間隔。 */
 private const val FIX_RECHECK_COUNT: Int = 3
 private const val FIX_RECHECK_INTERVAL_MILLIS: Long = 2_000L
@@ -60,6 +65,8 @@ private val ALL_CLEAR_CONTENT: Color = Color(0xFF1B5E20)
  * [externalRefreshKey] が変わると再チェックする。Android は画面復帰（ON_RESUME）のたびにこの値を進め、
  * システム設定から戻った直後の状態を反映する。この画面は致命的でない未達でも操作を妨げないため、
  * [onBack] は常に有効にし、そのままメイン画面へ戻れるようにする。
+ * [onCopyText] は案内ダイアログの [FixAid.Copy] ボタンで使うコピー処理。null なら
+ * [LocalClipboardManager] へフォールバックする。
  */
 @Composable
 fun HealthCheckScreen(
@@ -67,6 +74,7 @@ fun HealthCheckScreen(
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
     externalRefreshKey: Int = 0,
+    onCopyText: ((text: String, sensitive: Boolean) -> Unit)? = null,
 ) {
     var manualRefresh by remember { mutableStateOf(0) }
     var followUpRechecks by remember { mutableStateOf(0) }
@@ -113,6 +121,7 @@ fun HealthCheckScreen(
                             manualRefresh++
                             followUpRechecks = FIX_RECHECK_COUNT
                         },
+                        onCopyText = onCopyText,
                     )
                 }
             }
@@ -168,7 +177,11 @@ private fun AllClearBanner() {
 }
 
 @Composable
-private fun HealthItemRow(item: HealthCheckItem, onFixed: () -> Unit) {
+private fun HealthItemRow(
+    item: HealthCheckItem,
+    onFixed: () -> Unit,
+    onCopyText: ((text: String, sensitive: Boolean) -> Unit)?,
+) {
     var fixError by remember(item.id) { mutableStateOf<String?>(null) }
     var fixRequested by remember(item.id, item.state) { mutableStateOf(false) }
 
@@ -234,7 +247,7 @@ private fun HealthItemRow(item: HealthCheckItem, onFixed: () -> Unit) {
                 AlertDialog(
                     onDismissRequest = { guidanceOpen = false },
                     title = { Text(text = item.label) },
-                    text = { Text(text = item.fixGuidance.orEmpty()) },
+                    text = { FixGuidanceContent(item = item, onCopyText = onCopyText) },
                     confirmButton = {
                         TextButton(
                             onClick = {
@@ -252,6 +265,60 @@ private fun HealthItemRow(item: HealthCheckItem, onFixed: () -> Unit) {
                         }
                     },
                 )
+            }
+        }
+    }
+}
+
+/**
+ * 案内ダイアログの本文。案内文の下に [HealthCheckItem.fixAids] を補助ボタンとして並べる。
+ * コピー実行後の「コピーしました」は最後にコピーした行にだけ出す（他の行を押すと表示が移動する）。
+ */
+@Composable
+private fun FixGuidanceContent(
+    item: HealthCheckItem,
+    onCopyText: ((text: String, sensitive: Boolean) -> Unit)?,
+) {
+    val clipboard = LocalClipboardManager.current
+    var copiedIndex by remember(item.id) { mutableStateOf<Int?>(null) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = item.fixGuidance.orEmpty())
+        item.fixAids.forEachIndexed { index, aid ->
+            when (aid) {
+                is FixAid.Copy -> Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(text = aid.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    if (copiedIndex == index) {
+                        Text(
+                            text = HEALTH_FIX_AID_COPIED,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(
+                        onClick = {
+                            if (onCopyText != null) {
+                                onCopyText(aid.value, aid.sensitive)
+                            } else {
+                                clipboard.setText(AnnotatedString(aid.value))
+                            }
+                            copiedIndex = index
+                        },
+                        modifier = Modifier.testTag("$TAG_HEALTH_FIX_AID_PREFIX${item.id}-$index"),
+                    ) {
+                        Text(text = "コピー")
+                    }
+                }
+
+                is FixAid.Action -> TextButton(
+                    onClick = aid.onRun,
+                    modifier = Modifier.testTag("$TAG_HEALTH_FIX_AID_PREFIX${item.id}-$index"),
+                ) {
+                    Text(text = aid.label)
+                }
             }
         }
     }

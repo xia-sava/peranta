@@ -14,7 +14,9 @@ import co.touchlab.kermit.Logger
 import org.unifiedpush.android.connector.UnifiedPush
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.net.EndpointServerMatch
+import to.sava.peranta.net.httpBaseUrl
 import to.sava.peranta.net.matchEndpointServer
+import to.sava.peranta.ui.FixAid
 import to.sava.peranta.ui.HealthCheckItem
 import to.sava.peranta.ui.HealthCheckState
 import to.sava.peranta.ui.HealthChecker
@@ -55,7 +57,17 @@ class AndroidHealthChecker(context: Context) : HealthChecker {
                 val match = config.unifiedPushEndpoint?.let { matchEndpointServer(it, config) }
                 add(ntfyInstalledItem(ntfyInstalled))
                 add(unifiedPushRegisteredItem(config))
-                add(endpointServerItem(match = match, onReregister = { PerantaUnifiedPush.reregister(appContext) }))
+                add(
+                    endpointServerItem(
+                        match = match,
+                        onReregister = { PerantaUnifiedPush.reregister(appContext) },
+                        fixAids = listOf(
+                            FixAid.Copy(label = "サーバーURL", value = config.httpBaseUrl()),
+                            FixAid.Copy(label = "認証ヘッダの値", value = "Bearer ${config.accessToken.orEmpty()}", sensitive = true),
+                            FixAid.Action(label = "ntfy を開く", onRun = ::openNtfyApp),
+                        ),
+                    ),
+                )
                 add(
                     selfTestItem(
                         status = PerantaSelfTest.status.value,
@@ -218,6 +230,22 @@ class AndroidHealthChecker(context: Context) : HealthChecker {
         val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$NTFY_PACKAGE"))
         val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$NTFY_PACKAGE"))
         startFirstResolvable(market, web)
+    }
+
+    /** ntfy アプリを起動する。導入済み前提の操作で、解決できなければストア導線へ降格する。 */
+    private fun openNtfyApp() {
+        val launchIntent = appContext.packageManager.getLaunchIntentForPackage(NTFY_PACKAGE)
+        if (launchIntent == null) {
+            openNtfyInStore()
+            return
+        }
+        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            appContext.startActivity(launchIntent)
+        } catch (error: ActivityNotFoundException) {
+            log.w(error) { "ntfy launch intent not resolvable" }
+            openNtfyInStore()
+        }
     }
 
     private fun openAppNotificationSettings() {

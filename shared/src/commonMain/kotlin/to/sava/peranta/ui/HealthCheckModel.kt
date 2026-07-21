@@ -20,6 +20,7 @@ enum class HealthCheckState {
  * 両方が揃ったときだけ操作ボタンを出す。合格・情報項目や、直す手段が無い項目では null にする。
  * [fixGuidance] があると「直す」の実行前に案内ダイアログを挟み、移動先で行う操作を説明してから実行する
  * （システム設定へ飛ばすだけでは次の操作が分かりにくい項目に使う）。
+ * [fixAids] は fixGuidance のダイアログ内に補助ボタンとして並べる。fixGuidance が null のときは使わない。
  */
 data class HealthCheckItem(
     val id: String,
@@ -29,7 +30,17 @@ data class HealthCheckItem(
     val fixLabel: String? = null,
     val onFix: (() -> Unit)? = null,
     val fixGuidance: String? = null,
+    val fixAids: List<FixAid> = emptyList(),
 )
+
+/** 「直す」前の案内ダイアログに並べる補助操作。 */
+sealed interface FixAid {
+    /** 値をクリップボードへコピーする。[sensitive] はトークン等のプレビュー抑止に使う。 */
+    data class Copy(val label: String, val value: String, val sensitive: Boolean = false) : FixAid
+
+    /** 任意の操作（関連アプリの起動等）。 */
+    data class Action(val label: String, val onRun: () -> Unit) : FixAid
+}
 
 /**
  * プラットフォーム依存のチェックを実行して健康診断の項目一覧を返す（§10.5）。
@@ -77,3 +88,6 @@ const val TAG_HEALTH_FIX_PENDING_PREFIX: String = "health-fix-pending-"
 
 /** 「直す」実行前の案内ダイアログの続行ボタンのタグ接頭辞（末尾に item id を付ける）。 */
 const val TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX: String = "health-fix-guidance-ok-"
+
+/** 案内ダイアログの補助ボタンのタグ接頭辞（末尾に item id + "-" + インデックスを付ける）。 */
+const val TAG_HEALTH_FIX_AID_PREFIX: String = "health-fix-aid-"

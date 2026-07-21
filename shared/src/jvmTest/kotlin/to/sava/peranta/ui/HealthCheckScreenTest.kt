@@ -94,6 +94,56 @@ class HealthCheckScreenTest {
         assertTrue(fixed)
     }
 
+    /**
+     * fixGuidance + fixAids 付きの項目で「直す」を押すと、案内ダイアログに補助ボタンが並ぶ。
+     * Copy ボタンを押すと onCopyText が (value, sensitive) で呼ばれ、Action ボタンを押すと onRun が
+     * 呼ばれる。どちらもダイアログを閉じない（続けるボタンがまだ存在する）。その後「続ける」で onFix が呼ばれる。
+     */
+    @Test
+    fun fixAidsInvokeCopyAndActionWithoutClosingDialog() = runComposeUiTest {
+        var fixed = false
+        var copiedValue: String? = null
+        var copiedSensitive: Boolean? = null
+        var actionRun = false
+        setContent {
+            HealthCheckScreen(
+                checker = checker(
+                    HealthCheckItem(
+                        id = "up-endpoint-server",
+                        label = "受信エンドポイントのサーバ",
+                        state = HealthCheckState.FAILING,
+                        fixLabel = "登録し直す",
+                        onFix = { fixed = true },
+                        fixGuidance = "案内文",
+                        fixAids = listOf(
+                            FixAid.Copy(label = "サーバーURL", value = "https://example.com"),
+                            FixAid.Copy(label = "認証ヘッダの値", value = "Bearer token", sensitive = true),
+                            FixAid.Action(label = "ntfy を開く", onRun = { actionRun = true }),
+                        ),
+                    ),
+                ),
+                onCopyText = { text, sensitive ->
+                    copiedValue = text
+                    copiedSensitive = sensitive
+                },
+            )
+        }
+        onNodeWithTag("${TAG_HEALTH_FIX_PREFIX}up-endpoint-server").performClick()
+
+        onNodeWithTag("${TAG_HEALTH_FIX_AID_PREFIX}up-endpoint-server-1").performClick()
+        assertEquals("Bearer token", copiedValue)
+        assertEquals(true, copiedSensitive)
+        assertFalse(fixed)
+
+        onNodeWithTag("${TAG_HEALTH_FIX_AID_PREFIX}up-endpoint-server-2").performClick()
+        assertTrue(actionRun)
+        onNodeWithTag("${TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX}up-endpoint-server").assertIsDisplayed()
+        assertFalse(fixed)
+
+        onNodeWithTag("${TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX}up-endpoint-server").performClick()
+        assertTrue(fixed)
+    }
+
     /** onFix が成功すると、項目に実行済みの案内文を出す。 */
     @Test
     fun successfulFixShowsDoneNotice() = runComposeUiTest {

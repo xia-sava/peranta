@@ -41,6 +41,21 @@ class UnifiedPushHealthItemsTest {
         assertTrue(item.fixGuidance!!.contains(mismatch.configOrigin))
     }
 
+    /** サーバ不一致では、渡した fixAids がそのまま項目に載る。 */
+    @Test
+    fun mismatchCarriesFixAidsThrough() {
+        val mismatch = EndpointServerMatch.Mismatch(
+            endpointOrigin = "https://other.example.com",
+            configOrigin = "https://peranta.example.com",
+        )
+        val fixAids = listOf(
+            FixAid.Copy(label = "サーバーURL", value = "https://peranta.example.com"),
+            FixAid.Action(label = "ntfy を開く", onRun = {}),
+        )
+        val item = endpointServerItem(match = mismatch, onReregister = {}, fixAids = fixAids)
+        assertEquals(fixAids, item.fixAids)
+    }
+
     /** URL を解釈できない場合も不合格で「登録し直す」導線を持つ。 */
     @Test
     fun unparseableIsFailing() {
