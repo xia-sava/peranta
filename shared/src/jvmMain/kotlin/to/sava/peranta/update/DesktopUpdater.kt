@@ -25,11 +25,6 @@ class DesktopUpdater(
     val controller: UpdateController =
         UpdateController(UpdateChecker(httpClient, config, currentVersionCode, PLATFORM_DESKTOP), scope)
 
-    /** 起動時の更新確認を実行する。 */
-    fun checkAtStartup() {
-        controller.checkNow()
-    }
-
     /** MSI のダウンロードページを既定ブラウザで開く。失敗は UI をクラッシュさせずログに残す。 */
     fun install(url: String) {
         try {

@@ -22,6 +22,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +42,8 @@ import to.sava.peranta.ui.setup.LabeledCheckbox
 import to.sava.peranta.ui.setup.PairingQrSection
 import to.sava.peranta.ui.setup.PortField
 import to.sava.peranta.ui.setup.TokenField
+import to.sava.peranta.update.UpdateController
+import to.sava.peranta.update.UpdateStatus
 
 /** QR の自動非表示までの既定時間（§6: 表示は時間制限つき）。 */
 private const val DEFAULT_QR_VISIBLE_MILLIS: Long = 60_000L
@@ -74,6 +77,7 @@ private const val KEY_CREATED_QR_PREREQUISITE_NOTICE: String =
 private const val SECTION_CONNECTION: String = "ntfyサーバー接続設定"
 private const val SECTION_THIS_DEVICE: String = "この端末"
 private const val SECTION_NOTIFICATIONS: String = "通知と履歴"
+private const val SECTION_UPDATE: String = "アプリの更新"
 private const val SECTION_ADD_DEVICE: String = "端末の追加"
 private const val SECTION_DANGER: String = "危険な操作"
 
@@ -88,6 +92,7 @@ private const val SECTION_DANGER: String = "危険な操作"
  * [to.sava.peranta.config.PerantaConfig.smsDirectReceive]）のトグルを表示する。
  * [onSaved] は設定の保存・鍵生成が成功した直後に呼ぶ（受信パイプラインの再構築契機に使う）。
  * [onOpenWizard] が非 null のとき、セットアップをページ列で案内するウィザードへの導線を出す。
+ * [updateController] が非 null のとき「アプリの更新」セクションを出し、ボタン押下時だけ更新確認を実行する（§12）。
  */
 @Composable
 fun SettingsScreen(
@@ -101,6 +106,8 @@ fun SettingsScreen(
     showSendRoleOptions: Boolean = false,
     onSaved: (() -> Unit)? = null,
     onOpenWizard: (() -> Unit)? = null,
+    updateController: UpdateController? = null,
+    onInstallUpdate: ((String) -> Unit)? = null,
 ) {
     val initial = remember { controller.load() }
     var host by remember { mutableStateOf(initial.host) }
@@ -249,6 +256,11 @@ fun SettingsScreen(
                     tag = TAG_ATTACH_FULL_TEXT,
                 )
 
+                if (updateController != null) {
+                    SectionHeader(title = SECTION_UPDATE)
+                    UpdateSection(controller = updateController, onInstall = onInstallUpdate)
+                }
+
                 SectionHeader(title = SECTION_ADD_DEVICE)
                 KeyStatusText(hasKey = hasKey, keyId = keyId)
                 if (hasKey) {
@@ -376,6 +388,48 @@ private fun DangerSectionHeader(expanded: Boolean, onToggle: () -> Unit) {
     HorizontalDivider()
 }
 
+/**
+ * 「アプリの更新」セクションの中身。ボタン押下時だけ [controller] で更新確認を実行し、
+ * 結果をボタンの下に表示する（§12: 起動時の自動確認は行わない）。
+ */
+@Composable
+private fun UpdateSection(controller: UpdateController, onInstall: ((String) -> Unit)?) {
+    val status by controller.status.collectAsState()
+    val checking by controller.checking.collectAsState()
+    OutlinedButton(
+        onClick = { controller.checkNow() },
+        enabled = !checking,
+        modifier = Modifier.testTag(TAG_UPDATE_CHECK),
+    ) {
+        Text(text = if (checking) "確認中..." else "アプリ更新チェック")
+    }
+    updateStatusText(status)?.let { text ->
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.testTag(TAG_UPDATE_STATUS),
+        )
+    }
+    val available = status as? UpdateStatus.Available
+    if (available != null && onInstall != null) {
+        OutlinedButton(
+            onClick = { onInstall(available.url) },
+            modifier = Modifier.testTag(TAG_UPDATE_INSTALL),
+        ) {
+            Text(text = "更新")
+        }
+    }
+}
+
+/** 更新確認結果の表示文。未チェック（null）は結果行を出さない。 */
+private fun updateStatusText(status: UpdateStatus?): String? = when (status) {
+    null -> null
+    UpdateStatus.NotConfigured -> "初期設定が完了すると更新を確認できます"
+    UpdateStatus.UpToDate -> "最新のバージョンです"
+    is UpdateStatus.Available -> "新しいバージョン ${status.versionName}"
+    is UpdateStatus.Failed -> "更新確認に失敗しました: ${status.reason}"
+}
+
 const val TAG_AUTOSAVE_NOTE: String = "settings-autosave-note"
 const val TAG_OPEN_WIZARD: String = "settings-open-wizard"
 const val TAG_HOST: String = "settings-host"
@@ -386,6 +440,9 @@ const val TAG_PERSIST_SENSITIVE: String = "settings-persist-sensitive"
 const val TAG_ATTACH_FULL_TEXT: String = "settings-attach-full-text"
 const val TAG_SEND_ENABLED: String = "settings-send-enabled"
 const val TAG_SMS_DIRECT_RECEIVE: String = "settings-sms-direct-receive"
+const val TAG_UPDATE_CHECK: String = "settings-update-check"
+const val TAG_UPDATE_STATUS: String = "settings-update-status"
+const val TAG_UPDATE_INSTALL: String = "settings-update-install"
 const val TAG_CREATE_KEY: String = "settings-create-key"
 const val TAG_DANGER_TOGGLE: String = "settings-danger-toggle"
 const val TAG_ROTATE: String = "settings-rotate"

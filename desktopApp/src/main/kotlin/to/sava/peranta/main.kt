@@ -161,7 +161,6 @@ fun main(args: Array<String>) {
         mainWindow.get()?.let(::bringWindowToFront)
     }
     val updater = DesktopUpdater(desktopSettings.config, DesktopVersion.versionCode)
-    updater.checkAtStartup()
 
     application {
         // 設定保存のたびに増やす世代番号。受信機は世代の変化で作り直される。
@@ -291,6 +290,8 @@ fun main(args: Array<String>) {
                         onCopyPairingUri = ::copyToClipboard,
                         onSaved = { configGeneration++ },
                         onOpenWizard = { showWizard = true },
+                        updateController = updater.controller,
+                        onInstallUpdate = { url -> updater.install(url) },
                     )
                 }
                 showAppFilter && currentReceiver != null -> PerantaTheme {
@@ -303,8 +304,6 @@ fun main(args: Array<String>) {
                 errorMessage != null -> App(errorMessage!!)
                 currentReceiver != null -> App(
                     items = currentReceiver.items,
-                    updateController = updater.controller,
-                    onInstallUpdate = { url -> updater.install(url) },
                     onOpenSettings = { showSettings = true },
                     onOpenAppFilter = { showAppFilter = true },
                     onOpenHealthCheck = { showHealthCheck = true },

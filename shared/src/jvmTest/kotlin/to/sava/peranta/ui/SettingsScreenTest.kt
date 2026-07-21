@@ -7,6 +7,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -14,9 +15,23 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runComposeUiTest
 import com.russhwolf.settings.MapSettings
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.pairing.SettingsController
+import to.sava.peranta.update.PLATFORM_DESKTOP
+import to.sava.peranta.update.UpdateChecker
+import to.sava.peranta.update.UpdateController
 import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -455,6 +470,89 @@ class SettingsScreenTest {
         val loaded = repo.load()
         assertEquals(true, loaded.sendEnabled)
         assertEquals(false, loaded.smsDirectReceive)
+    }
+
+    // --- アプリの更新 ---
+
+    /** updateController 未指定なら「アプリの更新」セクションごと非表示になる。 */
+    @Test
+    fun updateSectionHiddenWhenControllerNotProvided() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_UPDATE_CHECK).assertDoesNotExist()
+    }
+
+    /** ボタン押下で checkNow が実行され、失敗結果はボタンの下に理由付きで表示される。 */
+    @Test
+    fun updateCheckButtonRunsCheckNowAndShowsFailedReason() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val settingsController = SettingsController(repo)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val engine = MockEngine { respond(content = "", status = HttpStatusCode.NotFound) }
+        val updateController =
+            UpdateController(UpdateChecker(HttpClient(engine), repo.load(), 1, PLATFORM_DESKTOP), scope)
+
+        try {
+            setContent { SettingsScreen(settingsController, updateController = updateController) }
+
+            onNodeWithTag(TAG_UPDATE_CHECK).performScrollTo().performClick()
+            waitUntil(timeoutMillis = 5_000) {
+                onAllNodesWithTag(TAG_UPDATE_STATUS).fetchSemanticsNodes().isNotEmpty()
+            }
+
+            onNodeWithText("更新確認に失敗しました: latest.json の取得に失敗しました (HTTP 404)").assertExists()
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    /** Available のとき「更新」ボタンが出て、押すと onInstallUpdate に配布 URL が渡る。 */
+    @Test
+    fun updateAvailableShowsInstallButtonAndInvokesOnInstallUpdate() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val settingsController = SettingsController(repo)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val manifestJson = """
+            { "desktop": { "versionCode": 20, "versionName": "2.0.0", "url": "http://h/d.msi" } }
+        """.trimIndent()
+        val engine = MockEngine {
+            respond(
+                content = manifestJson,
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
+            )
+        }
+        val updateController =
+            UpdateController(UpdateChecker(HttpClient(engine), repo.load(), 1, PLATFORM_DESKTOP), scope)
+        var installedUrl: String? = null
+
+        try {
+            setContent {
+                SettingsScreen(
+                    settingsController,
+                    updateController = updateController,
+                    onInstallUpdate = { url -> installedUrl = url },
+                )
+            }
+
+            onNodeWithTag(TAG_UPDATE_CHECK).performScrollTo().performClick()
+            waitUntil(timeoutMillis = 5_000) {
+                onAllNodesWithTag(TAG_UPDATE_INSTALL).fetchSemanticsNodes().isNotEmpty()
+            }
+
+            onNodeWithText("新しいバージョン 2.0.0").assertExists()
+            onNodeWithTag(TAG_UPDATE_INSTALL).performScrollTo().performClick()
+
+            assertEquals("http://h/d.msi", installedUrl)
+        } finally {
+            scope.cancel()
+        }
     }
 
     private companion object {

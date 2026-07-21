@@ -29,11 +29,6 @@ class AndroidUpdater(
     val controller: UpdateController =
         UpdateController(UpdateChecker(httpClient, config, currentVersionCode, PLATFORM_ANDROID), scope)
 
-    /** 起動時の更新確認を実行する。 */
-    fun checkAtStartup() {
-        controller.checkNow()
-    }
-
     /** APK をダウンロードしてインストール確認 Intent を発行する。失敗はログに残す。 */
     fun install(url: String) {
         scope.launch {

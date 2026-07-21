@@ -144,7 +144,6 @@ class MainActivity : ComponentActivity() {
 
         val config = androidConfigRepository().load()
         val updater = AndroidUpdater(this, config, currentVersionCode()).also { this.updater = it }
-        updater.checkAtStartup()
 
         val importController = PairingImportController(androidConfigRepository())
         // コマンド受信のための UnifiedPush 登録は役割を問わない（送信ロールのスマホも受け口を持つ、§3.4）。
@@ -224,8 +223,6 @@ class MainActivity : ComponentActivity() {
                 Screen.Main -> if (receiveRole) {
                     App(
                         items = PerantaReceive.items,
-                        updateController = updater.controller,
-                        onInstallUpdate = { url -> updater.install(url) },
                         receiveEndpoint = config.unifiedPushEndpoint,
                         onOpenSettings = { screen = Screen.Settings },
                         onOpenPairing = { screen = Screen.Pairing },
@@ -243,8 +240,6 @@ class MainActivity : ComponentActivity() {
                 } else {
                     SendRoleApp(
                         sendEnabled = config.sendEnabled,
-                        updateController = updater.controller,
-                        onInstallUpdate = { url -> updater.install(url) },
                         onOpenSettings = { screen = Screen.Settings },
                         onOpenPairing = { screen = Screen.Pairing },
                         onOpenAppFilter = { screen = Screen.AppFilter },
@@ -267,6 +262,8 @@ class MainActivity : ComponentActivity() {
                         showSendRoleOptions = true,
                         onOpenTimeline = { resetReceiveAndRecreate() },
                         onOpenWizard = { screen = Screen.Wizard },
+                        updateController = updater.controller,
+                        onInstallUpdate = { url -> updater.install(url) },
                     )
                 }
 

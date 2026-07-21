@@ -23,15 +23,11 @@ import to.sava.peranta.ui.FullTextUi
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.TimelineActions
 import to.sava.peranta.ui.TimelineScreen
-import to.sava.peranta.ui.UpdateBanner
-import to.sava.peranta.update.UpdateController
 
-/** タイムラインを表示するアプリ本体。更新導線が渡されたときは上部にバナーを出す。 */
+/** タイムラインを表示するアプリ本体。 */
 @Composable
 fun App(
     items: StateFlow<List<TimelineItem>>,
-    updateController: UpdateController? = null,
-    onInstallUpdate: ((String) -> Unit)? = null,
     receiveEndpoint: String? = null,
     onOpenSettings: (() -> Unit)? = null,
     onOpenPairing: (() -> Unit)? = null,
@@ -44,9 +40,6 @@ fun App(
 ) {
     PerantaTheme {
         Column(modifier = Modifier.fillMaxSize()) {
-            if (updateController != null && onInstallUpdate != null) {
-                UpdateBanner(updateController, onInstallUpdate)
-            }
             if (receiveEndpoint != null || onOpenSettings != null || onOpenPairing != null ||
                 onOpenAppFilter != null || onOpenReceiveSetup != null || onOpenHealthCheck != null
             ) {
@@ -109,8 +102,6 @@ fun App(errorMessage: String) {
 @Composable
 fun SendRoleApp(
     sendEnabled: Boolean,
-    updateController: UpdateController? = null,
-    onInstallUpdate: ((String) -> Unit)? = null,
     onOpenSettings: (() -> Unit)? = null,
     onOpenPairing: (() -> Unit)? = null,
     onOpenAppFilter: (() -> Unit)? = null,
@@ -119,9 +110,6 @@ fun SendRoleApp(
 ) {
     PerantaTheme {
         Column(modifier = Modifier.fillMaxSize()) {
-            if (updateController != null && onInstallUpdate != null) {
-                UpdateBanner(updateController, onInstallUpdate)
-            }
             Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
                 Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
                     Text(
