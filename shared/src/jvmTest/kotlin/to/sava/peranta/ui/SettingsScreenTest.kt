@@ -178,7 +178,7 @@ class SettingsScreenTest {
 
     // --- 端末の追加（鍵あり） ---
 
-    /** 鍵が設定済みなら「QR を表示して端末を追加」が出て、押すと QR スロットに URI が渡って表示される。 */
+    /** 鍵が設定済みなら「端末追加用のQRを表示」が出て、押すと QR スロットに URI が渡って表示される。 */
     @Test
     fun addDeviceRendersQrSlotWithPairingUri() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
@@ -283,9 +283,27 @@ class SettingsScreenTest {
             .assertExists()
     }
 
+    // --- 危険な操作: 折り畳み ---
+
+    /** 危険な操作セクションは既定で折り畳まれており、「共有鍵を作り直す」は見出しをクリックするまで出ない。 */
+    @Test
+    fun dangerSectionCollapsedByDefaultAndExpandsOnHeaderClick() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_ROTATE).assertDoesNotExist()
+
+        onNodeWithTag(TAG_DANGER_TOGGLE).performScrollTo().performClick()
+
+        onNodeWithTag(TAG_ROTATE).performScrollTo().assertIsDisplayed()
+    }
+
     // --- 危険な操作: 共有鍵の作り直し ---
 
-    /** 鍵未設定のときは危険な操作の「共有鍵を作り直す」は出ない（作成は端末の追加が担う）。 */
+    /** 鍵未設定のときは危険な操作の見出し自体が出ない（作成は端末の追加が担う）。 */
     @Test
     fun rotateButtonHiddenWhenNoKey() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
@@ -294,10 +312,11 @@ class SettingsScreenTest {
 
         setContent { SettingsScreen(controller) }
 
+        onNodeWithTag(TAG_DANGER_TOGGLE).assertDoesNotExist()
         onNodeWithTag(TAG_ROTATE).assertDoesNotExist()
     }
 
-    /** 既存鍵があると「共有鍵を作り直す」で警告ダイアログが出て、確認後に鍵が作り直され QR が自動表示され案内文が出る。 */
+    /** 既存鍵があると、危険な操作を展開して「共有鍵を作り直す」で警告ダイアログが出て、確認後に鍵が作り直され QR が自動表示され案内文が出る。 */
     @Test
     fun rotateWithExistingKeyShowsWarningThenReplacesAndShowsQr() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
@@ -311,6 +330,7 @@ class SettingsScreenTest {
             )
         }
 
+        onNodeWithTag(TAG_DANGER_TOGGLE).performScrollTo().performClick()
         onNodeWithTag(TAG_ROTATE).performScrollTo().performClick()
         onNodeWithText("鍵を作り直しますか？").assertIsDisplayed()
 
@@ -331,6 +351,7 @@ class SettingsScreenTest {
 
         setContent { SettingsScreen(controller, onSaved = { savedCount++ }) }
 
+        onNodeWithTag(TAG_DANGER_TOGGLE).performScrollTo().performClick()
         onNodeWithTag(TAG_ROTATE).performScrollTo().performClick()
         onNodeWithTag(TAG_ROTATE_CONFIRM).performClick()
         assertEquals(1, savedCount)

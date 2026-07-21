@@ -124,7 +124,7 @@ internal fun PairingQrSection(
             },
             modifier = Modifier.testTag(TAG_COPY_PAIRING_URI),
         ) {
-            Text(text = "文字列をコピー")
+            Text(text = "QR文字列をコピー")
         }
     }
     TextButton(onClick = onHide, modifier = Modifier.testTag(TAG_HIDE_QR)) {

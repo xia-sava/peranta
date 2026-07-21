@@ -1,7 +1,9 @@
 package to.sava.peranta.ui.setup
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -61,7 +63,8 @@ private const val ROTATE_WARNING_BODY: String =
  *
  * プラットフォーム依存は各スロットで注入する。[qrContent] は端末追加ページの QR 描画、
  * [importController] と [onRequestScan] は QR 取り込みページ、[onCopyText] / [onCopyPairingUri] はコピー、
- * [healthChecker] は完了ページの診断集計に使う。[onClose] は「閉じる」「タイムラインへ」で呼ぶ。
+ * [scrollbarContent] はページ本体のスクロールバー、[healthChecker] は完了ページの診断集計に使う。
+ * [onClose] は「閉じる」「タイムラインへ」で呼ぶ。
  */
 @Composable
 fun WizardScreen(
@@ -75,6 +78,7 @@ fun WizardScreen(
     onCopyPairingUri: ((String) -> Unit)? = null,
     onCopyText: ((text: String, sensitive: Boolean) -> Unit)? = null,
     onRequestScan: ((onResult: (String?) -> Unit) -> Unit)? = null,
+    scrollbarContent: @Composable BoxScope.(scrollState: ScrollState) -> Unit = {},
     qrVisibleMillis: Long = DEFAULT_QR_VISIBLE_MILLIS,
     externalRefreshKey: Int = 0,
     onClose: (() -> Unit)? = null,
@@ -211,8 +215,9 @@ fun WizardScreen(
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f)) {
+                val scrollState = rememberScrollState()
                 Column(
-                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+                    modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     WizardHeader(page = page, completed = completed, onClose = onClose)
@@ -252,6 +257,7 @@ fun WizardScreen(
                         onOpenTimeline = onClose,
                     )
                 }
+                scrollbarContent(scrollState)
             }
 
             WizardFooter(

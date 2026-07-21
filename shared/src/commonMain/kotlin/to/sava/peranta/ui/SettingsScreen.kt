@@ -1,6 +1,7 @@
 package to.sava.peranta.ui
 
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -24,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,7 +71,7 @@ private const val PAIRING_PREREQUISITE_NOTICE: String = "先にトークンと�
 private const val KEY_CREATED_QR_PREREQUISITE_NOTICE: String =
     "QR の表示には接続設定が必要です。先にサーバホスト名とアクセストークンを設定してください。"
 
-private const val SECTION_CONNECTION: String = "接続"
+private const val SECTION_CONNECTION: String = "ntfyサーバー接続設定"
 private const val SECTION_THIS_DEVICE: String = "この端末"
 private const val SECTION_NOTIFICATIONS: String = "通知と履歴"
 private const val SECTION_ADD_DEVICE: String = "端末の追加"
@@ -116,6 +118,7 @@ fun SettingsScreen(
     var showRotateWarning by remember { mutableStateOf(false) }
     var pairingUri by remember { mutableStateOf<String?>(null) }
     var dirty by remember { mutableStateOf(false) }
+    var dangerExpanded by rememberSaveable { mutableStateOf(false) }
 
     fun persistConnection() {
         controller.saveConnectionSettings(
@@ -253,7 +256,7 @@ fun SettingsScreen(
                         onClick = { showPairingQr() },
                         modifier = Modifier.testTag(TAG_ADD_DEVICE),
                     ) {
-                        Text(text = "QR を表示して端末を追加")
+                        Text(text = "端末追加用のQRを表示")
                     }
                 } else {
                     OutlinedButton(
@@ -261,21 +264,6 @@ fun SettingsScreen(
                         modifier = Modifier.testTag(TAG_CREATE_KEY),
                     ) {
                         Text(text = "共有鍵を作成して QR を表示")
-                    }
-                }
-
-                if (hasKey) {
-                    SectionHeader(title = SECTION_DANGER, color = MaterialTheme.colorScheme.error)
-                    Text(
-                        text = ROTATE_DANGER_DESCRIPTION,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    OutlinedButton(
-                        onClick = { showRotateWarning = true },
-                        modifier = Modifier.testTag(TAG_ROTATE),
-                    ) {
-                        Text(text = "共有鍵を作り直す")
                     }
                 }
 
@@ -296,6 +284,26 @@ fun SettingsScreen(
                         onCopied = { statusMessage = "ペアリング文字列をコピーしました。" },
                         onHide = { pairingUri = null },
                     )
+                }
+
+                if (hasKey) {
+                    DangerSectionHeader(
+                        expanded = dangerExpanded,
+                        onToggle = { dangerExpanded = !dangerExpanded },
+                    )
+                    if (dangerExpanded) {
+                        Text(
+                            text = ROTATE_DANGER_DESCRIPTION,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        OutlinedButton(
+                            onClick = { showRotateWarning = true },
+                            modifier = Modifier.testTag(TAG_ROTATE),
+                        ) {
+                            Text(text = "共有鍵を作り直す")
+                        }
+                    }
                 }
             }
             scrollbarContent(scrollState)
@@ -339,6 +347,35 @@ private fun SectionHeader(title: String, color: Color = MaterialTheme.colorSchem
     HorizontalDivider()
 }
 
+/**
+ * 「危険な操作」セクションの見出し（エラー色）。クリックで [expanded] の開閉を切り替える。
+ * 折り畳み状態は矢印で示す。
+ */
+@Composable
+private fun DangerSectionHeader(expanded: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .clickable(onClick = onToggle)
+            .testTag(TAG_DANGER_TOGGLE),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = if (expanded) "▼" else "▶",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.error,
+        )
+        Text(
+            text = SECTION_DANGER,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+    HorizontalDivider()
+}
+
 const val TAG_AUTOSAVE_NOTE: String = "settings-autosave-note"
 const val TAG_OPEN_WIZARD: String = "settings-open-wizard"
 const val TAG_HOST: String = "settings-host"
@@ -350,6 +387,7 @@ const val TAG_ATTACH_FULL_TEXT: String = "settings-attach-full-text"
 const val TAG_SEND_ENABLED: String = "settings-send-enabled"
 const val TAG_SMS_DIRECT_RECEIVE: String = "settings-sms-direct-receive"
 const val TAG_CREATE_KEY: String = "settings-create-key"
+const val TAG_DANGER_TOGGLE: String = "settings-danger-toggle"
 const val TAG_ROTATE: String = "settings-rotate"
 const val TAG_ROTATE_CONFIRM: String = "settings-rotate-confirm"
 const val TAG_ADD_DEVICE: String = "settings-add-device"

@@ -76,7 +76,7 @@ private fun DesktopQrCode(uri: String, modifier: Modifier = Modifier) {
     QrCodeCanvas(matrix, modifier = modifier.size(240.dp))
 }
 
-/** 設定画面のスクロール位置に追従する縦スクロールバー。commonMain の設定画面へスロットとして注入する。 */
+/** スクロール位置に追従する縦スクロールバー。commonMain の設定画面・ウィザードへスロットとして注入する。 */
 @Composable
 private fun BoxScope.DesktopScrollbar(scrollState: ScrollState) {
     VerticalScrollbar(
@@ -267,6 +267,7 @@ fun main(args: Array<String>) {
                         healthChecker = DesktopHealthChecker(autoStart),
                         qrContent = { uri -> DesktopQrCode(uri) },
                         onCopyPairingUri = ::copyToClipboard,
+                        scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
                         onClose = { showWizard = false },
                         onSaved = { configGeneration++ },
                     )

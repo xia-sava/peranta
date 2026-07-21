@@ -1,5 +1,8 @@
 package to.sava.peranta.ui.setup
 
+import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -92,6 +95,25 @@ class WizardScreenTest {
         onNodeWithTag(TAG_WIZARD_NEXT).assertIsNotEnabled()
         onNodeWithTag("wizard-settings-token").performTextReplacement("tk")
         onNodeWithTag(TAG_WIZARD_NEXT).assertIsEnabled()
+    }
+
+    /** scrollbarContent スロットに現在のスクロール状態が渡され、描画される（Desktop 用スクロールバーの注入経路）。 */
+    @Test
+    fun scrollbarContentSlotIsInvoked() = runComposeUiTest {
+        val controller = SettingsController(ConfigRepository(MapSettings()))
+        setContent {
+            WizardScreen(
+                role = WizardRole.DESKTOP_SOURCE,
+                controller = controller,
+                provider = FakeProvider(),
+                healthChecker = emptyHealthChecker,
+                scrollbarContent = {
+                    Text(text = "scrollbar", modifier = Modifier.testTag(SCROLLBAR_SLOT_TAG))
+                },
+            )
+        }
+
+        onNodeWithTag(SCROLLBAR_SLOT_TAG).assertIsDisplayed()
     }
 
     // --- 選択ページの即時保存 ---
@@ -280,5 +302,9 @@ class WizardScreenTest {
 
         onNodeWithTag(TAG_WIZARD_CLOSE).performClick()
         assertTrue(closed)
+    }
+
+    private companion object {
+        const val SCROLLBAR_SLOT_TAG = "scrollbar-slot"
     }
 }
