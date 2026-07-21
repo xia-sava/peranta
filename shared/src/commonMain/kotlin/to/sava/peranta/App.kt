@@ -36,6 +36,7 @@ fun App(
     onOpenSettings: (() -> Unit)? = null,
     onOpenPairing: (() -> Unit)? = null,
     onOpenAppFilter: (() -> Unit)? = null,
+    onOpenReceiveSetup: (() -> Unit)? = null,
     onOpenHealthCheck: (() -> Unit)? = null,
     timelineActions: TimelineActions? = null,
     attachmentUi: AttachmentUi? = null,
@@ -47,7 +48,7 @@ fun App(
                 UpdateBanner(updateController, onInstallUpdate)
             }
             if (receiveEndpoint != null || onOpenSettings != null || onOpenPairing != null ||
-                onOpenAppFilter != null || onOpenHealthCheck != null
+                onOpenAppFilter != null || onOpenReceiveSetup != null || onOpenHealthCheck != null
             ) {
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
@@ -59,6 +60,9 @@ fun App(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.End,
                         ) {
+                            if (onOpenReceiveSetup != null) {
+                                TextButton(onClick = onOpenReceiveSetup) { Text(text = "受信のセットアップ") }
+                            }
                             if (onOpenHealthCheck != null) {
                                 TextButton(onClick = onOpenHealthCheck) { Text(text = "健康診断") }
                             }
@@ -110,6 +114,7 @@ fun SendRoleApp(
     onOpenSettings: (() -> Unit)? = null,
     onOpenPairing: (() -> Unit)? = null,
     onOpenAppFilter: (() -> Unit)? = null,
+    onOpenReceiveSetup: (() -> Unit)? = null,
     onOpenHealthCheck: (() -> Unit)? = null,
 ) {
     PerantaTheme {
@@ -127,6 +132,9 @@ fun SendRoleApp(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End,
                     ) {
+                        if (onOpenReceiveSetup != null) {
+                            TextButton(onClick = onOpenReceiveSetup) { Text(text = "受信のセットアップ") }
+                        }
                         if (onOpenHealthCheck != null) {
                             TextButton(onClick = onOpenHealthCheck) { Text(text = "健康診断") }
                         }

@@ -6,7 +6,7 @@ import kotlin.test.assertFailsWith
 
 class ReceiveSetupStepsTest {
 
-    /** 手順は §5 の 5 つが規定順で並ぶ。 */
+    /** 手順は 5 つが規定順で並ぶ。 */
     @Test
     fun orderedIdsAreTheFiveStepsInOrder() {
         assertEquals(
@@ -25,7 +25,7 @@ class ReceiveSetupStepsTest {
         assertEquals(5, ReceiveSetupSteps.numberOf(ReceiveSetupSteps.SELF_TEST_ID))
     }
 
-    /** タイトルは §5 の表どおり。 */
+    /** タイトルは画面の手順表示どおり。 */
     @Test
     fun titlesMatchSpecTable() {
         assertEquals("ntfy アプリの導入", ReceiveSetupSteps.titleOf(ReceiveSetupSteps.NTFY_INSTALLED_ID))

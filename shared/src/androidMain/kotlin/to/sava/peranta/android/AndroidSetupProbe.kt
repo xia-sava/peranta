@@ -41,6 +41,13 @@ class AndroidSetupProbe(context: Context) {
     fun upRegistered(config: PerantaConfig): Boolean =
         UnifiedPush.getAckDistributor(appContext) != null && config.unifiedPushEndpoint != null
 
+    /**
+     * UnifiedPush へ登録済みか（ディストリビュータを ack 済みか）。
+     * config の受信要件が欠けていても受信のセットアップ画面へ入れるよう、登録の有無だけを見る。
+     */
+    fun unifiedPushRegistered(): Boolean =
+        UnifiedPush.getAckDistributor(appContext) != null
+
     /** 払い出しエンドポイントと設定サーバの照合結果。endpoint 未払い出しなら null。 */
     fun endpointMatch(config: PerantaConfig): EndpointServerMatch? =
         config.unifiedPushEndpoint?.let { matchEndpointServer(it, config) }

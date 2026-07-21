@@ -33,6 +33,8 @@ import to.sava.peranta.android.AndroidAttachmentActions
 import to.sava.peranta.android.AndroidAttachmentReceive
 import to.sava.peranta.android.AndroidHealthChecker
 import to.sava.peranta.android.AndroidInstalledAppsProvider
+import to.sava.peranta.android.AndroidReceiveSetupProvider
+import to.sava.peranta.android.AndroidSetupProbe
 import to.sava.peranta.android.AttachmentTransferService
 import to.sava.peranta.android.PerantaReceive
 import to.sava.peranta.android.PerantaUnifiedPush
@@ -55,6 +57,7 @@ import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.QrCodeCanvas
 import to.sava.peranta.ui.SettingsScreen
 import to.sava.peranta.ui.ShareScreen
+import to.sava.peranta.ui.setup.ReceiveSetupScreen
 import to.sava.peranta.update.AndroidUpdater
 
 /** 通知権限が拒否されたときにタイムラインへ出す文言（§10.5）。 */
@@ -72,7 +75,7 @@ private const val KEY_PENDING_SAVE_BLOB_ID = "pendingSaveBlobId"
  * MainActivity が表示する画面（§10）。
  * [Main] はロール（受信/送信）に応じて本体を出し、[Pairing] は QR 取り込み画面、
  * [Settings] は設定画面（§10.2）、[AppFilter] はアプリフィルタ画面（§10.4）、
- * [HealthCheck] は健康診断画面（§10.5）を出す。
+ * [HealthCheck] は健康診断画面（§10.5）、[ReceiveSetup] は受信のセットアップ常設画面を出す。
  */
 private sealed interface Screen {
     data object Main : Screen
@@ -80,6 +83,7 @@ private sealed interface Screen {
     data object Settings : Screen
     data object AppFilter : Screen
     data object HealthCheck : Screen
+    data object ReceiveSetup : Screen
     data class Share(val files: List<Uri>) : Screen
 }
 
@@ -158,6 +162,10 @@ class MainActivity : ComponentActivity() {
         }
 
         val healthChecker = AndroidHealthChecker(this)
+        val receiveSetupProvider = AndroidReceiveSetupProvider(this)
+        // 受信のセットアップは受信ロールの設定が揃うか、UnifiedPush 登録済みのとき入れる。
+        // 登録済みなら config が欠けても修復の作業台へ戻れるようにする。
+        val showReceiveSetup = config.isReadyForUnifiedPushReceive || AndroidSetupProbe(this).unifiedPushRegistered()
         val sharedFiles = extractSharedFiles(intent)
 
         setContent {
@@ -209,6 +217,11 @@ class MainActivity : ComponentActivity() {
                         onOpenSettings = { screen = Screen.Settings },
                         onOpenPairing = { screen = Screen.Pairing },
                         onOpenAppFilter = { screen = Screen.AppFilter },
+                        onOpenReceiveSetup = if (showReceiveSetup) {
+                            { screen = Screen.ReceiveSetup }
+                        } else {
+                            null
+                        },
                         onOpenHealthCheck = { screen = Screen.HealthCheck },
                         timelineActions = PerantaReceive.timelineActions(this@MainActivity),
                         attachmentUi = attachmentUi,
@@ -222,6 +235,11 @@ class MainActivity : ComponentActivity() {
                         onOpenSettings = { screen = Screen.Settings },
                         onOpenPairing = { screen = Screen.Pairing },
                         onOpenAppFilter = { screen = Screen.AppFilter },
+                        onOpenReceiveSetup = if (showReceiveSetup) {
+                            { screen = Screen.ReceiveSetup }
+                        } else {
+                            null
+                        },
                         onOpenHealthCheck = { screen = Screen.HealthCheck },
                     )
                 }
@@ -257,6 +275,15 @@ class MainActivity : ComponentActivity() {
                 Screen.HealthCheck -> PerantaTheme {
                     HealthCheckScreen(
                         checker = healthChecker,
+                        onBack = { screen = Screen.Main },
+                        externalRefreshKey = resumeTick,
+                        onCopyText = { text, sensitive -> copyText(text, sensitive) },
+                    )
+                }
+
+                Screen.ReceiveSetup -> PerantaTheme {
+                    ReceiveSetupScreen(
+                        provider = receiveSetupProvider,
                         onBack = { screen = Screen.Main },
                         externalRefreshKey = resumeTick,
                         onCopyText = { text, sensitive -> copyText(text, sensitive) },

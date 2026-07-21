@@ -1,7 +1,7 @@
 package to.sava.peranta.ui.setup
 
 /**
- * 受信のセットアップ手順（§5）の番号・タイトル・説明文を単一所有する。
+ * 受信のセットアップ手順の番号・タイトル・説明文を単一所有する。
  * 健康診断からの誘導文もこの定数から組み立て、手順名・番号の重複による齟齬を防ぐ。
  */
 object ReceiveSetupSteps {
@@ -28,7 +28,7 @@ object ReceiveSetupSteps {
         return index + 1
     }
 
-    /** 手順タイトル（§5 の表）。未知の id はエラーにする。 */
+    /** 手順タイトル。未知の id はエラーにする。 */
     fun titleOf(id: String): String =
         when (id) {
             NTFY_INSTALLED_ID -> "ntfy アプリの導入"
@@ -45,9 +45,9 @@ object ReceiveSetupSteps {
             NTFY_INSTALLED_ID ->
                 "UnifiedPush の配信には ntfy アプリが必要です。導入して既定に設定してください。"
             SERVER_CONFIG_ID ->
-                "ntfy アプリの 設定 →「既定のサーバー」にサーバーURL を設定し、" +
-                    "「カスタムヘッダを追加」でサービスURL・ヘッダ名・ヘッダ値を登録します" +
-                    "（「ユーザーの管理」でこのサーバーのユーザーを登録済みなら不要）。"
+                "ntfy アプリの 設定 →「既定のサーバー」と、「カスタムヘッダを追加」の サービスURL の" +
+                    " 2 箇所に同じサーバーURL を設定し、あわせてヘッダ名・ヘッダ値を登録します。" +
+                    "「ユーザーの管理」でこのサーバーのユーザーを登録済みなら、カスタムヘッダの登録は不要です。"
             UNIFIED_PUSH_ID ->
                 "受信エンドポイントの払い出しを受けるには UnifiedPush へ登録してください。"
             NTFY_BATTERY_ID ->
