@@ -29,6 +29,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.snapshotFlow
 import to.sava.peranta.autostart.AutoStartManager
 import to.sava.peranta.autostart.DesktopHealthChecker
@@ -49,6 +50,7 @@ import java.awt.Window as AwtWindow
 import java.awt.datatransfer.StringSelection
 import java.util.concurrent.atomic.AtomicReference
 import javax.swing.UIManager
+import kotlin.system.exitProcess
 
 /** トレイ・ウィンドウ用の簡易アイコン。 */
 private val perantaIcon: Painter = object : Painter() {
@@ -92,6 +94,9 @@ private fun bringWindowToFront(window: AwtWindow) {
     }
 }
 
+/** 終了時に受信機の close（JSONL 書き込みの完了）を待つ上限。 */
+private const val RECEIVER_CLOSE_TIMEOUT_MILLIS: Long = 2_000L
+
 fun main(args: Array<String>) {
     initLogging()
     val log = Logger.withTag("Main")
@@ -122,12 +127,15 @@ fun main(args: Array<String>) {
         var receiver by remember { mutableStateOf<DesktopReceiver?>(null) }
         var errorMessage by remember { mutableStateOf<String?>(null) }
 
-        // アプリ終了時は次世代の受信機が起動しないため JSONL 競合の懸念が無く、close 完了を待たずに投げる。
+        // 終了時は受信機の close（JSONL 書き込みの完了）を上限つきで待ってからアプリを閉じる。
         val appScope = rememberCoroutineScope()
         val closeAndExit = {
-            receiver?.let { appScope.launch { it.close() } }
-            updater.close()
-            exitApplication()
+            appScope.launch {
+                receiver?.let { withTimeoutOrNull(RECEIVER_CLOSE_TIMEOUT_MILLIS) { it.close() } }
+                updater.close()
+                exitApplication()
+            }
+            Unit
         }
 
         var windowVisible by remember { mutableStateOf(!startMinimized) }
@@ -250,4 +258,7 @@ fun main(args: Array<String>) {
             }
         }
     }
+
+    // トレイ（AWT）関連の非デーモンスレッドが残って JVM が終了しないことがあるため、明示的に終える。
+    exitProcess(0)
 }
