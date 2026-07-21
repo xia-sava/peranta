@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -197,12 +198,16 @@ private fun HealthItemRow(item: HealthCheckItem, onFixed: () -> Unit) {
         val fixLabel = item.fixLabel
         val onFix = item.onFix
         if (fixLabel != null && onFix != null) {
+            var guidanceOpen by remember(item.id) { mutableStateOf(false) }
+            fun executeFix() {
+                fixError = runFix(onFix)
+                fixRequested = fixError == null
+                if (fixError == null) onFixed()
+            }
             Column(horizontalAlignment = Alignment.End) {
                 TextButton(
                     onClick = {
-                        fixError = runFix(onFix)
-                        fixRequested = fixError == null
-                        if (fixError == null) onFixed()
+                        if (item.fixGuidance != null) guidanceOpen = true else executeFix()
                     },
                     modifier = Modifier.testTag("$TAG_HEALTH_FIX_PREFIX${item.id}"),
                 ) {
@@ -224,6 +229,29 @@ private fun HealthItemRow(item: HealthCheckItem, onFixed: () -> Unit) {
                         modifier = Modifier.testTag("$TAG_HEALTH_FIX_PENDING_PREFIX${item.id}"),
                     )
                 }
+            }
+            if (guidanceOpen) {
+                AlertDialog(
+                    onDismissRequest = { guidanceOpen = false },
+                    title = { Text(text = item.label) },
+                    text = { Text(text = item.fixGuidance.orEmpty()) },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                guidanceOpen = false
+                                executeFix()
+                            },
+                            modifier = Modifier.testTag("$TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX${item.id}"),
+                        ) {
+                            Text(text = "続ける")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { guidanceOpen = false }) {
+                            Text(text = "やめる")
+                        }
+                    },
+                )
             }
         }
     }

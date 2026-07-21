@@ -18,6 +18,8 @@ enum class HealthCheckState {
  * [detail] は状態の補足や「どこを直すか」の案内文で、無ければ null。
  * [fixLabel] と [onFix] は「直す」導線で、項目ごとに文言（権限を許可 / 設定を開く / 登録する 等）を変える。
  * 両方が揃ったときだけ操作ボタンを出す。合格・情報項目や、直す手段が無い項目では null にする。
+ * [fixGuidance] があると「直す」の実行前に案内ダイアログを挟み、移動先で行う操作を説明してから実行する
+ * （システム設定へ飛ばすだけでは次の操作が分かりにくい項目に使う）。
  */
 data class HealthCheckItem(
     val id: String,
@@ -26,6 +28,7 @@ data class HealthCheckItem(
     val detail: String? = null,
     val fixLabel: String? = null,
     val onFix: (() -> Unit)? = null,
+    val fixGuidance: String? = null,
 )
 
 /**
@@ -71,3 +74,6 @@ const val TAG_HEALTH_FIX_ERROR_PREFIX: String = "health-fix-error-"
 
 /** 「直す」操作が成功した直後の案内文のタグ接頭辞（末尾に item id を付ける）。 */
 const val TAG_HEALTH_FIX_PENDING_PREFIX: String = "health-fix-pending-"
+
+/** 「直す」実行前の案内ダイアログの続行ボタンのタグ接頭辞（末尾に item id を付ける）。 */
+const val TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX: String = "health-fix-guidance-ok-"

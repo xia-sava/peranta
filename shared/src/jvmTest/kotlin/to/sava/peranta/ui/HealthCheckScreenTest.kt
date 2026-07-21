@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
@@ -67,6 +68,30 @@ class HealthCheckScreenTest {
         onNodeWithTag("${TAG_HEALTH_FIX_PREFIX}autostart").performClick()
         onNodeWithTag("${TAG_HEALTH_FIX_ERROR_PREFIX}autostart").assertIsDisplayed()
         assertEquals(1, checker.calls)
+    }
+
+    /** fixGuidance 付きの項目は「直す」で先に案内ダイアログを出し、続行して初めて onFix を実行する。 */
+    @Test
+    fun guidanceDialogShowsBeforeFix() = runComposeUiTest {
+        var fixed = false
+        setContent {
+            HealthCheckScreen(
+                checker = checker(
+                    HealthCheckItem(
+                        id = "sms",
+                        label = "SMS の受信",
+                        state = HealthCheckState.FAILING,
+                        fixLabel = "設定を開く",
+                        onFix = { fixed = true },
+                        fixGuidance = "アプリ情報画面で権限を変更してください。",
+                    ),
+                ),
+            )
+        }
+        onNodeWithTag("${TAG_HEALTH_FIX_PREFIX}sms").performClick()
+        assertFalse(fixed)
+        onNodeWithTag("${TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX}sms").performClick()
+        assertTrue(fixed)
     }
 
     /** onFix が成功すると、項目に実行済みの案内文を出す。 */

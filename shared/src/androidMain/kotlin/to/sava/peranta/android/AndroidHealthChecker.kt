@@ -98,6 +98,11 @@ class AndroidHealthChecker(context: Context) : HealthChecker {
             detail = if (granted) null else "SMS を直接受信して転送するには SMS 受信を許可してください。",
             fixLabel = if (granted) null else "設定を開く",
             onFix = if (granted) null else ::openAppDetailsSettings,
+            fixGuidance = if (granted) {
+                null
+            } else {
+                "アプリ情報画面が開きます。「権限」から「SMS」を選んで許可に変更し、この画面に戻ってください。"
+            },
         )
     }
 
@@ -109,6 +114,12 @@ class AndroidHealthChecker(context: Context) : HealthChecker {
             detail = if (installed) null else "UnifiedPush の配信には ntfy アプリが必要です。導入して既定に設定してください。",
             fixLabel = if (installed) null else "インストール",
             onFix = if (installed) null else ::openNtfyInStore,
+            fixGuidance = if (installed) {
+                null
+            } else {
+                "ストアが開きます。ntfy をインストールしたら一度 ntfy を開いて通知の許可を済ませ、" +
+                    "この画面に戻って再チェックしてください。"
+            },
         )
 
     private fun unifiedPushRegisteredItem(config: PerantaConfig): HealthCheckItem {
