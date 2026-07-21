@@ -140,6 +140,25 @@ class WizardScreenTest {
         assertEquals(false, repo.load().sendEnabled)
     }
 
+    /** 「自動転送する」を選ぶと、SMS 直接受信トグルの下に理由の説明文が表示される。 */
+    @Test
+    fun choosingForwardShowsSmsDirectReceiveDescription() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(pairedConfig())
+        val controller = SettingsController(repo)
+        setContent {
+            WizardScreen(
+                role = WizardRole.ANDROID,
+                controller = controller,
+                provider = FakeProvider(),
+                healthChecker = emptyHealthChecker,
+            )
+        }
+
+        onNodeWithTag(TAG_WIZARD_ROLE_SEND).performClick()
+        onNodeWithText(SMS_DIRECT_RECEIVE_DESCRIPTION).assertIsDisplayed()
+    }
+
     /**
      * A2a（QR 取り込み）ページを実際に合成しても落ちない（外側スクロール内へ埋め込む中身が
      * 二重スクロールにならないことの回帰）。JOIN を選んで次へ進み、取り込み欄が表示される。

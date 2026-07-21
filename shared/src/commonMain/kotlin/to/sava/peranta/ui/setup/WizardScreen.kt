@@ -520,13 +520,13 @@ private fun RoleChoiceBody(
         style = MaterialTheme.typography.bodyMedium,
     )
     ChoiceCard(
-        label = "自動転送する（このスマホに届く通知や SMS を他の端末へ送る）",
+        label = "自動転送する（この端末に届く通知や SMS を他の端末へ送る）",
         selected = answers.forward == true,
         tag = TAG_WIZARD_ROLE_SEND,
         onClick = { onChooseForward(true) },
     )
     ChoiceCard(
-        label = "転送しない（受け取り専用にする。他の端末から転送された通知を受け取る）",
+        label = "転送しない（この端末に届く通知や SMS を他の端末へ送らない）",
         selected = answers.forward == false,
         tag = TAG_WIZARD_ROLE_RECEIVE,
         onClick = { onChooseForward(false) },
@@ -537,6 +537,11 @@ private fun RoleChoiceBody(
             onCheckedChange = onSmsDirectReceiveChange,
             label = "SMS を直接受信して転送する",
             tag = TAG_WIZARD_SMS_DIRECT_RECEIVE,
+        )
+        Text(
+            text = SMS_DIRECT_RECEIVE_DESCRIPTION,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

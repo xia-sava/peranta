@@ -27,6 +27,14 @@ import to.sava.peranta.ui.TAG_TOKEN
 private const val QR_HINT: String =
     "この QR を新しい端末のカメラで読み取ってください。時間が経つと自動的に隠れます。"
 
+/**
+ * 「SMS を直接受信して転送する」トグルの下に添える説明文（§3.1: SMS アプリの通知経由の弱点）。
+ * ウィザードとフラット画面の両方から参照する。
+ */
+internal const val SMS_DIRECT_RECEIVE_DESCRIPTION: String =
+    "ON にすると SMS を直接受信し、本文を全文確実に転送します。" +
+        "OFF だと SMS アプリの通知経由になり、本文が省略されたり既読の SMS は転送されないことがあります。"
+
 @Composable
 internal fun HostField(value: String, onValueChange: (String) -> Unit, tag: String = TAG_HOST) {
     OutlinedTextField(

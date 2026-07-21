@@ -29,6 +29,7 @@ import kotlinx.coroutines.cancel
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.pairing.SettingsController
+import to.sava.peranta.ui.setup.SMS_DIRECT_RECEIVE_DESCRIPTION
 import to.sava.peranta.update.PLATFORM_DESKTOP
 import to.sava.peranta.update.UpdateChecker
 import to.sava.peranta.update.UpdateController
@@ -470,6 +471,18 @@ class SettingsScreenTest {
         val loaded = repo.load()
         assertEquals(true, loaded.sendEnabled)
         assertEquals(false, loaded.smsDirectReceive)
+    }
+
+    /** SMS 直接受信トグルの下に、理由を説明する文が表示される。 */
+    @Test
+    fun smsDirectReceiveDescriptionIsDisplayedWhenSendRoleOptionsShown() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller, showSendRoleOptions = true) }
+
+        onNodeWithText(SMS_DIRECT_RECEIVE_DESCRIPTION).assertIsDisplayed()
     }
 
     // --- アプリの更新 ---

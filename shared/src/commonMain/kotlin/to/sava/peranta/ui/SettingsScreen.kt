@@ -41,6 +41,7 @@ import to.sava.peranta.ui.setup.KeyStatusText
 import to.sava.peranta.ui.setup.LabeledCheckbox
 import to.sava.peranta.ui.setup.PairingQrSection
 import to.sava.peranta.ui.setup.PortField
+import to.sava.peranta.ui.setup.SMS_DIRECT_RECEIVE_DESCRIPTION
 import to.sava.peranta.ui.setup.TokenField
 import to.sava.peranta.update.UpdateController
 import to.sava.peranta.update.UpdateStatus
@@ -234,6 +235,11 @@ fun SettingsScreen(
                         },
                         label = "SMS を直接受信して転送する",
                         tag = TAG_SMS_DIRECT_RECEIVE,
+                    )
+                    Text(
+                        text = SMS_DIRECT_RECEIVE_DESCRIPTION,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
