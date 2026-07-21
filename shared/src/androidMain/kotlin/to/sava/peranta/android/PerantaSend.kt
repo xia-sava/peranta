@@ -52,8 +52,8 @@ object PerantaSend {
     /** 直接受信 SMS と SMS アプリ通知の重複抑止（§3.1）。 */
     val dedupe = SmsDedupeTracker()
 
-    /** 同一通知の連続更新の抑止（§3.1）。 */
-    val updates = NotificationUpdateTracker()
+    /** 内容が変わらない通知再投稿の抑止（§3.1）。 */
+    val reposts = NotificationRepostTracker()
 
     /** 自端末が転送した通知の key を覚え、元通知の削除検知で既読同期の要否を判定する（§3.4）。 */
     val forwarded = ForwardedKeyTracker()

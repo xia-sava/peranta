@@ -160,8 +160,8 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             log.d { "skipping notification from $packageName" }
             return
         }
-        if (PerantaSend.updates.isRepeatUpdate(sbn.key, fields.text.orEmpty(), now)) {
-            log.d { "skipping repeated update from $packageName" }
+        if (PerantaSend.reposts.isUnchangedRepost(sbn.key, fields.title.orEmpty(), fields.text.orEmpty())) {
+            log.d { "skipping unchanged repost from $packageName" }
             return
         }
 
@@ -203,6 +203,8 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         val sendConfig = config.copy(deviceId = deviceId)
         // 転送対象にした通知の key を覚え、元通知が消えたときの既読同期（§3.4）で参照する。
         PerantaSend.forwarded.remember(prepared.payload.notificationKey)
+        // 内容も記録し、同一内容のままの再投稿（未読会話の再掲など）を次回以降スキップする（§3.1）。
+        PerantaSend.reposts.recordForwarded(input.notificationKey, input.title, input.text)
         scope.launch {
             // 長文本文なら全文を暗号化 blob として添付し、インラインは切り詰めプレビューにする（§4.3）。
             val payload = PerantaSend.withFullTextAttachment(
@@ -232,6 +234,7 @@ class PerantaNotificationListenerService : NotificationListenerService() {
     private fun handleRemoved(sbn: StatusBarNotification) {
         val config = androidConfigRepository().load()
         if (!config.sendEnabled || !config.isReadyForSend) return
+        PerantaSend.reposts.forget(sbn.key)
         if (!PerantaSend.forwarded.consume(sbn.key)) {
             log.d { "removed notification was not forwarded; ignoring key=${sbn.key}" }
             return
