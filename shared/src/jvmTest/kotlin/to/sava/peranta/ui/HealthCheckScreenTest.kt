@@ -144,6 +144,36 @@ class HealthCheckScreenTest {
         assertTrue(fixed)
     }
 
+    /** 再チェックで項目リストの構成が変わっても、開いている案内ダイアログは維持される。 */
+    @Test
+    fun guidanceDialogSurvivesRecheckWithChangedItemList() = runComposeUiTest {
+        val guidanceItem = HealthCheckItem(
+            id = "up-endpoint-server",
+            label = "受信エンドポイントのサーバ",
+            state = HealthCheckState.FAILING,
+            fixLabel = "登録し直す",
+            onFix = {},
+            fixGuidance = "ntfy 側の設定を変更してください。",
+        )
+        val checker = QueueHealthChecker(
+            listOf(
+                listOf(guidanceItem),
+                listOf(
+                    HealthCheckItem(id = "extra", label = "追加項目", state = HealthCheckState.FAILING, fixLabel = "直す", onFix = {}),
+                    guidanceItem,
+                ),
+            ),
+        )
+        val key = mutableStateOf(0)
+        setContent { HealthCheckScreen(checker = checker, externalRefreshKey = key.value) }
+
+        onNodeWithTag("${TAG_HEALTH_FIX_PREFIX}up-endpoint-server").performClick()
+        onNodeWithTag("${TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX}up-endpoint-server").assertIsDisplayed()
+
+        runOnIdle { key.value = 1 }
+        onNodeWithTag("${TAG_HEALTH_FIX_GUIDANCE_OK_PREFIX}up-endpoint-server").assertIsDisplayed()
+    }
+
     /** onFix が成功すると、項目に実行済みの案内文を出す。 */
     @Test
     fun successfulFixShowsDoneNotice() = runComposeUiTest {

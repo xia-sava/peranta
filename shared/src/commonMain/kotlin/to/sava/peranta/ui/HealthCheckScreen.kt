@@ -19,8 +19,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -115,14 +117,17 @@ fun HealthCheckScreen(
                     AllClearBanner()
                 }
                 visible.forEach { item ->
-                    HealthItemRow(
-                        item = item,
-                        onFixed = {
-                            manualRefresh++
-                            followUpRechecks = FIX_RECHECK_COUNT
-                        },
-                        onCopyText = onCopyText,
-                    )
+                    // 再チェックで項目の増減・並び替えが起きても行の状態（開いたダイアログ等）を保つ。
+                    key(item.id) {
+                        HealthItemRow(
+                            item = item,
+                            onFixed = {
+                                manualRefresh++
+                                followUpRechecks = FIX_RECHECK_COUNT
+                            },
+                            onCopyText = onCopyText,
+                        )
+                    }
                 }
             }
 
@@ -211,7 +216,8 @@ private fun HealthItemRow(
         val fixLabel = item.fixLabel
         val onFix = item.onFix
         if (fixLabel != null && onFix != null) {
-            var guidanceOpen by remember(item.id) { mutableStateOf(false) }
+            // 案内ダイアログは他アプリへの往復（Activity 再生成を含む）をまたいで開いたままにする。
+            var guidanceOpen by rememberSaveable(item.id) { mutableStateOf(false) }
             fun executeFix() {
                 fixError = runFix(onFix)
                 fixRequested = fixError == null
