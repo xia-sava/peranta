@@ -75,12 +75,13 @@ class AndroidSetupProbe(context: Context) {
     fun notificationsEnabled(): Boolean =
         notificationManager.areNotificationsEnabled()
 
-    /** ntfy 側のサーバ設定へ貼り付ける値と ntfy 起動をまとめた補助操作。 */
+    /** ntfy 側のサーバ設定へ貼り付ける値と ntfy 起動をまとめた補助操作。貼り先は ntfy アプリの表記に合わせる。 */
     fun ntfyServerAids(config: PerantaConfig): List<FixAid> =
         listOf(
-            FixAid.Copy(label = "サーバーURL（既定のサーバー / サービスURL の2箇所）", value = config.httpBaseUrl()),
-            FixAid.Copy(label = "ヘッダ名", value = "Authorization"),
-            FixAid.Copy(label = "ヘッダ値", value = "Bearer ${config.accessToken.orEmpty()}", sensitive = true),
+            FixAid.Copy(label = "デフォルトのサーバーに貼るサーバーURL", value = config.httpBaseUrl()),
+            FixAid.Copy(label = "カスタムヘッダーのサービスURL", value = config.httpBaseUrl()),
+            FixAid.Copy(label = "カスタムヘッダーのヘッダ名", value = "Authorization"),
+            FixAid.Copy(label = "カスタムヘッダーのヘッダ値", value = "Bearer ${config.accessToken.orEmpty()}", sensitive = true),
             FixAid.Action(label = "ntfy を開く", onRun = ::openNtfyApp),
         )
 

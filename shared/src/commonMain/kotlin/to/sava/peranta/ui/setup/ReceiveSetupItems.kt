@@ -7,7 +7,7 @@ import to.sava.peranta.ui.FixAid
 
 /** 手順2が不一致のときの事実と影響の記述。 */
 private const val SERVER_CONFIG_MISMATCH_DETAIL: String =
-    "手順3の照合で不一致です。ntfy の既定のサーバーがこのアプリの設定サーバと一致していないため、" +
+    "手順3の照合で不一致です。ntfy のデフォルトのサーバーがこのアプリの設定サーバと一致していないため、" +
         "転送された通知がこの端末に届きません。"
 
 /**

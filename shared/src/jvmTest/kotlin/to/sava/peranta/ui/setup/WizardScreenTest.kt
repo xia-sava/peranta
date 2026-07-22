@@ -185,6 +185,59 @@ class WizardScreenTest {
     }
 
     /**
+     * SMS 権限ページは IN_PAGE モードで説明文を省く一般則の例外で、遷移先のアプリ情報画面だけでは
+     * 分からない操作手順（権限→SMS の選択）を説明文として表示する。
+     */
+    @Test
+    fun smsPermissionPageShowsGuidanceDescription() = runComposeUiTest {
+        val guidance = "アプリ情報画面が開きます。「権限」から「SMS」を選んで許可に変更し、この画面に戻ってください。"
+        val repo = ConfigRepository(MapSettings())
+        repo.save(pairedConfig())
+        val controller = SettingsController(repo)
+        setContent {
+            WizardScreen(
+                caps = androidCaps,
+                controller = controller,
+                provider = FakeProvider(
+                    listOf(
+                        SetupItemUi(
+                            id = WizardFlow.ITEM_NLS,
+                            title = "通知へのアクセス",
+                            description = null,
+                            status = SetupStatus.DONE,
+                            statusDetail = null,
+                            action = SetupAction(label = "権限を許可", run = {}),
+                        ),
+                        SetupItemUi(
+                            id = WizardFlow.ITEM_SELF_BATTERY,
+                            title = "バッテリー最適化の除外",
+                            description = null,
+                            status = SetupStatus.DONE,
+                            statusDetail = null,
+                            action = SetupAction(label = "設定を開く", run = {}),
+                        ),
+                        SetupItemUi(
+                            id = WizardFlow.ITEM_SMS,
+                            title = "SMS の受信",
+                            description = guidance,
+                            status = SetupStatus.TODO,
+                            statusDetail = null,
+                            action = SetupAction(label = "設定を開く", run = {}),
+                        ),
+                    ),
+                ),
+                healthChecker = emptyHealthChecker,
+            )
+        }
+
+        onNodeWithTag(TAG_WIZARD_ROLE_SEND).performClick()
+        onNodeWithTag(TAG_WIZARD_NEXT).performClick() // 通知の自動転送 → 通知へのアクセス
+        onNodeWithTag(TAG_WIZARD_NEXT).performClick() // 通知へのアクセス → バッテリー最適化の除外
+        onNodeWithTag(TAG_WIZARD_NEXT).performClick() // バッテリー最適化の除外 → SMS の受信
+        onNodeWithText(guidance).assertIsDisplayed()
+    }
+
+    /**
      * A2a（QR 取り込み）ページを実際に合成しても落ちない（外側スクロール内へ埋め込む中身が
      * 二重スクロールにならないことの回帰）。JOIN を選んで次へ進み、取り込み欄が表示される。
      */

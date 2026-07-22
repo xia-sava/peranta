@@ -490,6 +490,16 @@ private fun ItemPageBody(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+    // SMS は遷移先のアプリ情報画面だけでは操作手順が分からないため、この項目に限り説明文を表示する。
+    if (page.id == WizardFlow.PAGE_PERM_SMS) {
+        pageItems.firstOrNull { it.id == WizardFlow.ITEM_SMS }?.description?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
 @Composable

@@ -66,7 +66,7 @@ class ReceiveSetupItemsTest {
         ).byId(ReceiveSetupSteps.SERVER_CONFIG_ID)
         assertEquals(SetupStatus.TODO, mismatch.status)
         assertEquals(
-            "手順3の照合で不一致です。ntfy の既定のサーバーがこのアプリの設定サーバと一致していないため、" +
+            "手順3の照合で不一致です。ntfy のデフォルトのサーバーがこのアプリの設定サーバと一致していないため、" +
                 "転送された通知がこの端末に届きません。",
             mismatch.statusDetail,
         )
@@ -172,7 +172,7 @@ class ReceiveSetupItemsTest {
             val detail = build(selfTestStatus = SelfTestStatus.Done(result, 0L))
                 .byId(ReceiveSetupSteps.SELF_TEST_ID).statusDetail
             assertTrue(detail!!.contains("手順2〜4を確認してください"))
-            assertTrue(!detail.contains("既定のサーバー") && !detail.contains("カスタムヘッダ"))
+            assertTrue(!detail.contains("デフォルトのサーバー") && !detail.contains("カスタムヘッダー"))
         }
     }
 
