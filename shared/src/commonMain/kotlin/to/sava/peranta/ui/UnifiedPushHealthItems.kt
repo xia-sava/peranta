@@ -4,11 +4,11 @@ import to.sava.peranta.ui.setup.ReceiveSetupSteps
 import to.sava.peranta.ui.setup.SetupItemUi
 import to.sava.peranta.ui.setup.SetupStatus
 
-/** 健康診断から受信のセットアップ画面を開く誘導リンクのラベル。 */
+/** 動作チェックから受信のセットアップ画面を開く誘導リンクのラベル。 */
 private const val OPEN_SETUP_LABEL: String = "セットアップを開く"
 
 /**
- * 受信のセットアップ手順の [SetupItemUi] 列を、健康診断の [HealthCheckItem] 列へ機械変換する（§10.5）。
+ * 受信のセットアップ手順の [SetupItemUi] 列を、動作チェックの [HealthCheckItem] 列へ機械変換する（§10.5）。
  * UnifiedPush 系の項目は診断では修復手段（onFix）を持たず、受信のセットアップ画面への誘導だけを担う。
  * 状態は [SetupStatus] を写し取り、ラベルは「N. タイトル」、[detail] は状態の事実
  * （[SetupItemUi.statusDetail]）を基に、直接の操作が要る未達の項目にだけ [ReceiveSetupSteps.guidanceTo]

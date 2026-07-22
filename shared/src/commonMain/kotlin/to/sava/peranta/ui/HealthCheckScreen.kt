@@ -61,7 +61,7 @@ private val ALL_CLEAR_CONTAINER: Color = Color(0xFFC8E6C9)
 private val ALL_CLEAR_CONTENT: Color = Color(0xFF1B5E20)
 
 /**
- * 健康診断画面（§10.5）。[checker] が返す項目を合格 ✓ / 不合格 ✗ / 情報 ⓘ で描画し、
+ * 動作チェック画面（§10.5）。[checker] が返す項目を合格 ✓ / 不合格 ✗ / 情報 ⓘ で描画し、
  * 「直す」導線と「今すぐ再チェック」を提供する。対象外（[HealthCheckState.NOT_APPLICABLE]）項目は出さない。
  *
  * [externalRefreshKey] が変わると再チェックする。Android は画面復帰（ON_RESUME）のたびにこの値を進め、
@@ -154,7 +154,7 @@ private fun Header(onBack: (() -> Unit)?) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "健康診断",
+            text = "動作チェック",
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.testTag(TAG_HEALTH_TITLE),
         )

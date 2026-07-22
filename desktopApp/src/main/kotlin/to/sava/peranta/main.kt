@@ -302,7 +302,6 @@ fun main(args: Array<String>) {
                         onNavigate = onNavigate,
                         serverLabel = labelConfig.host.takeIf { it.isNotBlank() },
                         deviceLabel = labelConfig.deviceName?.takeIf { it.isNotBlank() },
-                        showReceiveSetup = false,
                     ) { shellDestination ->
                         when (shellDestination) {
                             ShellDestination.Timeline -> when {
@@ -322,6 +321,8 @@ fun main(args: Array<String>) {
                                 scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
                                 onCopyPairingUri = ::copyToClipboard,
                                 onOpenWizard = { showWizard = true },
+                                loadHealthItems = { DesktopHealthChecker(autoStart).check() },
+                                onOpenHealthCheck = { onNavigate(ShellDestination.HealthCheck) },
                                 updateController = updater.controller,
                                 onInstallUpdate = { url -> updater.install(url) },
                                 // 鍵の作成は例外として即時反映する（§10.2）。画面を離れたときの反映は onNavigate が担う。
@@ -351,7 +352,7 @@ fun main(args: Array<String>) {
                                 showDescription = true,
                             )
 
-                            // Desktop に受信のセットアップ画面は無い（showReceiveSetup=false でドロワーにも出さない）。
+                            // Desktop に受信のセットアップ画面は無い（セットアップ状況にも受信経路の行を出さない）。
                             ShellDestination.ReceiveSetup -> App()
                         }
                     }

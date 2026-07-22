@@ -105,7 +105,7 @@ class MainActivity : ComponentActivity() {
     private var updater: AndroidUpdater? = null
 
     /**
-     * 画面復帰（ON_RESUME）ごとに進めるカウンタ。健康診断画面はこれを再チェックの契機にし、
+     * 画面復帰（ON_RESUME）ごとに進めるカウンタ。動作チェック画面はこれを再チェックの契機にし、
      * システム設定から戻った直後の権限・設定状態を反映する（§10.5）。
      */
     private var resumeTick by mutableStateOf(0)
@@ -176,9 +176,10 @@ class MainActivity : ComponentActivity() {
 
         val receiveSetupProvider = AndroidReceiveSetupProvider(this)
         val wizardSetupProvider = AndroidWizardSetupProvider(this)
-        // 受信のセットアップは受信ロールの設定が揃うか、UnifiedPush 登録済みのとき入れる。
-        // 登録済みなら config が欠けても修復の作業台へ戻れるようにする。
-        val showReceiveSetup = config.isReadyForUnifiedPushReceive || AndroidSetupProbe(this).unifiedPushRegistered()
+        // 受信のセットアップは受信ロールの設定が揃うか、UnifiedPush 登録済みのとき使えるようにする。
+        // 登録済みなら config が欠けても修復の作業台へ戻れるようにする。入口は設定画面のセットアップ状況の受信経路の行。
+        val receiveSetupAvailable =
+            config.isReadyForUnifiedPushReceive || AndroidSetupProbe(this).unifiedPushRegistered()
         val sharedFiles = extractSharedFiles(intent)
 
         setContent {
@@ -195,12 +196,12 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            // 健康診断の UnifiedPush 系項目は受信のセットアップ画面へ誘導する。onOpen で診断からその画面へ移す。
+            // 動作チェックの UnifiedPush 系項目は受信のセットアップ画面へ誘導する。onOpen で診断からその画面へ移す。
             val healthChecker = remember {
                 AndroidHealthChecker(this@MainActivity) { destination = ShellDestination.ReceiveSetup }
             }
 
-            // 起動時にペアリング済みなら健康診断を実行し、対処の要る未達があれば診断画面へ誘導する（§10.5）。
+            // 起動時にペアリング済みなら動作チェックを実行し、対処の要る未達があれば診断画面へ誘導する（§10.5）。
             // 未セットアップは初回ウィザードが最優先のため、タイムライン表示中のときだけ遷移する。強制ブロックはしない。
             LaunchedEffect(Unit) {
                 if (config.hasSharedKey && overlay == null && destination == ShellDestination.Timeline &&
@@ -307,7 +308,6 @@ class MainActivity : ComponentActivity() {
                             onNavigate = onNavigate,
                             serverLabel = config.host.takeIf { it.isNotBlank() },
                             deviceLabel = config.deviceName?.takeIf { it.isNotBlank() },
-                            showReceiveSetup = showReceiveSetup,
                         ) { shellDestination ->
                             when (shellDestination) {
                                 ShellDestination.Timeline -> App(
@@ -338,6 +338,19 @@ class MainActivity : ComponentActivity() {
                                     onCopyPairingUri = { text -> copyPairingUri(text) },
                                     showSendRoleOptions = true,
                                     onOpenWizard = { overlay = Overlay.Wizard },
+                                    loadHealthItems = { healthChecker.check() },
+                                    onOpenHealthCheck = { onNavigate(ShellDestination.HealthCheck) },
+                                    hasReceiveSetup = receiveSetupAvailable,
+                                    loadReceiveSetupItems = if (receiveSetupAvailable) {
+                                        suspend { receiveSetupProvider.items() }
+                                    } else {
+                                        null
+                                    },
+                                    onOpenReceiveSetup = if (receiveSetupAvailable) {
+                                        { onNavigate(ShellDestination.ReceiveSetup) }
+                                    } else {
+                                        null
+                                    },
                                     updateController = updater.controller,
                                     onInstallUpdate = { url -> updater.install(url) },
                                     showHeader = false,
@@ -479,7 +492,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 任意のテキストをシステムクリップボードへコピーする（健康診断の案内ダイアログのコピー導線・
+     * 任意のテキストをシステムクリップボードへコピーする（動作チェックの案内ダイアログのコピー導線・
      * 設定画面のペアリング文字列コピーで共用、§10.3/§10.5）。[sensitive] が真のときだけ、
      * Android 13+ でクリップボード履歴・プレビューから伏せる。
      */

@@ -15,7 +15,7 @@ enum class SetupStatus {
 }
 
 /**
- * セットアップ項目 1 件の表示モデル。健康診断の項目 id と同じ体系の [id] を持ち、
+ * セットアップ項目 1 件の表示モデル。動作チェックの項目 id と同じ体系の [id] を持ち、
  * 常設画面（[SetupChecklist] の常設モード）とウィザードの項目ページが同じ列を描く。
  * [description] は手段の説明（[ReceiveSetupSteps] や probe 定数が単一所有する文言）、
  * [statusDetail] は照合結果・テスト結果などの事実、[aids] はコピー／外部起動の補助操作、

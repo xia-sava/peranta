@@ -41,7 +41,7 @@ class WizardFlowTest {
         WizardFlow.pages(caps, config, answers).map { it.id }
 
     /**
-     * 健康診断（AndroidHealthChecker）が生成する診断項目 id を config から写す契約。
+     * 動作チェック（AndroidHealthChecker）が生成する診断項目 id を config から写す契約。
      * 送信ロールで nls/self-battery/(sms)、受信可能で受信手順 5 種、受信可能なら送信の可否を問わず
      * post-notifications。INFO の oem-power-save は合否を出さないため被覆対象に含めない。
      */
@@ -416,7 +416,7 @@ class WizardFlowTest {
     // --- §2.3 被覆検証（caps 直積） ---
 
     /**
-     * ウィザードの全ページ itemIds が、その config で健康診断が出す全項目 id を覆う。
+     * ウィザードの全ページ itemIds が、その config で動作チェックが出す全項目 id を覆う。
      * かつ、skippable でないページの完走だけで残り得る未達（✗）は、skippable ページ上の項目に限られる
      * （＝必須ページを完走すれば skippable を飛ばした分以外に✗が残らない構造）。
      */

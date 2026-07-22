@@ -24,7 +24,7 @@ private const val NTFY_PACKAGE = "io.heckel.ntfy"
  * 受信・送信のセットアップに要する Android 実環境の判定・操作・素材を一手に持つ。
  * PackageManager / UnifiedPush / PowerManager / NotificationManager への実アクセスと、
  * 「直す」で起動するシステム設定 Intent の段階フォールバックをここへ集約し、上位の画面や
- * 健康診断はこの結果と操作だけを使う。権限系の案内手順文もここが所有する。
+ * 動作チェックはこの結果と操作だけを使う。権限系の案内手順文もここが所有する。
  */
 class AndroidSetupProbe(context: Context) {
 

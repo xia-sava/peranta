@@ -29,6 +29,9 @@ import kotlinx.coroutines.cancel
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.pairing.SettingsController
+import to.sava.peranta.ui.setup.OVERVIEW_ROW_CONNECTION
+import to.sava.peranta.ui.setup.OVERVIEW_ROW_FORWARD
+import to.sava.peranta.ui.setup.OVERVIEW_ROW_RECEIVE
 import to.sava.peranta.ui.setup.SMS_DIRECT_RECEIVE_DESCRIPTION
 import to.sava.peranta.update.PLATFORM_DESKTOP
 import to.sava.peranta.update.UpdateChecker
@@ -166,7 +169,7 @@ class SettingsScreenTest {
 
     // --- ウィザード導線 ---
 
-    /** onOpenWizard が指定されていれば「ウィザードで設定する」導線が出て、押すとコールバックが呼ばれる。 */
+    /** onOpenWizard が指定されていれば「ウィザードで最初からやり直す」導線が出て、押すとコールバックが呼ばれる。 */
     @Test
     fun openWizardButtonInvokesCallbackWhenProvided() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
@@ -180,7 +183,7 @@ class SettingsScreenTest {
         assertEquals(true, wizardOpened)
     }
 
-    /** onOpenWizard が未指定（既定）なら「ウィザードで設定する」導線は出ない。 */
+    /** onOpenWizard が未指定（既定）なら「ウィザードで最初からやり直す」導線は出ない。 */
     @Test
     fun openWizardButtonHiddenByDefault() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
@@ -190,6 +193,80 @@ class SettingsScreenTest {
         setContent { SettingsScreen(controller) }
 
         onNodeWithTag(TAG_OPEN_WIZARD).assertDoesNotExist()
+    }
+
+    // --- セットアップ状況 ---
+
+    /** loadHealthItems 未指定（既定）ならセットアップ状況セクションは出ない。 */
+    @Test
+    fun setupOverviewSectionHiddenByDefault() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+
+        setContent { SettingsScreen(SettingsController(repo)) }
+
+        onNodeWithTag("$TAG_OVERVIEW_STATE_PREFIX$OVERVIEW_ROW_CONNECTION").assertDoesNotExist()
+    }
+
+    /** loadHealthItems を渡すと接続とペアリング・通知の転送の行が出る。共有鍵ありなら接続は達成表示。 */
+    @Test
+    fun setupOverviewShowsConnectionAndForwardRows() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+
+        setContent {
+            SettingsScreen(
+                controller = SettingsController(repo),
+                loadHealthItems = { emptyList() },
+            )
+        }
+
+        onNodeWithTag("$TAG_OVERVIEW_STATE_PREFIX$OVERVIEW_ROW_CONNECTION").assertIsDisplayed()
+        onNodeWithText("接続先と共有鍵設定済み").assertExists()
+        onNodeWithTag("$TAG_OVERVIEW_STATE_PREFIX$OVERVIEW_ROW_FORWARD").assertExists()
+        // 受信経路の行は hasReceiveSetup 既定 false のとき出ない。
+        onNodeWithTag("$TAG_OVERVIEW_STATE_PREFIX$OVERVIEW_ROW_RECEIVE").assertDoesNotExist()
+    }
+
+    /** 通知の転送の行の[開く]で onOpenHealthCheck が呼ばれる。 */
+    @Test
+    fun overviewForwardOpenInvokesHealthCheckCallback() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        var opened = false
+
+        setContent {
+            SettingsScreen(
+                controller = SettingsController(repo),
+                loadHealthItems = { emptyList() },
+                onOpenHealthCheck = { opened = true },
+            )
+        }
+
+        onNodeWithTag("$TAG_OVERVIEW_OPEN_PREFIX$OVERVIEW_ROW_FORWARD").performScrollTo().performClick()
+        assertEquals(true, opened)
+    }
+
+    /** hasReceiveSetup=true なら受信経路の行が出て、[開く]で onOpenReceiveSetup が呼ばれる。 */
+    @Test
+    fun overviewReceiveRowShownAndOpenInvokesCallback() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        var opened = false
+
+        setContent {
+            SettingsScreen(
+                controller = SettingsController(repo),
+                loadHealthItems = { emptyList() },
+                hasReceiveSetup = true,
+                loadReceiveSetupItems = { emptyList() },
+                onOpenReceiveSetup = { opened = true },
+            )
+        }
+
+        onNodeWithTag("$TAG_OVERVIEW_STATE_PREFIX$OVERVIEW_ROW_RECEIVE").assertExists()
+        onNodeWithTag("$TAG_OVERVIEW_OPEN_PREFIX$OVERVIEW_ROW_RECEIVE").performScrollTo().performClick()
+        assertEquals(true, opened)
     }
 
     // --- 端末の追加（鍵あり） ---

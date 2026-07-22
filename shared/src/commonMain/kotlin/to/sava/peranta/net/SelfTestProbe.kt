@@ -30,7 +30,7 @@ sealed interface SelfTestResult {
     data object Timeout : SelfTestResult
 }
 
-/** プローブの現在状態。健康診断の項目描画がこれを読む。 */
+/** プローブの現在状態。動作チェックの項目描画がこれを読む。 */
 sealed interface SelfTestStatus {
     data object NotRun : SelfTestStatus
     data object Running : SelfTestStatus

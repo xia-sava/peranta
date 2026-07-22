@@ -12,7 +12,7 @@ import to.sava.peranta.ui.receiveSetupHealthItems
 private val OEM_POWER_SAVE_MANUFACTURERS = setOf("SHARP")
 
 /**
- * Android 端末の健康診断（§10.5）を、現在の設定に応じた条件で組み立てる。
+ * Android 端末の動作チェック（§10.5）を、現在の設定に応じた条件で組み立てる。
  * 権限・省電力除外の実判定と「直す」操作・素材は [AndroidSetupProbe] に委ね、結果を [HealthCheckItem] に写す。
  * UnifiedPush 系は受信のセットアップ手順（[AndroidReceiveSetupProvider]）を診断項目へ変換し、
  * 修復手段は持たず [onOpenReceiveSetup] で受信のセットアップ画面へ誘導するだけにする。

@@ -63,8 +63,8 @@ fun shellNavigate(from: ShellDestination, to: ShellDestination): ShellNavigation
  * アンカースロット。サブ画面表示時は左端が戻る（タイムラインへ [onNavigate]）に変わり、タイトルは
  * 画面名になる。ドロワーはサブ画面でもエッジスワイプで開ける（[ModalNavigationDrawer] の標準挙動）。
  *
- * ドロワーには各画面への行き先を列挙する。受信のセットアップは [showReceiveSetup]
- * が真のときだけ出す。現在地は [NavigationDrawerItem] の選択でハイライトする。項目タップで
+ * ドロワーには行き先を列挙する。受信のセットアップと動作チェックは設定画面のセットアップ状況の行から開くため、
+ * ドロワーには並べない。現在地は [NavigationDrawerItem] の選択でハイライトする。項目タップで
  * [onNavigate] へ一元化して遷移し、ドロワーを閉じる。[drawerExtras] はドロワーヘッダ下の将来スロット。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -74,7 +74,6 @@ fun PerantaShell(
     onNavigate: (ShellDestination) -> Unit,
     serverLabel: String?,
     deviceLabel: String?,
-    showReceiveSetup: Boolean,
     modifier: Modifier = Modifier,
     serverTrailing: (@Composable () -> Unit)? = null,
     drawerExtras: (@Composable ColumnScope.() -> Unit)? = null,
@@ -89,7 +88,6 @@ fun PerantaShell(
         drawerContent = {
             ShellDrawer(
                 destination = destination,
-                showReceiveSetup = showReceiveSetup,
                 serverLabel = serverLabel,
                 deviceLabel = deviceLabel,
                 drawerExtras = drawerExtras,
@@ -189,7 +187,6 @@ private fun TimelineTitle(
 @Composable
 private fun ShellDrawer(
     destination: ShellDestination,
-    showReceiveSetup: Boolean,
     serverLabel: String?,
     deviceLabel: String?,
     drawerExtras: (@Composable ColumnScope.() -> Unit)?,
@@ -210,10 +207,6 @@ private fun ShellDrawer(
             drawerExtras?.invoke(this)
             HorizontalDivider()
             DrawerItem(ShellDestination.Timeline, "タイムライン", destination, onSelect)
-            if (showReceiveSetup) {
-                DrawerItem(ShellDestination.ReceiveSetup, "受信のセットアップ", destination, onSelect)
-            }
-            DrawerItem(ShellDestination.HealthCheck, "健康診断", destination, onSelect)
             DrawerItem(ShellDestination.AppFilter, "アプリフィルタ", destination, onSelect)
             DrawerItem(ShellDestination.Settings, "設定", destination, onSelect)
             HorizontalDivider()
@@ -253,7 +246,7 @@ private fun destinationTitle(destination: ShellDestination): String = when (dest
     ShellDestination.AppFilter -> "アプリフィルタ"
     ShellDestination.Settings -> "設定"
     ShellDestination.ReceiveSetup -> "受信のセットアップ"
-    ShellDestination.HealthCheck -> "健康診断"
+    ShellDestination.HealthCheck -> "動作チェック"
     ShellDestination.PairingImport -> "QR で設定を取り込む"
 }
 

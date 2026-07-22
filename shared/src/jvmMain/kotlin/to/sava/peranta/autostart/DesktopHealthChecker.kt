@@ -5,7 +5,7 @@ import to.sava.peranta.ui.HealthCheckState
 import to.sava.peranta.ui.HealthChecker
 
 /**
- * Desktop の健康診断（§10.5）。現状の点検項目はログオン時自動起動（§3.3）のみ。
+ * Desktop の動作チェック（§10.5）。現状の点検項目はログオン時自動起動（§3.3）のみ。
  * 配布物でない開発実行では自動起動を扱えないため、その項目は対象外（画面に出さない）とする。
  */
 class DesktopHealthChecker(private val autoStart: AutoStartManager) : HealthChecker {

@@ -21,10 +21,17 @@ class PerantaShellTest {
     private fun drawerTag(destination: ShellDestination): String =
         "$TAG_SHELL_DRAWER_ITEM_PREFIX${destination.name}"
 
+    /** ドロワーに並ぶ行き先。受信のセットアップと動作チェックは設定画面のセットアップ状況から開くため含めない。 */
+    private val drawerDestinations = listOf(
+        ShellDestination.Timeline,
+        ShellDestination.AppFilter,
+        ShellDestination.Settings,
+        ShellDestination.PairingImport,
+    )
+
     @Composable
     private fun shell(
         destination: ShellDestination,
-        showReceiveSetup: Boolean = true,
         onNavigate: (ShellDestination) -> Unit = {},
     ) {
         PerantaShell(
@@ -32,7 +39,6 @@ class PerantaShellTest {
             onNavigate = onNavigate,
             serverLabel = "peranta.example.com",
             deviceLabel = "Pixel 9",
-            showReceiveSetup = showReceiveSetup,
         ) { Text(text = "content-${it.name}") }
     }
 
@@ -45,22 +51,23 @@ class PerantaShellTest {
         onNodeWithTag(drawerTag(ShellDestination.Timeline)).assertIsDisplayed()
     }
 
-    /** ドロワーには全行き先が並ぶ。 */
+    /** ドロワーにはナビゲーションの行き先が並ぶ（受信のセットアップと動作チェックは含まない）。 */
     @Test
-    fun drawerListsAllDestinations() = runComposeUiTest {
+    fun drawerListsNavigationDestinations() = runComposeUiTest {
         setContent { shell(ShellDestination.Timeline) }
         onNodeWithTag(TAG_SHELL_MENU).performClick()
-        ShellDestination.entries.forEach { destination ->
+        drawerDestinations.forEach { destination ->
             onNodeWithTag(drawerTag(destination)).assertExists()
         }
     }
 
-    /** 受信のセットアップは showReceiveSetup が false のとき出さない。 */
+    /** 受信のセットアップと動作チェックはドロワーに出さない（入口は設定画面のセットアップ状況に集約）。 */
     @Test
-    fun receiveSetupHiddenWhenDisabled() = runComposeUiTest {
-        setContent { shell(ShellDestination.Timeline, showReceiveSetup = false) }
+    fun receiveSetupAndHealthCheckAbsentFromDrawer() = runComposeUiTest {
+        setContent { shell(ShellDestination.Timeline) }
         onNodeWithTag(TAG_SHELL_MENU).performClick()
         onAllNodesWithTag(drawerTag(ShellDestination.ReceiveSetup)).assertCountEquals(0)
+        onAllNodesWithTag(drawerTag(ShellDestination.HealthCheck)).assertCountEquals(0)
         onNodeWithTag(drawerTag(ShellDestination.Settings)).assertExists()
     }
 

@@ -57,7 +57,7 @@ object WizardFlow {
     const val PAGE_REVERSE_CHANNEL: String = "reverse-channel"
     const val PAGE_DONE: String = "done"
 
-    /** 権限系項目の id（[SetupItemUi.id]・健康診断 id と同一体系）。 */
+    /** 権限系項目の id（[SetupItemUi.id]・動作チェック id と同一体系）。 */
     const val ITEM_NLS: String = "nls"
     const val ITEM_SELF_BATTERY: String = "self-battery"
     const val ITEM_SMS: String = "sms"

@@ -14,7 +14,7 @@ import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.roster.topicOf
 
 /**
- * 自己疎通テストの Android 側入口（§10）。健康診断から実行し、受信口の横取りで到達を判定する。
+ * 自己疎通テストの Android 側入口（§10）。動作チェックから実行し、受信口の横取りで到達を判定する。
  * プローブ状態を単一に保つためのシングルトン。
  */
 object PerantaSelfTest {
@@ -23,7 +23,7 @@ object PerantaSelfTest {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val log = Logger.withTag("SelfTest")
 
-    /** プローブの現在状態。健康診断の項目描画がこれを読む。 */
+    /** プローブの現在状態。動作チェックの項目描画がこれを読む。 */
     val status: StateFlow<SelfTestStatus> get() = probe.status
 
     /** テストを非同期で開始する（実行中は何もしない）。受信設定が未整備なら理由をログに残して何もしない。 */

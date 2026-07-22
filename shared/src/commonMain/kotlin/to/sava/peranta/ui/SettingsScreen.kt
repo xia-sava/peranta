@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import to.sava.peranta.pairing.SettingsController
@@ -42,7 +43,12 @@ import to.sava.peranta.ui.setup.LabeledCheckbox
 import to.sava.peranta.ui.setup.PairingQrSection
 import to.sava.peranta.ui.setup.PortField
 import to.sava.peranta.ui.setup.SMS_DIRECT_RECEIVE_DESCRIPTION
+import to.sava.peranta.ui.setup.SetupItemUi
+import to.sava.peranta.ui.setup.SetupOverviewRow
+import to.sava.peranta.ui.setup.SetupOverviewStatus
+import to.sava.peranta.ui.setup.SetupOverviewTarget
 import to.sava.peranta.ui.setup.TokenField
+import to.sava.peranta.ui.setup.setupOverview
 import to.sava.peranta.update.UpdateController
 import to.sava.peranta.update.UpdateStatus
 
@@ -75,6 +81,7 @@ private const val PAIRING_PREREQUISITE_NOTICE: String = "先にトークンと�
 private const val KEY_CREATED_QR_PREREQUISITE_NOTICE: String =
     "QR の表示には接続設定が必要です。先にサーバホスト名とアクセストークンを設定してください。"
 
+private const val SECTION_SETUP_OVERVIEW: String = "セットアップ状況"
 private const val SECTION_CONNECTION: String = "ntfyサーバー接続設定"
 private const val SECTION_THIS_DEVICE: String = "この端末"
 private const val SECTION_NOTIFICATIONS: String = "通知と履歴"
@@ -93,6 +100,10 @@ private const val SECTION_DANGER: String = "危険な操作"
  * [to.sava.peranta.config.PerantaConfig.smsDirectReceive]）のトグルを表示する。
  * [onSaved] は設定の保存・鍵生成が成功した直後に呼ぶ（受信パイプラインの再構築契機に使う）。
  * [onOpenWizard] が非 null のとき、セットアップをページ列で案内するウィザードへの導線を出す。
+ * [loadHealthItems] が非 null のとき冒頭に「セットアップ状況」セクションを出し、初回コンポジションで一度だけ
+ * 動作チェック項目を取得して集計する（取得中は未確認表示）。[hasReceiveSetup] が真なら受信経路の行も出し、
+ * [loadReceiveSetupItems] で受信のセットアップ項目を取得する。[onOpenHealthCheck] / [onOpenReceiveSetup] は
+ * 各行の [開く] 導線で、null なら該当行の [開く] を出さない。
  * [updateController] が非 null のとき「アプリの更新」セクションを出し、ボタン押下時だけ更新確認を実行する（§12）。
  * [showHeader] が false のときは画面見出し行（タイトルと「タイムラインへ」）を出さない。外側のアプリバーが
  * 見出しと戻る導線を持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
@@ -109,6 +120,11 @@ fun SettingsScreen(
     showSendRoleOptions: Boolean = false,
     onSaved: (() -> Unit)? = null,
     onOpenWizard: (() -> Unit)? = null,
+    loadHealthItems: (suspend () -> List<HealthCheckItem>)? = null,
+    onOpenHealthCheck: (() -> Unit)? = null,
+    hasReceiveSetup: Boolean = false,
+    loadReceiveSetupItems: (suspend () -> List<SetupItemUi>)? = null,
+    onOpenReceiveSetup: (() -> Unit)? = null,
     updateController: UpdateController? = null,
     onInstallUpdate: ((String) -> Unit)? = null,
     showHeader: Boolean = true,
@@ -130,6 +146,15 @@ fun SettingsScreen(
     var pairingUri by remember { mutableStateOf<String?>(null) }
     var dirty by remember { mutableStateOf(false) }
     var dangerExpanded by rememberSaveable { mutableStateOf(false) }
+    var overviewHealthItems by remember { mutableStateOf<List<HealthCheckItem>?>(null) }
+    var overviewReceiveItems by remember { mutableStateOf<List<SetupItemUi>?>(null) }
+
+    if (loadHealthItems != null) {
+        LaunchedEffect(Unit) { overviewHealthItems = loadHealthItems() }
+    }
+    if (loadReceiveSetupItems != null) {
+        LaunchedEffect(Unit) { overviewReceiveItems = loadReceiveSetupItems() }
+    }
 
     fun persistConnection() {
         controller.saveConnectionSettings(
@@ -206,11 +231,25 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag(TAG_AUTOSAVE_NOTE),
                 )
+                if (loadHealthItems != null) {
+                    SetupOverviewSection(
+                        rows = setupOverview(
+                            hasHost = host.isNotBlank(),
+                            hasToken = accessToken.isNotBlank(),
+                            hasSharedKey = hasKey,
+                            healthItems = overviewHealthItems,
+                            hasReceiveSetup = hasReceiveSetup,
+                            receiveSetupItems = overviewReceiveItems,
+                        ),
+                        onOpenHealthCheck = onOpenHealthCheck,
+                        onOpenReceiveSetup = onOpenReceiveSetup,
+                    )
+                }
                 if (onOpenWizard != null) {
                     TextButton(
                         onClick = onOpenWizard,
                         modifier = Modifier.testTag(TAG_OPEN_WIZARD),
-                    ) { Text(text = "ウィザードで設定する") }
+                    ) { Text(text = "ウィザードで最初からやり直す") }
                 }
 
                 SectionHeader(title = SECTION_CONNECTION)
@@ -358,6 +397,71 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * 「セットアップ状況」セクション（§10.2）。機能単位の行で「何を設定するのに何が必要か」の全体地図を示す。
+ * 各行は状態バッジ・事実記述と、誘導先を持つ行の [開く] 導線を並べる。[開く] のコールバックが null の
+ * 行では導線を出さない（プラットフォーム差の吸収）。
+ */
+@Composable
+private fun SetupOverviewSection(
+    rows: List<SetupOverviewRow>,
+    onOpenHealthCheck: (() -> Unit)?,
+    onOpenReceiveSetup: (() -> Unit)?,
+) {
+    SectionHeader(title = SECTION_SETUP_OVERVIEW)
+    rows.forEach { row ->
+        val onOpen = when (row.target) {
+            SetupOverviewTarget.HealthCheck -> onOpenHealthCheck
+            SetupOverviewTarget.ReceiveSetup -> onOpenReceiveSetup
+            null -> null
+        }
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = overviewMarker(row.status),
+                color = overviewMarkerColor(row.status),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier
+                    .testTag("$TAG_OVERVIEW_STATE_PREFIX${row.id}")
+                    .padding(end = 12.dp),
+            )
+            Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
+                Text(text = row.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                row.detail?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            val openLabel = row.openLabel
+            if (openLabel != null && onOpen != null) {
+                TextButton(
+                    onClick = onOpen,
+                    modifier = Modifier.testTag("$TAG_OVERVIEW_OPEN_PREFIX${row.id}"),
+                ) {
+                    Text(text = openLabel)
+                }
+            }
+        }
+    }
+}
+
+/** セットアップ状況の状態マーカー記号。達成 ✓ / 未達 ✗ / 未確認 ?。 */
+private fun overviewMarker(status: SetupOverviewStatus): String = when (status) {
+    SetupOverviewStatus.MET -> "✓"
+    SetupOverviewStatus.UNMET -> "✗"
+    SetupOverviewStatus.UNKNOWN -> "?"
+}
+
+@Composable
+private fun overviewMarkerColor(status: SetupOverviewStatus): Color = when (status) {
+    SetupOverviewStatus.MET -> MaterialTheme.colorScheme.primary
+    SetupOverviewStatus.UNMET -> MaterialTheme.colorScheme.error
+    SetupOverviewStatus.UNKNOWN -> MaterialTheme.colorScheme.onSurfaceVariant
+}
+
 /** セクションの見出し（ラベル＋区切り線）。[color] で見出しの色を変えられる（危険な操作はエラー色）。 */
 @Composable
 private fun SectionHeader(title: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
@@ -444,6 +548,8 @@ private fun updateStatusText(status: UpdateStatus?): String? = when (status) {
 
 const val TAG_AUTOSAVE_NOTE: String = "settings-autosave-note"
 const val TAG_OPEN_WIZARD: String = "settings-open-wizard"
+const val TAG_OVERVIEW_STATE_PREFIX: String = "settings-overview-state-"
+const val TAG_OVERVIEW_OPEN_PREFIX: String = "settings-overview-open-"
 const val TAG_HOST: String = "settings-host"
 const val TAG_TOKEN: String = "settings-token"
 const val TAG_DEVICE_NAME: String = "settings-deviceName"
