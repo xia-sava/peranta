@@ -82,7 +82,8 @@ class TimelineActions(
  * チャット風タイムライン（§10.1）。受信通知は左寄せ、エラー・送信通知は右寄せに並べる。
  * [actions] が渡されると受信通知にアクションボタン・スワイプで消す・長押し/右クリックメニューを付ける。
  * 「消す」はブロードキャスト送信と同時に、往復を待たず自端末の表示から即座に取り下げる。
- * 並び順は最下部=最新（reverseLayout）。[listState] を呼び出し側から注入でき、
+ * 並び順は時系列順（古い→新しい、上→下）で最新が最下部。起動時は最下部へジャンプし、
+ * 最下部表示中の新着だけ追従する（§10.1）。[listState] を呼び出し側から注入でき、
  * [lazyScrollbarContent] スロットで Desktop 用スクロールバー等を注入できる（`AppFilterScreen` と同型）。
  */
 @Composable
@@ -99,16 +100,26 @@ fun TimelineScreen(
     val list by items.collectAsState()
     val locallyDismissed = remember { mutableStateListOf<String>() }
     val visible = list.filterNot { it.id in locallyDismissed }
-    // 最下部=最新（§10.1）。表示リストを新しい順にし、reverseLayout で index 0 を画面最下部に固定する。
-    val displayed = visible.asReversed()
 
-    // 最下部（index 0）が見えているときだけ新着へ追従する。読み返し中（それ以外）は何もしない。
-    val currentDisplayed by rememberUpdatedState(displayed)
+    // 起動時は最下部（最新）へアニメーション無しでジャンプし、以降は末尾アイテムが変わるたびに
+    // 「追加直前に最下部を表示していたか」を判定して追従するかどうかを決める（§10.1）。
+    var initialScrollDone by remember { mutableStateOf(false) }
+    val currentVisible by rememberUpdatedState(visible)
     LaunchedEffect(listState) {
-        snapshotFlow { currentDisplayed.firstOrNull()?.id }
-            .collect { newestId ->
-                if (newestId != null && listState.firstVisibleItemIndex == 0) {
-                    listState.animateScrollToItem(0)
+        snapshotFlow { currentVisible.lastOrNull()?.id }
+            .collect {
+                val lastIndex = currentVisible.lastIndex
+                if (lastIndex < 0) return@collect
+                if (!initialScrollDone) {
+                    listState.scrollToItem(lastIndex)
+                    initialScrollDone = true
+                } else {
+                    // この時点の layoutInfo はまだ今回の追加前のレイアウトを反映しているため、
+                    // 「最後の可視 index が新リストの末尾直前以上」で追加直前の最下部表示を判定できる。
+                    val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                    if (lastVisibleIndex >= lastIndex - 1) {
+                        listState.animateScrollToItem(lastIndex)
+                    }
                 }
             }
     }
@@ -120,12 +131,11 @@ fun TimelineScreen(
             Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = listState,
-                    reverseLayout = true,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(displayed, key = { it.id }) { item ->
+                    items(visible, key = { it.id }) { item ->
                         TimelineRow(
                             item = item,
                             actions = actions,

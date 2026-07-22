@@ -235,7 +235,7 @@ class TimelineScreenTest {
         onNodeWithText(formatTimeOfDay(1000L)).assertExists()
     }
 
-    /** 初期表示では reverseLayout により index 0 = 画面最下部に最新アイテムが来る（§10.1）。 */
+    /** 初期表示ではアニメーション無しで最下部へジャンプし、最新アイテムが見え最古アイテムは見えない（§10.1）。 */
     @Test
     fun initialDisplayShowsLatestItemAtBottom() = runComposeUiTest {
         val listState = LazyListState()
@@ -248,11 +248,12 @@ class TimelineScreenTest {
             )
         }
         waitForIdle()
-        assertEquals(0, listState.firstVisibleItemIndex)
+
         onNodeWithText("item-$TEST_ITEM_COUNT").assertExists()
+        onNodeWithText("item-1").assertDoesNotExist()
     }
 
-    /** 最下部（index 0）にいるときに新着が追加されると、追従スクロールして最新が見え続ける（§10.1）。 */
+    /** 最下部表示中に新着が追加されると自動で追従スクロールし、新着アイテムが可視になる（§10.1）。 */
     @Test
     fun followsNewestItemWhenAtBottom() = runComposeUiTest {
         val listState = LazyListState()
@@ -269,14 +270,13 @@ class TimelineScreenTest {
         flow.value = flow.value + receivedItem(TEST_ITEM_COUNT + 1)
         waitForIdle()
 
-        assertEquals(0, listState.firstVisibleItemIndex)
         onNodeWithText("item-${TEST_ITEM_COUNT + 1}").assertExists()
     }
 
     /**
-     * 読み返し中（最下部から離れている）に新着が来ても、key 基準で表示位置が維持され最下部へは戻らない（§10.1）。
-     * `scrollToItem` で読み返し位置へ移動したうえで新着を足し、既読アイテムの index が
-     * 新着分だけずれて（+1）同じ位置を指し続けることを確認する。
+     * 読み返し中（最下部から離れている）に新着が来ても表示位置が維持され、最下部へ勝手に戻らない（§10.1）。
+     * 新着は末尾への追記のみで既存アイテムの並びは変わらないため、読み返し位置の先頭可視 index は
+     * 新着追加の前後で変化しないはずである。
      */
     @Test
     fun preservesReadingPositionWhenNewItemArrivesWhileScrolledAway() = runComposeUiTest {
@@ -293,6 +293,7 @@ class TimelineScreenTest {
                 modifier = Modifier.size(width = LIST_TEST_WIDTH, height = LIST_TEST_HEIGHT),
             )
         }
+        waitForIdle()
         scrollTarget = READING_POSITION_INDEX
         waitForIdle()
         val indexBeforeNewItem = listState.firstVisibleItemIndex
@@ -300,7 +301,8 @@ class TimelineScreenTest {
         flow.value = flow.value + receivedItem(TEST_ITEM_COUNT + 1)
         waitForIdle()
 
-        assertEquals(indexBeforeNewItem + 1, listState.firstVisibleItemIndex)
+        assertEquals(indexBeforeNewItem, listState.firstVisibleItemIndex)
+        onNodeWithText("item-${TEST_ITEM_COUNT + 1}").assertDoesNotExist()
     }
 
     /** スクロールバースロットには LazyColumn と同一の listState が渡され、注入した内容が描画される。 */
