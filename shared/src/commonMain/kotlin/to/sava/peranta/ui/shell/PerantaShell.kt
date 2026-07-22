@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DrawerValue
@@ -42,6 +43,9 @@ import to.sava.peranta.ui.setup.ReceiveSetupSteps
 
 /** これ以上のコンテンツ幅では常設ドロワーの広幅レイアウトに切り替える閾値。 */
 internal val WIDE_LAYOUT_MIN_WIDTH: Dp = 840.dp
+
+/** ドロワーシートの幅（M3 既定の 360dp より狭める）。開閉式・常設の両シートに適用する。 */
+internal val DRAWER_SHEET_WIDTH: Dp = 280.dp
 
 /**
  * 画面シェルが束ねる行き先（§10）。タイムラインをメインに、サブ画面をアプリバー共有で差し替える。
@@ -161,7 +165,7 @@ private fun NarrowShell(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet {
+            ModalDrawerSheet(modifier = Modifier.width(DRAWER_SHEET_WIDTH).testTag(TAG_SHELL_DRAWER_SHEET)) {
                 ShellDrawerContent(
                     destination = destination,
                     serverLabel = serverLabel,
@@ -201,7 +205,7 @@ private fun WideShell(
 ) {
     PermanentNavigationDrawer(
         drawerContent = {
-            PermanentDrawerSheet {
+            PermanentDrawerSheet(modifier = Modifier.width(DRAWER_SHEET_WIDTH).testTag(TAG_SHELL_DRAWER_SHEET)) {
                 ShellDrawerContent(
                     destination = destination,
                     serverLabel = serverLabel,
@@ -406,3 +410,6 @@ const val TAG_SHELL_SERVER: String = "shell-server"
 
 /** ドロワー項目のタグ接頭辞（末尾に [ShellDestination] 名を付ける）。 */
 const val TAG_SHELL_DRAWER_ITEM_PREFIX: String = "shell-drawer-"
+
+/** ドロワーシート（開閉式・常設とも）のタグ。 */
+const val TAG_SHELL_DRAWER_SHEET: String = "shell-drawer-sheet"

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -155,6 +156,13 @@ class PerantaShellTest {
         setContent { shell(ShellDestination.Settings, modifier = wideShellModifier) }
         onNodeWithTag(drawerTag(ShellDestination.Settings)).assertIsSelected()
         onNodeWithTag(drawerTag(ShellDestination.Timeline)).assertIsNotSelected()
+    }
+
+    /** 広幅シェルの常設ドロワーシートは [DRAWER_SHEET_WIDTH]（280dp）幅である。 */
+    @Test
+    fun wideDrawerSheetHasFixedWidth() = runComposeUiTest {
+        setContent { shell(ShellDestination.Timeline, modifier = wideShellModifier) }
+        onNodeWithTag(TAG_SHELL_DRAWER_SHEET).assertWidthIsEqualTo(DRAWER_SHEET_WIDTH)
     }
 
     /** 閾値ちょうどの幅は広幅（常設ドロワー）になる。 */
