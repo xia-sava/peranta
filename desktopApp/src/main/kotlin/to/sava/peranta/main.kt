@@ -4,10 +4,20 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.ScrollbarStyle
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.defaultScrollbarStyle
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,6 +59,7 @@ import to.sava.peranta.ui.PairingScanScreen
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.QrCodeCanvas
 import to.sava.peranta.ui.SettingsScreen
+import to.sava.peranta.ui.TimelineScreen
 import to.sava.peranta.ui.setup.SetupAction
 import to.sava.peranta.ui.setup.SetupItemUi
 import to.sava.peranta.ui.setup.SetupItemsProvider
@@ -134,6 +145,43 @@ private fun desktopWizardSetupProvider(autoStart: AutoStartManager): SetupItemsP
             ),
         )
     }
+
+/**
+ * タイムライン本体の上にナビゲーションリンク行を重ねた Desktop 版の表示。
+ * TODO: PerantaShell 適用時にこのリンク行を撤去する。
+ */
+@Composable
+private fun DesktopTimeline(
+    receiver: DesktopReceiver,
+    onOpenSettings: () -> Unit,
+    onOpenPairing: () -> Unit,
+    onOpenAppFilter: () -> Unit,
+    onOpenHealthCheck: () -> Unit,
+) {
+    PerantaTheme {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onOpenHealthCheck) { Text(text = "健康診断") }
+                    TextButton(onClick = onOpenAppFilter) { Text(text = "アプリフィルタ") }
+                    TextButton(onClick = onOpenPairing) { Text(text = "QR で設定を取り込む") }
+                    TextButton(onClick = onOpenSettings) { Text(text = "設定") }
+                }
+            }
+            Box(modifier = Modifier.weight(1f)) {
+                TimelineScreen(
+                    receiver.items,
+                    actions = receiver.timelineActions(),
+                    attachments = receiver.attachmentUi(),
+                    fullText = receiver.fullTextUi(),
+                )
+            }
+        }
+    }
+}
 
 /** ペアリング文字列をシステムクリップボードにコピーする。 */
 private fun copyToClipboard(text: String) {
@@ -329,15 +377,12 @@ fun main(args: Array<String>) {
                     )
                 }
                 errorMessage != null -> App(errorMessage!!)
-                currentReceiver != null -> App(
-                    items = currentReceiver.items,
+                currentReceiver != null -> DesktopTimeline(
+                    receiver = currentReceiver,
                     onOpenSettings = { showSettings = true },
                     onOpenPairing = { showPairing = true },
                     onOpenAppFilter = { showAppFilter = true },
                     onOpenHealthCheck = { showHealthCheck = true },
-                    timelineActions = currentReceiver.timelineActions(),
-                    attachmentUi = currentReceiver.attachmentUi(),
-                    fullTextUi = currentReceiver.fullTextUi(),
                 )
                 else -> App()
             }

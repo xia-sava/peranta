@@ -44,6 +44,9 @@ private const val RECHECK_INTERVAL_MILLIS: Long = 2_000L
  * ntfy やシステム設定から戻った直後の状態を反映する。手順内の操作を実行したあとは、非同期に反映される
  * 状態（UnifiedPush 登録・受信テスト）を追って数回だけ自動再チェックする。
  * [onCopyText] はコピーチップで使うコピー処理で、null なら端末のクリップボードへフォールバックする。
+ * [receiveEndpoint] が非 null のときは説明文の下に受信エンドポイントを表示する。
+ * [showHeader] が false のときは画面見出し行（タイトルと「戻る」）を出さない。外側のアプリバーが
+ * 見出しと戻る導線を持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
  */
 @Composable
 fun ReceiveSetupScreen(
@@ -52,6 +55,8 @@ fun ReceiveSetupScreen(
     onBack: (() -> Unit)? = null,
     externalRefreshKey: Int = 0,
     onCopyText: ((text: String, sensitive: Boolean) -> Unit)? = null,
+    receiveEndpoint: String? = null,
+    showHeader: Boolean = true,
 ) {
     var manualRefresh by remember { mutableStateOf(0) }
     var followUpRechecks by remember { mutableStateOf(0) }
@@ -79,12 +84,22 @@ fun ReceiveSetupScreen(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Header(onBack = onBack)
+            if (showHeader) {
+                Header(onBack = onBack)
+            }
             Text(
                 text = RECEIVE_SETUP_DESCRIPTION,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (receiveEndpoint != null) {
+                Text(
+                    text = "受信エンドポイント: $receiveEndpoint",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(TAG_RECEIVE_SETUP_ENDPOINT),
+                )
+            }
 
             val loaded = items
             if (loaded == null) {
@@ -134,6 +149,9 @@ const val TAG_RECEIVE_SETUP_TITLE: String = "receive-setup-title"
 
 /** 戻る導線のタグ。 */
 const val TAG_RECEIVE_SETUP_BACK: String = "receive-setup-back"
+
+/** 受信エンドポイント表示のタグ。 */
+const val TAG_RECEIVE_SETUP_ENDPOINT: String = "receive-setup-endpoint"
 
 /** 「今すぐ再チェック」ボタンのタグ。 */
 const val TAG_RECEIVE_SETUP_RECHECK: String = "receive-setup-recheck"

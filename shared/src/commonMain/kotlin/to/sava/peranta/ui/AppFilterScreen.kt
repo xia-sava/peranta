@@ -93,6 +93,8 @@ private fun priorityTag(priority: Priority?): String = priority?.name ?: "defaul
  * [installedAppsProvider] が渡ると送信ロールのフル機能（インストール済み一覧・詳細設定）を、
  * 渡らないときは受信専用ロール（タイムライン履歴由来の候補を mute/unmute するだけ）を表示する。
  * チェックの意味は現在の [FilterMode] に応じて反転する（denylist=除外 / allowlist=許可）。
+ * [showHeader] が false のときは画面見出し行（タイトルと「戻る」）を出さない。外側のアプリバーが
+ * 見出しと戻る導線を持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
  */
 @Composable
 fun AppFilterScreen(
@@ -101,11 +103,17 @@ fun AppFilterScreen(
     installedAppsProvider: InstalledAppsProvider? = null,
     items: StateFlow<List<TimelineItem>>? = null,
     onBack: (() -> Unit)? = null,
+    showHeader: Boolean = true,
 ) {
     val mode = remember { controller.load().filterMode }
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            ScreenHeader(mode = mode, receiveOnly = installedAppsProvider == null, onBack = onBack)
+            ScreenHeader(
+                mode = mode,
+                receiveOnly = installedAppsProvider == null,
+                onBack = onBack,
+                showHeader = showHeader,
+            )
             if (installedAppsProvider != null) {
                 SendRoleContent(controller = controller, mode = mode, provider = installedAppsProvider)
             } else {
@@ -116,19 +124,21 @@ fun AppFilterScreen(
 }
 
 @Composable
-private fun ScreenHeader(mode: FilterMode, receiveOnly: Boolean, onBack: (() -> Unit)?) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "アプリフィルタ",
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.testTag(TAG_APP_FILTER_TITLE),
-        )
-        if (onBack != null) {
-            TextButton(onClick = onBack) { Text(text = "戻る") }
+private fun ScreenHeader(mode: FilterMode, receiveOnly: Boolean, onBack: (() -> Unit)?, showHeader: Boolean) {
+    if (showHeader) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "アプリフィルタ",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.testTag(TAG_APP_FILTER_TITLE),
+            )
+            if (onBack != null) {
+                TextButton(onClick = onBack) { Text(text = "戻る") }
+            }
         }
     }
     Text(

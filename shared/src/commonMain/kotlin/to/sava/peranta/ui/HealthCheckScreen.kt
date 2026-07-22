@@ -69,6 +69,8 @@ private val ALL_CLEAR_CONTENT: Color = Color(0xFF1B5E20)
  * [onBack] は常に有効にし、そのままメイン画面へ戻れるようにする。
  * [onCopyText] は案内ダイアログの [FixAid.Copy] ボタンで使うコピー処理。null なら
  * [LocalClipboardManager] へフォールバックする。
+ * [showHeader] が false のときは画面見出し行（タイトルと「戻る」）を出さない。外側のアプリバーが
+ * 見出しと戻る導線を持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
  */
 @Composable
 fun HealthCheckScreen(
@@ -77,6 +79,7 @@ fun HealthCheckScreen(
     onBack: (() -> Unit)? = null,
     externalRefreshKey: Int = 0,
     onCopyText: ((text: String, sensitive: Boolean) -> Unit)? = null,
+    showHeader: Boolean = true,
 ) {
     var manualRefresh by remember { mutableStateOf(0) }
     var followUpRechecks by remember { mutableStateOf(0) }
@@ -99,7 +102,9 @@ fun HealthCheckScreen(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Header(onBack = onBack)
+            if (showHeader) {
+                Header(onBack = onBack)
+            }
             Text(
                 text = HEALTH_DESCRIPTION,
                 style = MaterialTheme.typography.bodyMedium,

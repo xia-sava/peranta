@@ -3,14 +3,11 @@ package to.sava.peranta
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,64 +22,24 @@ import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.TimelineActions
 import to.sava.peranta.ui.TimelineScreen
 
-/** タイムラインを表示するアプリ本体。 */
+/** タイムライン本体。ナビゲーションは画面シェルへ委ね、ここは受信済みアイテムの表示に専念する。 */
 @Composable
 fun App(
     items: StateFlow<List<TimelineItem>>,
-    receiveEndpoint: String? = null,
-    onOpenSettings: (() -> Unit)? = null,
-    onOpenPairing: (() -> Unit)? = null,
-    onOpenAppFilter: (() -> Unit)? = null,
-    onOpenReceiveSetup: (() -> Unit)? = null,
-    onOpenHealthCheck: (() -> Unit)? = null,
     timelineActions: TimelineActions? = null,
     attachmentUi: AttachmentUi? = null,
     fullTextUi: FullTextUi? = null,
     emptyStateMessage: String = DEFAULT_EMPTY_TIMELINE_MESSAGE,
 ) {
     PerantaTheme {
-        Column(modifier = Modifier.fillMaxSize()) {
-            if (receiveEndpoint != null || onOpenSettings != null || onOpenPairing != null ||
-                onOpenAppFilter != null || onOpenReceiveSetup != null || onOpenHealthCheck != null
-            ) {
-                Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-                        val endpointLabel = receiveEndpoint?.let { "受信エンドポイント: $it" }.orEmpty()
-                        if (endpointLabel.isNotEmpty()) {
-                            Text(text = endpointLabel, style = MaterialTheme.typography.labelSmall)
-                        }
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                        ) {
-                            if (onOpenReceiveSetup != null) {
-                                TextButton(onClick = onOpenReceiveSetup) { Text(text = "受信のセットアップ") }
-                            }
-                            if (onOpenHealthCheck != null) {
-                                TextButton(onClick = onOpenHealthCheck) { Text(text = "健康診断") }
-                            }
-                            if (onOpenAppFilter != null) {
-                                TextButton(onClick = onOpenAppFilter) { Text(text = "アプリフィルタ") }
-                            }
-                            if (onOpenPairing != null) {
-                                TextButton(onClick = onOpenPairing) { Text(text = "QR で設定を取り込む") }
-                            }
-                            if (onOpenSettings != null) {
-                                TextButton(onClick = onOpenSettings) { Text(text = "設定") }
-                            }
-                        }
-                    }
-                }
-            }
-            Box(modifier = Modifier.weight(1f)) {
-                TimelineScreen(
-                    items,
-                    actions = timelineActions,
-                    attachments = attachmentUi,
-                    fullText = fullTextUi,
-                    emptyStateMessage = emptyStateMessage,
-                )
-            }
+        Box(modifier = Modifier.fillMaxSize()) {
+            TimelineScreen(
+                items,
+                actions = timelineActions,
+                attachments = attachmentUi,
+                fullText = fullTextUi,
+                emptyStateMessage = emptyStateMessage,
+            )
         }
     }
 }

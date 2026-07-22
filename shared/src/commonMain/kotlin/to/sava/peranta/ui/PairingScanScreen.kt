@@ -40,8 +40,9 @@ private const val PAIRING_DEVICE_NAME_MISSING_NOTICE: String =
  * この端末自身を設定元にするための設定画面への導線を表示する（取り込み成功後は隠す）。
  * [onOpenWizard] が非 null のときは、セットアップをページ列で案内するウィザードへ戻る導線を表示する
  * （取り込み成功後は隠す）。取り込み成功後は [onImported] が非 null ならタイムラインへ進む導線を表示する。
- * [showHeader] が false のときは画面見出しと概要説明を出さない。外側（ウィザードのページ）が
- * 見出しを持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
+ * [showHeader] が false のときは見出し行（タイトル＋戻る）を出さない。[showDescription] が false の
+ * ときは概要説明文を出さない。外側（ウィザードのページ、シェルのアプリバー）が見出しやタイトルを
+ * 持つ埋め込み利用で個別に使い、既定の true では従来どおり見出し・説明つきの単独画面として振る舞う。
  */
 @Composable
 fun PairingScanScreen(
@@ -53,6 +54,7 @@ fun PairingScanScreen(
     onImported: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null,
     showHeader: Boolean = true,
+    showDescription: Boolean = true,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -67,6 +69,7 @@ fun PairingScanScreen(
                 onImported = onImported,
                 onBack = onBack,
                 showHeader = showHeader,
+                showDescription = showDescription,
             )
         }
     }
@@ -86,6 +89,7 @@ internal fun PairingScanContent(
     onImported: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null,
     showHeader: Boolean = true,
+    showDescription: Boolean = true,
     onApplied: (() -> Unit)? = null,
 ) {
     var manualInput by remember { mutableStateOf("") }
@@ -116,6 +120,8 @@ internal fun PairingScanContent(
 
     if (showHeader) {
         Text(text = "設定の取り込み", style = MaterialTheme.typography.titleLarge)
+    }
+    if (showDescription) {
         Text(
             text = "設定元の端末が表示した QR を読み取ると、サーバ・トークン・共有鍵をまとめて取り込みます。",
             style = MaterialTheme.typography.bodyMedium,

@@ -94,6 +94,8 @@ private const val SECTION_DANGER: String = "危険な操作"
  * [onSaved] は設定の保存・鍵生成が成功した直後に呼ぶ（受信パイプラインの再構築契機に使う）。
  * [onOpenWizard] が非 null のとき、セットアップをページ列で案内するウィザードへの導線を出す。
  * [updateController] が非 null のとき「アプリの更新」セクションを出し、ボタン押下時だけ更新確認を実行する（§12）。
+ * [showHeader] が false のときは画面見出し行（タイトルと「タイムラインへ」）を出さない。外側のアプリバーが
+ * 見出しと戻る導線を持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
  */
 @Composable
 fun SettingsScreen(
@@ -109,6 +111,7 @@ fun SettingsScreen(
     onOpenWizard: (() -> Unit)? = null,
     updateController: UpdateController? = null,
     onInstallUpdate: ((String) -> Unit)? = null,
+    showHeader: Boolean = true,
 ) {
     val initial = remember { controller.load() }
     var host by remember { mutableStateOf(initial.host) }
@@ -177,22 +180,24 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(text = "設定", style = MaterialTheme.typography.titleLarge)
-                    if (onOpenTimeline != null) {
-                        TextButton(
-                            onClick = {
-                                if (dirty) {
-                                    onSaved?.invoke()
-                                    dirty = false
-                                }
-                                onOpenTimeline()
-                            },
-                        ) { Text(text = "タイムラインへ") }
+                if (showHeader) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(text = "設定", style = MaterialTheme.typography.titleLarge)
+                        if (onOpenTimeline != null) {
+                            TextButton(
+                                onClick = {
+                                    if (dirty) {
+                                        onSaved?.invoke()
+                                        dirty = false
+                                    }
+                                    onOpenTimeline()
+                                },
+                            ) { Text(text = "タイムラインへ") }
+                        }
                     }
                 }
                 Text(

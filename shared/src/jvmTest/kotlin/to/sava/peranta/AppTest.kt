@@ -3,8 +3,6 @@ package to.sava.peranta
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import kotlinx.coroutines.flow.MutableStateFlow
 import to.sava.peranta.model.NotificationPayload
@@ -12,7 +10,6 @@ import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.ui.DEFAULT_EMPTY_TIMELINE_MESSAGE
 import kotlin.test.Test
-import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class AppTest {
@@ -62,17 +59,5 @@ class AppTest {
         setContent { App(items = MutableStateFlow(emptyList()), emptyStateMessage = notReady) }
         onAllNodesWithText(notReady).assertCountEquals(1)
         onAllNodesWithText(DEFAULT_EMPTY_TIMELINE_MESSAGE).assertCountEquals(0)
-    }
-
-    /** ツールバーの各導線は全端末共通で出る。設定ボタンを押すと onOpenSettings が呼ばれる。 */
-    @Test
-    fun toolbarActionsAreAvailable() = runComposeUiTest {
-        var openedSettings = false
-        setContent {
-            App(items = items(), onOpenSettings = { openedSettings = true })
-        }
-        onAllNodesWithText("設定").assertCountEquals(1)
-        onNodeWithText("設定").performClick()
-        assertTrue(openedSettings)
     }
 }

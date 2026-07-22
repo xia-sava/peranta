@@ -463,6 +463,7 @@ private fun QrImportBody(
         controller = importController,
         onRequestScan = onRequestScan,
         showHeader = false,
+        showDescription = false,
         onApplied = onApplied,
     )
 }

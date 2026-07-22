@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -67,6 +68,9 @@ import to.sava.peranta.ui.QrCodeCanvas
 import to.sava.peranta.ui.SettingsScreen
 import to.sava.peranta.ui.ShareScreen
 import to.sava.peranta.ui.setup.ReceiveSetupScreen
+import to.sava.peranta.ui.shell.PerantaShell
+import to.sava.peranta.ui.shell.ShellDestination
+import to.sava.peranta.ui.shell.shellNavigate
 import to.sava.peranta.ui.setup.WizardScreen
 import to.sava.peranta.update.AndroidUpdater
 
@@ -86,21 +90,14 @@ private const val RECEIVE_NOT_READY_MESSAGE =
 private const val KEY_PENDING_SAVE_BLOB_ID = "pendingSaveBlobId"
 
 /**
- * MainActivity が表示する画面（§10）。
- * [Main] はタイムライン本体を出し、[Pairing] は QR 取り込み画面、
- * [Settings] は設定画面（§10.2）、[AppFilter] はアプリフィルタ画面（§10.4）、
- * [HealthCheck] は健康診断画面（§10.5）、[ReceiveSetup] は受信のセットアップ常設画面、
- * [Wizard] は設定・診断をページ列で案内するウィザードを出す。
+ * 画面シェルの外にあるモーダルなタスク（§10.7）。null のときは [PerantaShell] を表示する。
+ * [Wizard] は設定・診断をページ列で案内するウィザード、[PairingLanding] は未ペアリング端末の
+ * 取り込み待機画面、[Share] は共有シートから渡されたファイルの送信画面を出す。
  */
-private sealed interface Screen {
-    data object Main : Screen
-    data object Pairing : Screen
-    data object Settings : Screen
-    data object AppFilter : Screen
-    data object HealthCheck : Screen
-    data object ReceiveSetup : Screen
-    data object Wizard : Screen
-    data class Share(val files: List<Uri>) : Screen
+private sealed interface Overlay {
+    data object Wizard : Overlay
+    data object PairingLanding : Overlay
+    data class Share(val files: List<Uri>) : Overlay
 }
 
 class MainActivity : ComponentActivity() {
@@ -185,59 +182,72 @@ class MainActivity : ComponentActivity() {
         val sharedFiles = extractSharedFiles(intent)
 
         setContent {
-            var screen: Screen by remember {
+            // シェル内の現在地。設定を離れる遷移でも再生成後に生存させるため rememberSaveable で保持する。
+            var destination: ShellDestination by rememberSaveable { mutableStateOf(ShellDestination.Timeline) }
+            // シェル外のモーダルなタスク。未ペアリングはウィザードから始め、共有はファイル送信へ入る。
+            var overlay: Overlay? by remember {
                 mutableStateOf(
                     when {
-                        sharedFiles.isNotEmpty() && config.hasSharedKey -> Screen.Share(sharedFiles)
-                        config.hasSharedKey -> Screen.Main
-                        else -> Screen.Wizard
+                        sharedFiles.isNotEmpty() && config.hasSharedKey -> Overlay.Share(sharedFiles)
+                        config.hasSharedKey -> null
+                        else -> Overlay.Wizard
                     },
                 )
             }
 
             // 健康診断の UnifiedPush 系項目は受信のセットアップ画面へ誘導する。onOpen で診断からその画面へ移す。
-            val healthChecker = remember { AndroidHealthChecker(this@MainActivity) { screen = Screen.ReceiveSetup } }
+            val healthChecker = remember {
+                AndroidHealthChecker(this@MainActivity) { destination = ShellDestination.ReceiveSetup }
+            }
 
             // 起動時にペアリング済みなら健康診断を実行し、対処の要る未達があれば診断画面へ誘導する（§10.5）。
-            // 未セットアップは初回ウィザードが最優先のため、Main のときだけ遷移する。強制ブロックはしない。
+            // 未セットアップは初回ウィザードが最優先のため、タイムライン表示中のときだけ遷移する。強制ブロックはしない。
             LaunchedEffect(Unit) {
-                if (config.hasSharedKey && screen == Screen.Main &&
+                if (config.hasSharedKey && overlay == null && destination == ShellDestination.Timeline &&
                     healthCheckNeedsAttention(healthChecker.check())
                 ) {
-                    screen = Screen.HealthCheck
+                    destination = ShellDestination.HealthCheck
                 }
             }
 
-            // タイムラインへ戻る後処理は各画面のボタンとバックキーで共通の経路を通す。
-            val onOpenTimeline: () -> Unit = { resetReceiveAndRecreate() }
-            val onBackToMain: () -> Unit = { screen = Screen.Main }
-            // ペアリング済みならタイムラインへ（再生成で最新設定を反映）、未ペアリングなら
-            // ウィザード再開導線つきの待機画面（Pairing）へ着地する。
+            // シェル内の遷移を一元化する。設定を離れるときは遷移先に依らず設定反映（受信パイプラインの
+            // 再構築）を通し（§10.2）、反映後も遷移先を保つため先に遷移先を確定してから再生成する。
+            val onNavigate: (ShellDestination) -> Unit = { target ->
+                val nav = shellNavigate(from = destination, to = target)
+                destination = nav.destination
+                if (nav.reflectSettings) resetReceiveAndRecreate()
+            }
+
+            // 一連の設定・ペアリング作業を終えてタイムラインへ戻る後処理。遷移先をタイムラインに確定してから
+            // 再生成し、最新設定を反映する。
+            val onReturnToTimeline: () -> Unit = {
+                destination = ShellDestination.Timeline
+                overlay = null
+                resetReceiveAndRecreate()
+            }
+            // ペアリング済みならタイムラインへ、未ペアリングならウィザード再開導線つきの待機画面へ着地する。
             val onWizardClose: () -> Unit = {
                 if (androidConfigRepository().load().hasSharedKey) {
-                    resetReceiveAndRecreate()
+                    onReturnToTimeline()
                 } else {
-                    screen = Screen.Pairing
+                    overlay = Overlay.PairingLanding
                 }
             }
-            val onPairingBack: (() -> Unit)? = if (config.hasSharedKey) {
-                { resetReceiveAndRecreate() }
+            val onPairingLandingBack: (() -> Unit)? = if (config.hasSharedKey) {
+                onReturnToTimeline
             } else {
                 null
             }
             val onShareCancel: () -> Unit = { finish() }
 
-            // Main はタイムライン本体であり、サブ画面からのバックはここへ戻す。Main 自体では
-            // システム既定（アプリ終了/バックグラウンド）に委ねる。各画面の「戻る」ボタンと
-            // 同じ後処理を通し、設定変更の反映漏れ等が起きないようにする。
-            BackHandler(enabled = screen != Screen.Main) {
-                when (screen) {
-                    Screen.Settings -> onOpenTimeline()
-                    Screen.Wizard -> onWizardClose()
-                    Screen.AppFilter, Screen.HealthCheck, Screen.ReceiveSetup -> onBackToMain()
-                    Screen.Pairing -> (onPairingBack ?: onBackToMain)()
-                    is Screen.Share -> onShareCancel()
-                    Screen.Main -> Unit
+            // バックキーはタイムラインへ戻す。シェル外のタスクは各タスク固有の後処理を通す。設定から戻る時は
+            // onNavigate 経由で設定反映を通し、既存の後処理の共有を崩さない。
+            BackHandler(enabled = overlay != null || destination != ShellDestination.Timeline) {
+                when (overlay) {
+                    Overlay.Wizard -> onWizardClose()
+                    Overlay.PairingLanding -> (onPairingLandingBack ?: { overlay = null })()
+                    is Overlay.Share -> onShareCancel()
+                    null -> onNavigate(ShellDestination.Timeline)
                 }
             }
 
@@ -251,68 +261,8 @@ class MainActivity : ComponentActivity() {
                         .background(MaterialTheme.colorScheme.background)
                         .safeDrawingPadding(),
                 ) {
-                    when (screen) {
-                        Screen.Pairing -> PairingScanScreen(
-                            controller = importController,
-                            onRequestScan = { onResult -> requestScan(onResult) },
-                            onOpenSettings = if (config.hasSharedKey) {
-                                null
-                            } else {
-                                { screen = Screen.Settings }
-                            },
-                            onOpenWizard = if (config.hasSharedKey) {
-                                null
-                            } else {
-                                { screen = Screen.Wizard }
-                            },
-                            onImported = { resetReceiveAndRecreate() },
-                            onBack = onPairingBack,
-                        )
-
-                        Screen.Main -> App(
-                            items = PerantaReceive.items,
-                            receiveEndpoint = config.unifiedPushEndpoint,
-                            onOpenSettings = { screen = Screen.Settings },
-                            onOpenPairing = { screen = Screen.Pairing },
-                            onOpenAppFilter = { screen = Screen.AppFilter },
-                            onOpenReceiveSetup = if (showReceiveSetup) {
-                                { screen = Screen.ReceiveSetup }
-                            } else {
-                                null
-                            },
-                            onOpenHealthCheck = { screen = Screen.HealthCheck },
-                            timelineActions = if (canReceive) {
-                                PerantaReceive.timelineActions(this@MainActivity)
-                            } else {
-                                null
-                            },
-                            attachmentUi = attachmentUi,
-                            fullTextUi = if (canReceive) {
-                                AndroidAttachmentReceive.fullTextUi(this@MainActivity, config)
-                            } else {
-                                null
-                            },
-                            emptyStateMessage = if (canReceive) {
-                                DEFAULT_EMPTY_TIMELINE_MESSAGE
-                            } else {
-                                RECEIVE_NOT_READY_MESSAGE
-                            },
-                        )
-
-                        Screen.Settings -> SettingsScreen(
-                            controller = SettingsController(androidConfigRepository()),
-                            qrContent = { uri ->
-                                QrCodeCanvas(pairingQrMatrix(uri), modifier = Modifier.size(240.dp))
-                            },
-                            onCopyPairingUri = { text -> copyPairingUri(text) },
-                            showSendRoleOptions = true,
-                            onOpenTimeline = onOpenTimeline,
-                            onOpenWizard = { screen = Screen.Wizard },
-                            updateController = updater.controller,
-                            onInstallUpdate = { url -> updater.install(url) },
-                        )
-
-                        Screen.Wizard -> WizardScreen(
+                    when (val current = overlay) {
+                        Overlay.Wizard -> WizardScreen(
                             caps = platformCapabilities(),
                             controller = SettingsController(androidConfigRepository()),
                             provider = wizardSetupProvider,
@@ -328,38 +278,20 @@ class MainActivity : ComponentActivity() {
                             onClose = onWizardClose,
                         )
 
-                        // 捕捉端末（送信）はインストール済みアプリ一覧から転送フィルタを編集し、
-                        // 受信端末は受信履歴のミラーから送信元ごとに mute する（§10.4）。
-                        Screen.AppFilter -> if (config.sendEnabled) {
-                            AppFilterScreen(
-                                controller = AppFilterController(androidConfigRepository()),
-                                installedAppsProvider = AndroidInstalledAppsProvider(this@MainActivity),
-                                onBack = onBackToMain,
-                            )
-                        } else {
-                            AppFilterScreen(
-                                controller = PerantaReceive.appFilterController(this@MainActivity),
-                                items = PerantaReceive.items,
-                                onBack = onBackToMain,
-                            )
-                        }
-
-                        Screen.HealthCheck -> HealthCheckScreen(
-                            checker = healthChecker,
-                            onBack = onBackToMain,
-                            externalRefreshKey = resumeTick,
-                            onCopyText = { text, sensitive -> copyText(text, sensitive) },
+                        Overlay.PairingLanding -> PairingScanScreen(
+                            controller = importController,
+                            onRequestScan = { onResult -> requestScan(onResult) },
+                            onOpenSettings = {
+                                overlay = null
+                                destination = ShellDestination.Settings
+                            },
+                            onOpenWizard = { overlay = Overlay.Wizard },
+                            onImported = onReturnToTimeline,
+                            onBack = onPairingLandingBack,
                         )
 
-                        Screen.ReceiveSetup -> ReceiveSetupScreen(
-                            provider = receiveSetupProvider,
-                            onBack = onBackToMain,
-                            externalRefreshKey = resumeTick,
-                            onCopyText = { text, sensitive -> copyText(text, sensitive) },
-                        )
-
-                        is Screen.Share -> {
-                            val files = (screen as Screen.Share).files
+                        is Overlay.Share -> {
+                            val files = current.files
                             ShareScreen(
                                 itemCount = files.size,
                                 onSend = { caption ->
@@ -368,6 +300,88 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onCancel = onShareCancel,
                             )
+                        }
+
+                        null -> PerantaShell(
+                            destination = destination,
+                            onNavigate = onNavigate,
+                            serverLabel = config.host.takeIf { it.isNotBlank() },
+                            deviceLabel = config.deviceName?.takeIf { it.isNotBlank() },
+                            showReceiveSetup = showReceiveSetup,
+                        ) { shellDestination ->
+                            when (shellDestination) {
+                                ShellDestination.Timeline -> App(
+                                    items = PerantaReceive.items,
+                                    timelineActions = if (canReceive) {
+                                        PerantaReceive.timelineActions(this@MainActivity)
+                                    } else {
+                                        null
+                                    },
+                                    attachmentUi = attachmentUi,
+                                    fullTextUi = if (canReceive) {
+                                        AndroidAttachmentReceive.fullTextUi(this@MainActivity, config)
+                                    } else {
+                                        null
+                                    },
+                                    emptyStateMessage = if (canReceive) {
+                                        DEFAULT_EMPTY_TIMELINE_MESSAGE
+                                    } else {
+                                        RECEIVE_NOT_READY_MESSAGE
+                                    },
+                                )
+
+                                ShellDestination.Settings -> SettingsScreen(
+                                    controller = SettingsController(androidConfigRepository()),
+                                    qrContent = { uri ->
+                                        QrCodeCanvas(pairingQrMatrix(uri), modifier = Modifier.size(240.dp))
+                                    },
+                                    onCopyPairingUri = { text -> copyPairingUri(text) },
+                                    showSendRoleOptions = true,
+                                    onOpenWizard = { overlay = Overlay.Wizard },
+                                    updateController = updater.controller,
+                                    onInstallUpdate = { url -> updater.install(url) },
+                                    showHeader = false,
+                                )
+
+                                // 捕捉端末（送信）はインストール済みアプリ一覧から転送フィルタを編集し、
+                                // 受信端末は受信履歴のミラーから送信元ごとに mute する（§10.4）。
+                                ShellDestination.AppFilter -> if (config.sendEnabled) {
+                                    AppFilterScreen(
+                                        controller = AppFilterController(androidConfigRepository()),
+                                        installedAppsProvider = AndroidInstalledAppsProvider(this@MainActivity),
+                                        showHeader = false,
+                                    )
+                                } else {
+                                    AppFilterScreen(
+                                        controller = PerantaReceive.appFilterController(this@MainActivity),
+                                        items = PerantaReceive.items,
+                                        showHeader = false,
+                                    )
+                                }
+
+                                ShellDestination.HealthCheck -> HealthCheckScreen(
+                                    checker = healthChecker,
+                                    externalRefreshKey = resumeTick,
+                                    onCopyText = { text, sensitive -> copyText(text, sensitive) },
+                                    showHeader = false,
+                                )
+
+                                ShellDestination.ReceiveSetup -> ReceiveSetupScreen(
+                                    provider = receiveSetupProvider,
+                                    externalRefreshKey = resumeTick,
+                                    onCopyText = { text, sensitive -> copyText(text, sensitive) },
+                                    receiveEndpoint = config.unifiedPushEndpoint,
+                                    showHeader = false,
+                                )
+
+                                ShellDestination.PairingImport -> PairingScanScreen(
+                                    controller = importController,
+                                    onRequestScan = { onResult -> requestScan(onResult) },
+                                    onImported = onReturnToTimeline,
+                                    showHeader = false,
+                                    showDescription = true,
+                                )
+                            }
                         }
                     }
                 }
