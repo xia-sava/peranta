@@ -45,6 +45,7 @@ import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.platform.platformCapabilities
 import to.sava.peranta.ui.AppFilterScreen
 import to.sava.peranta.ui.HealthCheckScreen
+import to.sava.peranta.ui.PairingScanScreen
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.QrCodeCanvas
 import to.sava.peranta.ui.SettingsScreen
@@ -202,6 +203,7 @@ fun main(args: Array<String>) {
         var showSettings by remember { mutableStateOf(false) }
         var showAppFilter by remember { mutableStateOf(false) }
         var showHealthCheck by remember { mutableStateOf(false) }
+        var showPairing by remember { mutableStateOf(false) }
         val windowState = rememberWindowState()
 
         // トースト経由など Compose 外からの「ウィンドウを出す」要求を可視状態へ橋渡しする。
@@ -295,6 +297,13 @@ fun main(args: Array<String>) {
                         onBack = { showHealthCheck = false },
                     )
                 }
+                showPairing -> PerantaTheme {
+                    PairingScanScreen(
+                        controller = pairingImportController,
+                        onImported = { showPairing = false; configGeneration++ },
+                        onBack = { showPairing = false },
+                    )
+                }
                 showSettings -> PerantaTheme {
                     SettingsScreen(
                         controller = settingsController,
@@ -323,6 +332,7 @@ fun main(args: Array<String>) {
                 currentReceiver != null -> App(
                     items = currentReceiver.items,
                     onOpenSettings = { showSettings = true },
+                    onOpenPairing = { showPairing = true },
                     onOpenAppFilter = { showAppFilter = true },
                     onOpenHealthCheck = { showHealthCheck = true },
                     timelineActions = currentReceiver.timelineActions(),
