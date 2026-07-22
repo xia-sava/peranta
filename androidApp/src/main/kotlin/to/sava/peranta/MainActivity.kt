@@ -48,6 +48,7 @@ import to.sava.peranta.android.androidConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.platform.ioDispatcher
+import to.sava.peranta.platform.platformCapabilities
 import to.sava.peranta.pairing.PairingImportController
 import to.sava.peranta.pairing.SettingsController
 import to.sava.peranta.pairing.pairingQrMatrix
@@ -64,7 +65,6 @@ import to.sava.peranta.ui.QrCodeCanvas
 import to.sava.peranta.ui.SettingsScreen
 import to.sava.peranta.ui.ShareScreen
 import to.sava.peranta.ui.setup.ReceiveSetupScreen
-import to.sava.peranta.ui.setup.WizardRole
 import to.sava.peranta.ui.setup.WizardScreen
 import to.sava.peranta.update.AndroidUpdater
 
@@ -279,7 +279,7 @@ class MainActivity : ComponentActivity() {
                         )
 
                         Screen.Wizard -> WizardScreen(
-                            role = WizardRole.ANDROID,
+                            caps = platformCapabilities(),
                             controller = SettingsController(androidConfigRepository()),
                             provider = wizardSetupProvider,
                             healthChecker = healthChecker,

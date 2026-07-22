@@ -1,6 +1,7 @@
 package to.sava.peranta.ui.setup
 
 import to.sava.peranta.config.PerantaConfig
+import to.sava.peranta.platform.PlatformCapabilities
 import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -8,6 +9,24 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class WizardFlowTest {
+
+    /** Desktop 相当の caps（自動起動を持ち、通知捕捉・SMS・UnifiedPush・POST_NOTIFICATIONS は持たない）。 */
+    private val desktopCaps = PlatformCapabilities(
+        canCaptureNotifications = false,
+        canReceiveSms = false,
+        usesUnifiedPush = false,
+        requiresPostNotificationsPermission = false,
+        supportsAutoStart = true,
+    )
+
+    /** Android 相当の caps（通知捕捉・SMS・UnifiedPush・POST_NOTIFICATIONS を持ち、自動起動は持たない）。 */
+    private val androidCaps = PlatformCapabilities(
+        canCaptureNotifications = true,
+        canReceiveSms = true,
+        usesUnifiedPush = true,
+        requiresPostNotificationsPermission = true,
+        supportsAutoStart = false,
+    )
 
     private fun paired(config: PerantaConfig = PerantaConfig()): PerantaConfig =
         config.copy(sharedKeyBase64 = Base64.encode(ByteArray(32)), keyId = "1", deviceName = "d")
@@ -18,8 +37,8 @@ class WizardFlowTest {
     /** 各項目を DONE 扱いにした項目列（項目ページの完了判定を満たす）。 */
     private fun allDone(vararg ids: String): List<SetupItemUi> = ids.map { item(it, SetupStatus.DONE) }
 
-    private fun pageIds(role: WizardRole, config: PerantaConfig, answers: WizardAnswers): List<String> =
-        WizardFlow.pages(role, config, answers).map { it.id }
+    private fun pageIds(caps: PlatformCapabilities, config: PerantaConfig, answers: WizardAnswers): List<String> =
+        WizardFlow.pages(caps, config, answers).map { it.id }
 
     /**
      * 健康診断（AndroidHealthChecker）が生成する診断項目 id を config から写す契約。
@@ -50,14 +69,14 @@ class WizardFlowTest {
                 WizardFlow.PAGE_AUTOSTART,
                 WizardFlow.PAGE_DONE,
             ),
-            pageIds(WizardRole.DESKTOP_SOURCE, PerantaConfig(), WizardAnswers()),
+            pageIds(desktopCaps, PerantaConfig(), WizardAnswers()),
         )
     }
 
     /** Android 冒頭は A1（設定の受け取り方）から始まり、既定/参加では QR 取り込みページを挟む。 */
     @Test
     fun androidStartsWithSourceThenQrImportByDefault() {
-        val ids = pageIds(WizardRole.ANDROID, PerantaConfig(), WizardAnswers())
+        val ids = pageIds(androidCaps, PerantaConfig(), WizardAnswers())
         assertEquals(WizardFlow.PAGE_SOURCE, ids.first())
         assertTrue(ids.contains(WizardFlow.PAGE_QR_IMPORT))
         assertFalse(ids.contains(WizardFlow.PAGE_CONNECTION))
@@ -67,7 +86,7 @@ class WizardFlowTest {
     @Test
     fun androidBeSourceBranchExpandsToConnectionDeviceNameKeyPairingInOrder() {
         val ids = pageIds(
-            WizardRole.ANDROID,
+            androidCaps,
             PerantaConfig(),
             WizardAnswers(source = WizardSourceChoice.BE_SOURCE),
         )
@@ -89,7 +108,7 @@ class WizardFlowTest {
     @Test
     fun androidJoinBranchPlacesDeviceNameAfterQrImport() {
         val ids = pageIds(
-            WizardRole.ANDROID,
+            androidCaps,
             PerantaConfig(),
             WizardAnswers(source = WizardSourceChoice.JOIN),
         )
@@ -102,7 +121,7 @@ class WizardFlowTest {
     @Test
     fun forwardOnShowsPermissionsAndReverseChannel() {
         val ids = pageIds(
-            WizardRole.ANDROID,
+            androidCaps,
             paired(PerantaConfig(smsDirectReceive = true)),
             WizardAnswers(source = WizardSourceChoice.JOIN, forward = true),
         )
@@ -122,7 +141,7 @@ class WizardFlowTest {
     @Test
     fun forwardOnOmitsSmsPageWhenSmsDirectReceiveOff() {
         val ids = pageIds(
-            WizardRole.ANDROID,
+            androidCaps,
             paired(PerantaConfig(smsDirectReceive = false)),
             WizardAnswers(source = WizardSourceChoice.JOIN, forward = true),
         )
@@ -133,7 +152,7 @@ class WizardFlowTest {
     @Test
     fun forwardOffShowsPostNotificationsAndReceiveStepsWithoutReverseChannel() {
         val ids = pageIds(
-            WizardRole.ANDROID,
+            androidCaps,
             paired(),
             WizardAnswers(source = WizardSourceChoice.JOIN, forward = false),
         )
@@ -148,7 +167,7 @@ class WizardFlowTest {
     @Test
     fun skippableFlagsMatchSpec() {
         val send = WizardFlow.pages(
-            WizardRole.ANDROID,
+            androidCaps,
             paired(PerantaConfig(smsDirectReceive = true)),
             WizardAnswers(source = WizardSourceChoice.JOIN, forward = true),
         )
@@ -156,7 +175,7 @@ class WizardFlowTest {
         assertFalse(send.first { it.id == WizardFlow.PAGE_PERM_NLS }.skippable)
 
         val receive = WizardFlow.pages(
-            WizardRole.ANDROID,
+            androidCaps,
             paired(),
             WizardAnswers(source = WizardSourceChoice.JOIN, forward = false),
         )
@@ -164,7 +183,7 @@ class WizardFlowTest {
         assertTrue(receive.first { it.id == ReceiveSetupSteps.SELF_TEST_ID }.skippable)
         assertFalse(receive.first { it.id == ReceiveSetupSteps.UNIFIED_PUSH_ID }.skippable)
 
-        val desktop = WizardFlow.pages(WizardRole.DESKTOP_SOURCE, PerantaConfig(), WizardAnswers())
+        val desktop = WizardFlow.pages(desktopCaps, PerantaConfig(), WizardAnswers())
         assertTrue(desktop.first { it.id == WizardFlow.PAGE_AUTOSTART }.skippable)
         assertFalse(desktop.first { it.id == WizardFlow.PAGE_CONNECTION }.skippable)
     }
@@ -308,7 +327,7 @@ class WizardFlowTest {
     fun firstIncompleteIsDeviceNameWhenBeSourceOnlyConnectionComplete() {
         val config = PerantaConfig(host = "h", accessToken = "tk")
         val answers = WizardAnswers(source = WizardSourceChoice.BE_SOURCE)
-        val pages = WizardFlow.pages(WizardRole.ANDROID, config, answers)
+        val pages = WizardFlow.pages(androidCaps, config, answers)
         assertEquals(
             WizardFlow.PAGE_DEVICE_NAME,
             WizardFlow.firstIncompletePage(pages, config, answers, emptyList())?.id,
@@ -320,7 +339,7 @@ class WizardFlowTest {
     fun firstIncompleteIsSourceWhenNothingAnswered() {
         val config = PerantaConfig()
         val answers = WizardAnswers()
-        val pages = WizardFlow.pages(WizardRole.ANDROID, config, answers)
+        val pages = WizardFlow.pages(androidCaps, config, answers)
         assertEquals(
             WizardFlow.PAGE_SOURCE,
             WizardFlow.firstIncompletePage(pages, config, answers, emptyList())?.id,
@@ -332,7 +351,7 @@ class WizardFlowTest {
     fun firstIncompleteIsRoleWhenPairedButRoleUnanswered() {
         val config = paired()
         val answers = WizardAnswers()
-        val pages = WizardFlow.pages(WizardRole.ANDROID, config, answers)
+        val pages = WizardFlow.pages(androidCaps, config, answers)
         assertEquals(
             WizardFlow.PAGE_ROLE,
             WizardFlow.firstIncompletePage(pages, config, answers, emptyList())?.id,
@@ -360,7 +379,7 @@ class WizardFlowTest {
             ),
         )
         scenarios.forEach { (config, answers) ->
-            val pages = WizardFlow.pages(WizardRole.ANDROID, config, answers)
+            val pages = WizardFlow.pages(androidCaps, config, answers)
             val healthIds = expectedHealthIds(config)
             val allItemIds = pages.flatMap { it.itemIds }.toSet()
             assertTrue(allItemIds.containsAll(healthIds), "被覆漏れ: ${healthIds - allItemIds} (forward=${answers.forward})")
@@ -378,7 +397,7 @@ class WizardFlowTest {
     /** Desktop の自動起動（診断 id: autostart）は D5（skippable）が覆う。 */
     @Test
     fun desktopAutostartIsCoveredBySkippablePage() {
-        val autostartPage = WizardFlow.pages(WizardRole.DESKTOP_SOURCE, PerantaConfig(), WizardAnswers())
+        val autostartPage = WizardFlow.pages(desktopCaps, PerantaConfig(), WizardAnswers())
             .first { it.itemIds.contains(WizardFlow.ITEM_AUTOSTART) }
         assertTrue(autostartPage.skippable)
     }
@@ -405,8 +424,8 @@ class WizardFlowTest {
      * 前ページで得た状態だけで完了できないページ（完了条件が後続ページの入力を要求する等）があれば、
      * ここで完了不能として検出する（id 集合の被覆検証だけでは順序の詰みを検出できないため）。
      */
-    private fun assertWalkReachesDone(role: WizardRole, config0: PerantaConfig, answers: WizardAnswers) {
-        val pages = WizardFlow.pages(role, config0, answers)
+    private fun assertWalkReachesDone(caps: PlatformCapabilities, config0: PerantaConfig, answers: WizardAnswers) {
+        val pages = WizardFlow.pages(caps, config0, answers)
         var config = config0
         val doneIds = mutableSetOf<String>()
         pages.dropLast(1).forEach { page ->
@@ -415,26 +434,26 @@ class WizardFlowTest {
             val items = doneIds.map { item(it, SetupStatus.DONE) }
             assertTrue(
                 WizardFlow.isPageComplete(page, config, answers, items),
-                "ページ ${page.id} が、そこまでの状態で完了できない (role=$role, source=${answers.source}, forward=${answers.forward})",
+                "ページ ${page.id} が、そこまでの状態で完了できない (caps=$caps, source=${answers.source}, forward=${answers.forward})",
             )
         }
         val finalItems = doneIds.map { item(it, SetupStatus.DONE) }
         assertEquals(
             WizardFlow.PAGE_DONE,
             WizardFlow.firstIncompletePage(pages, config, answers, finalItems)?.id,
-            "全ページ完了後の着地点が完了ページでない (role=$role, forward=${answers.forward})",
+            "全ページ完了後の着地点が完了ページでない (caps=$caps, forward=${answers.forward})",
         )
     }
 
     @Test
     fun desktopFlowWalksToDone() {
-        assertWalkReachesDone(WizardRole.DESKTOP_SOURCE, PerantaConfig(), WizardAnswers())
+        assertWalkReachesDone(desktopCaps, PerantaConfig(), WizardAnswers())
     }
 
     @Test
     fun androidJoinForwardOnFlowWalksToDone() {
         assertWalkReachesDone(
-            WizardRole.ANDROID,
+            androidCaps,
             PerantaConfig(smsDirectReceive = true),
             WizardAnswers(source = WizardSourceChoice.JOIN, forward = true),
         )
@@ -443,7 +462,7 @@ class WizardFlowTest {
     @Test
     fun androidJoinForwardOffFlowWalksToDone() {
         assertWalkReachesDone(
-            WizardRole.ANDROID,
+            androidCaps,
             PerantaConfig(),
             WizardAnswers(source = WizardSourceChoice.JOIN, forward = false),
         )
@@ -452,7 +471,7 @@ class WizardFlowTest {
     @Test
     fun androidBeSourceFlowWalksToDone() {
         assertWalkReachesDone(
-            WizardRole.ANDROID,
+            androidCaps,
             PerantaConfig(smsDirectReceive = true),
             WizardAnswers(source = WizardSourceChoice.BE_SOURCE, forward = true),
         )

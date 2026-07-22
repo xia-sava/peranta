@@ -17,6 +17,7 @@ import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.pairing.PairingImportController
 import to.sava.peranta.pairing.SettingsController
+import to.sava.peranta.platform.PlatformCapabilities
 import to.sava.peranta.ui.HealthCheckItem
 import to.sava.peranta.ui.HealthChecker
 import to.sava.peranta.ui.TAG_PAIRING_MANUAL_INPUT
@@ -33,6 +34,24 @@ class WizardScreenTest {
     }
 
     private val emptyHealthChecker = HealthChecker { emptyList<HealthCheckItem>() }
+
+    /** Desktop 相当の caps（自動起動を持ち、通知捕捉・SMS・UnifiedPush・POST_NOTIFICATIONS は持たない）。 */
+    private val desktopCaps = PlatformCapabilities(
+        canCaptureNotifications = false,
+        canReceiveSms = false,
+        usesUnifiedPush = false,
+        requiresPostNotificationsPermission = false,
+        supportsAutoStart = true,
+    )
+
+    /** Android 相当の caps（通知捕捉・SMS・UnifiedPush・POST_NOTIFICATIONS を持ち、自動起動は持たない）。 */
+    private val androidCaps = PlatformCapabilities(
+        canCaptureNotifications = true,
+        canReceiveSms = true,
+        usesUnifiedPush = true,
+        requiresPostNotificationsPermission = true,
+        supportsAutoStart = false,
+    )
 
     private fun autostartItem(status: SetupStatus): SetupItemUi =
         SetupItemUi(
@@ -64,7 +83,7 @@ class WizardScreenTest {
         val controller = SettingsController(ConfigRepository(MapSettings()))
         setContent {
             WizardScreen(
-                role = WizardRole.DESKTOP_SOURCE,
+                caps = desktopCaps,
                 controller = controller,
                 provider = FakeProvider(),
                 healthChecker = emptyHealthChecker,
@@ -85,7 +104,7 @@ class WizardScreenTest {
         val controller = SettingsController(ConfigRepository(MapSettings()))
         setContent {
             WizardScreen(
-                role = WizardRole.DESKTOP_SOURCE,
+                caps = desktopCaps,
                 controller = controller,
                 provider = FakeProvider(),
                 healthChecker = emptyHealthChecker,
@@ -103,7 +122,7 @@ class WizardScreenTest {
         val controller = SettingsController(ConfigRepository(MapSettings()))
         setContent {
             WizardScreen(
-                role = WizardRole.DESKTOP_SOURCE,
+                caps = desktopCaps,
                 controller = controller,
                 provider = FakeProvider(),
                 healthChecker = emptyHealthChecker,
@@ -126,7 +145,7 @@ class WizardScreenTest {
         val controller = SettingsController(repo)
         setContent {
             WizardScreen(
-                role = WizardRole.ANDROID,
+                caps = androidCaps,
                 controller = controller,
                 provider = FakeProvider(),
                 healthChecker = emptyHealthChecker,
@@ -148,7 +167,7 @@ class WizardScreenTest {
         val controller = SettingsController(repo)
         setContent {
             WizardScreen(
-                role = WizardRole.ANDROID,
+                caps = androidCaps,
                 controller = controller,
                 provider = FakeProvider(),
                 healthChecker = emptyHealthChecker,
@@ -169,7 +188,7 @@ class WizardScreenTest {
         val controller = SettingsController(repo)
         setContent {
             WizardScreen(
-                role = WizardRole.ANDROID,
+                caps = androidCaps,
                 controller = controller,
                 provider = FakeProvider(),
                 healthChecker = emptyHealthChecker,
@@ -189,7 +208,7 @@ class WizardScreenTest {
         val controller = SettingsController(ConfigRepository(MapSettings()))
         setContent {
             WizardScreen(
-                role = WizardRole.ANDROID,
+                caps = androidCaps,
                 controller = controller,
                 provider = FakeProvider(),
                 healthChecker = emptyHealthChecker,
@@ -211,7 +230,7 @@ class WizardScreenTest {
         val controller = SettingsController(repo)
         setContent {
             WizardScreen(
-                role = WizardRole.ANDROID,
+                caps = androidCaps,
                 controller = controller,
                 provider = FakeProvider(),
                 healthChecker = emptyHealthChecker,
@@ -232,7 +251,7 @@ class WizardScreenTest {
         val controller = SettingsController(repo)
         setContent {
             WizardScreen(
-                role = WizardRole.DESKTOP_SOURCE,
+                caps = desktopCaps,
                 controller = controller,
                 provider = FakeProvider(listOf(autostartItem(SetupStatus.TODO))),
                 healthChecker = emptyHealthChecker,
@@ -260,7 +279,7 @@ class WizardScreenTest {
         var savedCount = 0
         setContent {
             WizardScreen(
-                role = WizardRole.DESKTOP_SOURCE,
+                caps = desktopCaps,
                 controller = controller,
                 provider = FakeProvider(),
                 healthChecker = emptyHealthChecker,
@@ -290,7 +309,7 @@ class WizardScreenTest {
         var savedCount = 0
         setContent {
             WizardScreen(
-                role = WizardRole.DESKTOP_SOURCE,
+                caps = desktopCaps,
                 controller = controller,
                 provider = FakeProvider(),
                 healthChecker = emptyHealthChecker,
@@ -311,7 +330,7 @@ class WizardScreenTest {
         var closed = false
         setContent {
             WizardScreen(
-                role = WizardRole.DESKTOP_SOURCE,
+                caps = desktopCaps,
                 controller = controller,
                 provider = FakeProvider(),
                 healthChecker = emptyHealthChecker,

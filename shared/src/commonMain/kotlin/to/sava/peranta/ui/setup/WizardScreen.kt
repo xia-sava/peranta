@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.pairing.PairingImportController
+import to.sava.peranta.platform.PlatformCapabilities
 import to.sava.peranta.pairing.SettingsController
 import to.sava.peranta.ui.HealthCheckItem
 import to.sava.peranta.ui.HealthCheckState
@@ -56,7 +57,7 @@ private const val ROTATE_WARNING_BODY: String =
 
 /**
  * 設定・診断のセットアップをページ列で案内するウィザード。
- * ページ列は [WizardFlow.pages] が [role] と回答済み [WizardAnswers] / [PerantaConfig][to.sava.peranta.config.PerantaConfig]
+ * ページ列は [WizardFlow.pages] が [caps] と回答済み [WizardAnswers] / [PerantaConfig][to.sava.peranta.config.PerantaConfig]
  * から算出し、編集ページは [SettingsController] 経由で、項目ページは [provider] の [SetupItemUi] を
  * [SetupChecklist] のページ内モードで描く。入力・操作は全て即時保存し、いつでも「閉じる」で離脱できる。
  * 再入時は最初の未完了ページから始める。
@@ -68,7 +69,7 @@ private const val ROTATE_WARNING_BODY: String =
  */
 @Composable
 fun WizardScreen(
-    role: WizardRole,
+    caps: PlatformCapabilities,
     controller: SettingsController,
     provider: SetupItemsProvider,
     healthChecker: HealthChecker,
@@ -104,7 +105,7 @@ fun WizardScreen(
     var skipConfirm by remember { mutableStateOf<WizardPage?>(null) }
     var doneItems by remember { mutableStateOf<List<HealthCheckItem>?>(null) }
 
-    val pages = WizardFlow.pages(role, config, answers)
+    val pages = WizardFlow.pages(caps, config, answers)
     val index = currentIndex.coerceIn(0, pages.lastIndex)
     val page = pages[index]
     val completed = WizardFlow.isPageComplete(page, config, answers, items ?: emptyList())

@@ -1,15 +1,7 @@
 package to.sava.peranta.ui.setup
 
 import to.sava.peranta.config.PerantaConfig
-
-/**
- * ウィザードの系統。Desktop は設定元・受信の 1 系統、Android は冒頭の選択で
- * 送信/受信/両方・設定元/QR 取り込みに分岐するため単一の [ANDROID] にまとめ、分岐は [WizardAnswers] が担う。
- */
-enum class WizardRole {
-    DESKTOP_SOURCE,
-    ANDROID,
-}
+import to.sava.peranta.platform.PlatformCapabilities
 
 /** 設定の受け取り方（Android 冒頭の選択）。[JOIN] は他端末の QR で参加、[BE_SOURCE] はこの端末を設定元にする。 */
 enum class WizardSourceChoice {
@@ -44,8 +36,9 @@ data class WizardPage(
 )
 
 /**
- * ロール別のページ列と、config・answers・項目状態に基づく完了判定を提供する純関数群。
- * 永続化には関与せず、渡された [PerantaConfig] / [WizardAnswers] / [SetupItemUi] 列だけで判定する。
+ * プラットフォームの [PlatformCapabilities] 別のページ列と、config・answers・項目状態に基づく
+ * 完了判定を提供する純関数群。永続化には関与せず、渡された [PlatformCapabilities] /
+ * [PerantaConfig] / [WizardAnswers] / [SetupItemUi] 列だけで判定する。
  */
 object WizardFlow {
 
@@ -73,12 +66,17 @@ object WizardFlow {
     /** 自動起動項目の id（Desktop）。 */
     const val ITEM_AUTOSTART: String = "autostart"
 
-    /** [role] と回答済み [config] / [answers] から現在のページ列を算出する。 */
-    fun pages(role: WizardRole, config: PerantaConfig, answers: WizardAnswers): List<WizardPage> =
-        when (role) {
-            WizardRole.DESKTOP_SOURCE -> desktopPages()
-            WizardRole.ANDROID -> androidPages(config, answers)
-        }
+    /**
+     * [caps] と回答済み [config] / [answers] から現在のページ列を算出する。
+     * 系統の判別は [isDesktopSourceCaps] に閉じる（自動起動を持ち通知捕捉を持たない Desktop 系統か、
+     * それ以外の Android 系統か）。
+     */
+    fun pages(caps: PlatformCapabilities, config: PerantaConfig, answers: WizardAnswers): List<WizardPage> =
+        if (isDesktopSourceCaps(caps)) desktopPages() else androidPages(config, answers)
+
+    /** Desktop 系統（設定元・受信の 1 系統）の caps か。Android 系統は冒頭の選択で分岐し、分岐は [WizardAnswers] が担う。 */
+    private fun isDesktopSourceCaps(caps: PlatformCapabilities): Boolean =
+        caps.supportsAutoStart && !caps.canCaptureNotifications
 
     private fun desktopPages(): List<WizardPage> =
         listOf(

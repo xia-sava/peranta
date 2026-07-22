@@ -41,6 +41,7 @@ import to.sava.peranta.autostart.WindowsRunRegistry
 import to.sava.peranta.pairing.pairingQrMatrix
 import to.sava.peranta.platform.initLogging
 import to.sava.peranta.platform.ioDispatcher
+import to.sava.peranta.platform.platformCapabilities
 import to.sava.peranta.ui.AppFilterScreen
 import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.PerantaTheme
@@ -51,7 +52,6 @@ import to.sava.peranta.ui.setup.SetupItemUi
 import to.sava.peranta.ui.setup.SetupItemsProvider
 import to.sava.peranta.ui.setup.SetupStatus
 import to.sava.peranta.ui.setup.WizardFlow
-import to.sava.peranta.ui.setup.WizardRole
 import to.sava.peranta.ui.setup.WizardScreen
 import to.sava.peranta.update.DesktopUpdater
 import java.awt.EventQueue
@@ -274,7 +274,7 @@ fun main(args: Array<String>) {
             when {
                 showWizard -> PerantaTheme {
                     WizardScreen(
-                        role = WizardRole.DESKTOP_SOURCE,
+                        caps = platformCapabilities(),
                         controller = settingsController,
                         provider = desktopWizardSetupProvider(autoStart),
                         healthChecker = DesktopHealthChecker(autoStart),
