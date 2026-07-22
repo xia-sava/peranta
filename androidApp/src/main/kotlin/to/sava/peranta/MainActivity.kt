@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.os.PersistableBundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -207,6 +208,39 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // タイムラインへ戻る後処理は各画面のボタンとバックキーで共通の経路を通す。
+            val onOpenTimeline: () -> Unit = { resetReceiveAndRecreate() }
+            val onBackToMain: () -> Unit = { screen = Screen.Main }
+            // ペアリング済みならタイムラインへ（再生成で最新設定を反映）、未ペアリングなら
+            // ウィザード再開導線つきの待機画面（Pairing）へ着地する。
+            val onWizardClose: () -> Unit = {
+                if (androidConfigRepository().load().hasSharedKey) {
+                    resetReceiveAndRecreate()
+                } else {
+                    screen = Screen.Pairing
+                }
+            }
+            val onPairingBack: (() -> Unit)? = if (config.hasSharedKey) {
+                { resetReceiveAndRecreate() }
+            } else {
+                null
+            }
+            val onShareCancel: () -> Unit = { finish() }
+
+            // Main はタイムライン本体であり、サブ画面からのバックはここへ戻す。Main 自体では
+            // システム既定（アプリ終了/バックグラウンド）に委ねる。各画面の「戻る」ボタンと
+            // 同じ後処理を通し、設定変更の反映漏れ等が起きないようにする。
+            BackHandler(enabled = screen != Screen.Main) {
+                when (screen) {
+                    Screen.Settings -> onOpenTimeline()
+                    Screen.Wizard -> onWizardClose()
+                    Screen.AppFilter, Screen.HealthCheck, Screen.ReceiveSetup -> onBackToMain()
+                    Screen.Pairing -> (onPairingBack ?: onBackToMain)()
+                    is Screen.Share -> onShareCancel()
+                    Screen.Main -> Unit
+                }
+            }
+
             // システムバー（ステータスバー・ナビゲーションバー）と重ならないよう、全画面共通で安全領域の
             // 余白を入れる（enableEdgeToEdge によりコンテンツがシステムバー裏まで描くため）。没入型にはせず、
             // 背景色をシステムバー裏まで塗った上でコンテンツだけを内側へ寄せる。
@@ -232,11 +266,7 @@ class MainActivity : ComponentActivity() {
                                 { screen = Screen.Wizard }
                             },
                             onImported = { resetReceiveAndRecreate() },
-                            onBack = if (config.hasSharedKey) {
-                                { resetReceiveAndRecreate() }
-                            } else {
-                                null
-                            },
+                            onBack = onPairingBack,
                         )
 
                         Screen.Main -> App(
@@ -276,7 +306,7 @@ class MainActivity : ComponentActivity() {
                             },
                             onCopyPairingUri = { text -> copyPairingUri(text) },
                             showSendRoleOptions = true,
-                            onOpenTimeline = { resetReceiveAndRecreate() },
+                            onOpenTimeline = onOpenTimeline,
                             onOpenWizard = { screen = Screen.Wizard },
                             updateController = updater.controller,
                             onInstallUpdate = { url -> updater.install(url) },
@@ -295,15 +325,7 @@ class MainActivity : ComponentActivity() {
                             onCopyText = { text, sensitive -> copyText(text, sensitive) },
                             onRequestScan = { onResult -> requestScan(onResult) },
                             externalRefreshKey = resumeTick,
-                            // ペアリング済みならタイムラインへ（再生成で最新設定を反映）、未ペアリングなら
-                            // ウィザード再開導線つきの待機画面（Pairing）へ着地する。
-                            onClose = {
-                                if (androidConfigRepository().load().hasSharedKey) {
-                                    resetReceiveAndRecreate()
-                                } else {
-                                    screen = Screen.Pairing
-                                }
-                            },
+                            onClose = onWizardClose,
                         )
 
                         // 捕捉端末（送信）はインストール済みアプリ一覧から転送フィルタを編集し、
@@ -312,26 +334,26 @@ class MainActivity : ComponentActivity() {
                             AppFilterScreen(
                                 controller = AppFilterController(androidConfigRepository()),
                                 installedAppsProvider = AndroidInstalledAppsProvider(this@MainActivity),
-                                onBack = { screen = Screen.Main },
+                                onBack = onBackToMain,
                             )
                         } else {
                             AppFilterScreen(
                                 controller = PerantaReceive.appFilterController(this@MainActivity),
                                 items = PerantaReceive.items,
-                                onBack = { screen = Screen.Main },
+                                onBack = onBackToMain,
                             )
                         }
 
                         Screen.HealthCheck -> HealthCheckScreen(
                             checker = healthChecker,
-                            onBack = { screen = Screen.Main },
+                            onBack = onBackToMain,
                             externalRefreshKey = resumeTick,
                             onCopyText = { text, sensitive -> copyText(text, sensitive) },
                         )
 
                         Screen.ReceiveSetup -> ReceiveSetupScreen(
                             provider = receiveSetupProvider,
-                            onBack = { screen = Screen.Main },
+                            onBack = onBackToMain,
                             externalRefreshKey = resumeTick,
                             onCopyText = { text, sensitive -> copyText(text, sensitive) },
                         )
@@ -344,7 +366,7 @@ class MainActivity : ComponentActivity() {
                                     AttachmentTransferService.enqueueUpload(this@MainActivity, files, caption)
                                     finish()
                                 },
-                                onCancel = { finish() },
+                                onCancel = onShareCancel,
                             )
                         }
                     }
