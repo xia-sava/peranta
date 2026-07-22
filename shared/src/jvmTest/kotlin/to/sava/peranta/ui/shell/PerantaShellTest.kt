@@ -1,7 +1,9 @@
 package to.sava.peranta.ui.shell
 
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -12,6 +14,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -31,16 +34,24 @@ class PerantaShellTest {
         ShellDestination.Settings,
     )
 
+    /** 狭幅（開閉式ドロワー）を強制するサイズ。閾値未満。 */
+    private val narrowShellModifier = Modifier.size(width = 400.dp, height = 800.dp)
+
+    /** 広幅（常設ドロワー）を強制するサイズ。閾値以上。 */
+    private val wideShellModifier = Modifier.size(width = 1000.dp, height = 800.dp)
+
     @Composable
     private fun shell(
         destination: ShellDestination,
         onNavigate: (ShellDestination) -> Unit = {},
+        modifier: Modifier = narrowShellModifier,
     ) {
         PerantaShell(
             destination = destination,
             onNavigate = onNavigate,
             serverLabel = "peranta.example.com",
             deviceLabel = "Pixel 9",
+            modifier = modifier,
         ) { Text(text = "content-${it.name}") }
     }
 
@@ -106,5 +117,69 @@ class PerantaShellTest {
         onNodeWithTag(drawerTag(ShellDestination.Settings)).performClick()
         assertEquals(ShellDestination.Settings, navigated)
         onNodeWithTag(drawerTag(ShellDestination.Timeline)).assertIsNotDisplayed()
+    }
+
+    /** 広幅では開閉操作なしでドロワー項目が常時表示され、ハンバーガーは出ない。 */
+    @Test
+    fun wideShowsPermanentDrawerWithoutHamburger() = runComposeUiTest {
+        setContent { shell(ShellDestination.Timeline, modifier = wideShellModifier) }
+        drawerDestinations.forEach { destination ->
+            onNodeWithTag(drawerTag(destination)).assertIsDisplayed()
+        }
+        onAllNodesWithTag(TAG_SHELL_MENU).assertCountEquals(0)
+    }
+
+    /** 広幅のサブ画面では戻る（←）もハンバーガーも出ない（現在地は常設一覧が示す）。 */
+    @Test
+    fun wideSubScreenShowsNoLeadingIcon() = runComposeUiTest {
+        setContent { shell(ShellDestination.Settings, modifier = wideShellModifier) }
+        onAllNodesWithTag(TAG_SHELL_BACK).assertCountEquals(0)
+        onAllNodesWithTag(TAG_SHELL_MENU).assertCountEquals(0)
+        onNodeWithTag(drawerTag(ShellDestination.Settings)).assertIsDisplayed()
+    }
+
+    /** 広幅では常設ドロワー項目のタップで onNavigate が呼ばれる。 */
+    @Test
+    fun wideDrawerItemNavigates() = runComposeUiTest {
+        var navigated: ShellDestination? = null
+        setContent {
+            shell(ShellDestination.Timeline, onNavigate = { navigated = it }, modifier = wideShellModifier)
+        }
+        onNodeWithTag(drawerTag(ShellDestination.Settings)).performClick()
+        assertEquals(ShellDestination.Settings, navigated)
+    }
+
+    /** 広幅でも現在地は常設ドロワーでハイライトされる。 */
+    @Test
+    fun wideCurrentDestinationIsHighlighted() = runComposeUiTest {
+        setContent { shell(ShellDestination.Settings, modifier = wideShellModifier) }
+        onNodeWithTag(drawerTag(ShellDestination.Settings)).assertIsSelected()
+        onNodeWithTag(drawerTag(ShellDestination.Timeline)).assertIsNotSelected()
+    }
+
+    /** 閾値ちょうどの幅は広幅（常設ドロワー）になる。 */
+    @Test
+    fun exactThresholdWidthIsWide() = runComposeUiTest {
+        setContent {
+            shell(
+                ShellDestination.Timeline,
+                modifier = Modifier.size(width = WIDE_LAYOUT_MIN_WIDTH, height = 800.dp),
+            )
+        }
+        onNodeWithTag(drawerTag(ShellDestination.Timeline)).assertIsDisplayed()
+        onAllNodesWithTag(TAG_SHELL_MENU).assertCountEquals(0)
+    }
+
+    /** 閾値を 1dp でも下回る幅は狭幅（開閉式ドロワー）になる。 */
+    @Test
+    fun justBelowThresholdWidthIsNarrow() = runComposeUiTest {
+        setContent {
+            shell(
+                ShellDestination.Timeline,
+                modifier = Modifier.size(width = WIDE_LAYOUT_MIN_WIDTH - 1.dp, height = 800.dp),
+            )
+        }
+        onNodeWithTag(drawerTag(ShellDestination.Timeline)).assertIsNotDisplayed()
+        onNodeWithTag(TAG_SHELL_MENU).assertExists()
     }
 }

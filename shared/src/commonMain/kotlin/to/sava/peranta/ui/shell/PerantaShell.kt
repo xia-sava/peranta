@@ -1,6 +1,7 @@
 package to.sava.peranta.ui.shell
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -18,19 +19,29 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.PermanentDrawerSheet
+import androidx.compose.material3.PermanentNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import to.sava.peranta.ui.setup.ReceiveSetupSteps
+
+/** これ以上のコンテンツ幅では常設ドロワーの広幅レイアウトに切り替える閾値。 */
+internal val WIDE_LAYOUT_MIN_WIDTH: Dp = 840.dp
 
 /**
  * 画面シェルが束ねる行き先（§10）。タイムラインをメインに、サブ画面をアプリバー共有で差し替える。
@@ -75,18 +86,22 @@ fun setupBannerTarget(unmetHealthCheckIds: Set<String>): ShellDestination? {
 /**
  * タイムラインをメインに、サブ画面をアプリバー共有で差し替える画面シェル（§10）。
  *
- * タイムライン表示時はアプリバー左端にドロワー開閉、メインタイトルに「Peranta」と自端末名
- * （[deviceLabel] があれば一体表示）、サブ行に ntfy サーバ名（[serverLabel]、config 由来のみで
- * ネットワーク不要）を出す。サーバ名の隣の [serverTrailing] は将来のロスタードロップダウン用の
- * アンカースロット。サブ画面表示時は左端が戻る（タイムラインへ [onNavigate]）に変わり、タイトルは
- * 画面名になる。ドロワーはサブ画面でもエッジスワイプで開ける（[ModalNavigationDrawer] の標準挙動）。
+ * コンテンツ幅で出し方を切り替える。狭幅（[WIDE_LAYOUT_MIN_WIDTH] 未満）は [ModalNavigationDrawer] で、
+ * タイムライン表示時はアプリバー左端にドロワー開閉、サブ画面表示時は左端が戻る（タイムラインへ
+ * [onNavigate]）になり、ドロワーはエッジスワイプで開ける（標準挙動）。広幅（[WIDE_LAYOUT_MIN_WIDTH]
+ * 以上）は [PermanentNavigationDrawer] で左に常設ドロワーを置き、アプリバー左端のアイコンは出さない
+ * （現在地は常設一覧のハイライトが示し、タイムラインへはドロワーの「タイムライン」で戻る）。
  *
- * ドロワーには行き先を列挙する。受信のセットアップ・動作チェック・接続設定と暗号キーの取り込みは
- * 設定画面のセットアップ状況の行から開くため、ドロワーには並べない。現在地は [NavigationDrawerItem]
- * の選択でハイライトする。項目タップで [onNavigate] へ一元化して遷移し、ドロワーを閉じる。
- * [drawerExtras] はドロワーヘッダ下の将来スロット。
+ * どちらの幅でもアプリバーのタイトルは共通で、メインタイトルに「Peranta」と自端末名（[deviceLabel]
+ * があれば一体表示）、サブ行に ntfy サーバ名（[serverLabel]、config 由来のみでネットワーク不要）を出す。
+ * サーバ名の隣の [serverTrailing] は将来のロスタードロップダウン用のアンカースロット。サブ画面表示時は
+ * タイトルが画面名になる。
+ *
+ * ドロワーの中身は両レイアウトで共通で、行き先を列挙する。受信のセットアップ・動作チェック・
+ * 接続設定と暗号キーの取り込みは設定画面のセットアップ状況の行から開くため、ドロワーには並べない。
+ * 現在地は [NavigationDrawerItem] の選択でハイライトする。項目タップで [onNavigate] へ一元化して遷移し、
+ * 狭幅ではあわせてドロワーを閉じる。[drawerExtras] はドロワーヘッダ下の将来スロット。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PerantaShell(
     destination: ShellDestination,
@@ -98,40 +113,146 @@ fun PerantaShell(
     drawerExtras: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable (ShellDestination) -> Unit,
 ) {
+    // レイアウト切替（リサイズで閾値をまたぐ）が起きても content 配下のコンポジションと状態を
+    // 破棄しないよう、content は movableContentOf で両レイアウト共有の単一サブツリーにする。
+    val currentContent by rememberUpdatedState(content)
+    val movableContent = remember {
+        movableContentOf { shellDestination: ShellDestination -> currentContent(shellDestination) }
+    }
+    BoxWithConstraints(modifier = modifier) {
+        if (maxWidth >= WIDE_LAYOUT_MIN_WIDTH) {
+            WideShell(
+                destination = destination,
+                onNavigate = onNavigate,
+                serverLabel = serverLabel,
+                deviceLabel = deviceLabel,
+                serverTrailing = serverTrailing,
+                drawerExtras = drawerExtras,
+                content = movableContent,
+            )
+        } else {
+            NarrowShell(
+                destination = destination,
+                onNavigate = onNavigate,
+                serverLabel = serverLabel,
+                deviceLabel = deviceLabel,
+                serverTrailing = serverTrailing,
+                drawerExtras = drawerExtras,
+                content = movableContent,
+            )
+        }
+    }
+}
+
+/** 狭幅レイアウト。開閉式ドロワーと、アプリバー左端の開閉／戻るアイコンを持つ。 */
+@Composable
+private fun NarrowShell(
+    destination: ShellDestination,
+    onNavigate: (ShellDestination) -> Unit,
+    serverLabel: String?,
+    deviceLabel: String?,
+    serverTrailing: (@Composable () -> Unit)?,
+    drawerExtras: (@Composable ColumnScope.() -> Unit)?,
+    content: @Composable (ShellDestination) -> Unit,
+) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
     ModalNavigationDrawer(
-        modifier = modifier,
         drawerState = drawerState,
         drawerContent = {
-            ShellDrawer(
-                destination = destination,
-                serverLabel = serverLabel,
-                deviceLabel = deviceLabel,
-                drawerExtras = drawerExtras,
-                onSelect = { target ->
-                    scope.launch { drawerState.close() }
-                    onNavigate(target)
-                },
-            )
-        },
-    ) {
-        Scaffold(
-            topBar = {
-                ShellTopBar(
+            ModalDrawerSheet {
+                ShellDrawerContent(
                     destination = destination,
                     serverLabel = serverLabel,
                     deviceLabel = deviceLabel,
-                    serverTrailing = serverTrailing,
-                    onOpenDrawer = { scope.launch { drawerState.open() } },
-                    onNavigate = onNavigate,
+                    drawerExtras = drawerExtras,
+                    onSelect = { target ->
+                        scope.launch { drawerState.close() }
+                        onNavigate(target)
+                    },
                 )
-            },
-        ) { innerPadding ->
-            Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-                content(destination)
             }
+        },
+    ) {
+        ShellContent(
+            destination = destination,
+            serverLabel = serverLabel,
+            deviceLabel = deviceLabel,
+            serverTrailing = serverTrailing,
+            showNavigationIcon = true,
+            onOpenDrawer = { scope.launch { drawerState.open() } },
+            onNavigate = onNavigate,
+            content = content,
+        )
+    }
+}
+
+/** 広幅レイアウト。左に常設ドロワーを置き、アプリバー左端のアイコンは出さない。 */
+@Composable
+private fun WideShell(
+    destination: ShellDestination,
+    onNavigate: (ShellDestination) -> Unit,
+    serverLabel: String?,
+    deviceLabel: String?,
+    serverTrailing: (@Composable () -> Unit)?,
+    drawerExtras: (@Composable ColumnScope.() -> Unit)?,
+    content: @Composable (ShellDestination) -> Unit,
+) {
+    PermanentNavigationDrawer(
+        drawerContent = {
+            PermanentDrawerSheet {
+                ShellDrawerContent(
+                    destination = destination,
+                    serverLabel = serverLabel,
+                    deviceLabel = deviceLabel,
+                    drawerExtras = drawerExtras,
+                    onSelect = onNavigate,
+                )
+            }
+        },
+    ) {
+        ShellContent(
+            destination = destination,
+            serverLabel = serverLabel,
+            deviceLabel = deviceLabel,
+            serverTrailing = serverTrailing,
+            showNavigationIcon = false,
+            onOpenDrawer = {},
+            onNavigate = onNavigate,
+            content = content,
+        )
+    }
+}
+
+/** ドロワー右側の本体。アプリバーとコンテンツを両レイアウトで共通に組む。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ShellContent(
+    destination: ShellDestination,
+    serverLabel: String?,
+    deviceLabel: String?,
+    serverTrailing: (@Composable () -> Unit)?,
+    showNavigationIcon: Boolean,
+    onOpenDrawer: () -> Unit,
+    onNavigate: (ShellDestination) -> Unit,
+    content: @Composable (ShellDestination) -> Unit,
+) {
+    Scaffold(
+        topBar = {
+            ShellTopBar(
+                destination = destination,
+                serverLabel = serverLabel,
+                deviceLabel = deviceLabel,
+                serverTrailing = serverTrailing,
+                showNavigationIcon = showNavigationIcon,
+                onOpenDrawer = onOpenDrawer,
+                onNavigate = onNavigate,
+            )
+        },
+    ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            content(destination)
         }
     }
 }
@@ -143,21 +264,24 @@ private fun ShellTopBar(
     serverLabel: String?,
     deviceLabel: String?,
     serverTrailing: (@Composable () -> Unit)?,
+    showNavigationIcon: Boolean,
     onOpenDrawer: () -> Unit,
     onNavigate: (ShellDestination) -> Unit,
 ) {
     TopAppBar(
         navigationIcon = {
-            if (destination == ShellDestination.Timeline) {
-                IconButton(onClick = onOpenDrawer, modifier = Modifier.testTag(TAG_SHELL_MENU)) {
-                    Text(text = "☰", style = MaterialTheme.typography.titleLarge)
-                }
-            } else {
-                IconButton(
-                    onClick = { onNavigate(ShellDestination.Timeline) },
-                    modifier = Modifier.testTag(TAG_SHELL_BACK),
-                ) {
-                    Text(text = "←", style = MaterialTheme.typography.titleLarge)
+            if (showNavigationIcon) {
+                if (destination == ShellDestination.Timeline) {
+                    IconButton(onClick = onOpenDrawer, modifier = Modifier.testTag(TAG_SHELL_MENU)) {
+                        Text(text = "☰", style = MaterialTheme.typography.titleLarge)
+                    }
+                } else {
+                    IconButton(
+                        onClick = { onNavigate(ShellDestination.Timeline) },
+                        modifier = Modifier.testTag(TAG_SHELL_BACK),
+                    ) {
+                        Text(text = "←", style = MaterialTheme.typography.titleLarge)
+                    }
                 }
             }
         },
@@ -205,32 +329,31 @@ private fun TimelineTitle(
     }
 }
 
+/** ドロワーの中身（ヘッダ・将来スロット・行き先項目）。開閉式と常設のどちらのシートにも入れる。 */
 @Composable
-private fun ShellDrawer(
+private fun ShellDrawerContent(
     destination: ShellDestination,
     serverLabel: String?,
     deviceLabel: String?,
     drawerExtras: (@Composable ColumnScope.() -> Unit)?,
     onSelect: (ShellDestination) -> Unit,
 ) {
-    ModalDrawerSheet {
-        Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 16.dp)) {
-                Text(text = "Peranta", style = MaterialTheme.typography.titleLarge)
-                drawerSubtitle(deviceLabel, serverLabel)?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 16.dp)) {
+            Text(text = "Peranta", style = MaterialTheme.typography.titleLarge)
+            drawerSubtitle(deviceLabel, serverLabel)?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            drawerExtras?.invoke(this)
-            HorizontalDivider()
-            DrawerItem(ShellDestination.Timeline, "タイムライン", destination, onSelect)
-            DrawerItem(ShellDestination.AppFilter, "アプリフィルタ", destination, onSelect)
-            DrawerItem(ShellDestination.Settings, "設定", destination, onSelect)
         }
+        drawerExtras?.invoke(this)
+        HorizontalDivider()
+        DrawerItem(ShellDestination.Timeline, "タイムライン", destination, onSelect)
+        DrawerItem(ShellDestination.AppFilter, "アプリフィルタ", destination, onSelect)
+        DrawerItem(ShellDestination.Settings, "設定", destination, onSelect)
     }
 }
 
