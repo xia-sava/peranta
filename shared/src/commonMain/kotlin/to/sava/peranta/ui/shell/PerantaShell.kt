@@ -56,10 +56,26 @@ internal val DRAWER_SHEET_WIDTH: Dp = 280.dp
 enum class ShellDestination { Timeline, AppFilter, Settings, ReceiveSetup, HealthCheck, PairingImport }
 
 /**
- * シェルの遷移決定。[destination] は確定した遷移先、[reflectSettings] は設定を離れるため
- * 設定反映（受信パイプラインの再構築）を通す必要があるかを表す（§10.2）。
+ * 遷移元を1段だけ覚えて「戻る」の行き先にするサブ画面（設定画面のセットアップ状況から開く §10.0）。
  */
-data class ShellNavigation(val destination: ShellDestination, val reflectSettings: Boolean)
+private val ORIGIN_TRACKED_DESTINATIONS = setOf(
+    ShellDestination.ReceiveSetup,
+    ShellDestination.HealthCheck,
+    ShellDestination.PairingImport,
+)
+
+/**
+ * シェルの遷移決定。[destination] は確定した遷移先、[reflectSettings] は設定を離れるため
+ * 設定反映（受信パイプラインの再構築）を通す必要があるかを表す（§10.2）。[subScreenOrigin] は
+ * [destination] が [ORIGIN_TRACKED_DESTINATIONS] のとき「戻る」の行き先として覚える遷移元
+ * （それ以外の行き先では null。§10.0）で、呼び出し側は destination と同じ場所に保持し
+ * [shellReturnDestination] へ渡す。
+ */
+data class ShellNavigation(
+    val destination: ShellDestination,
+    val reflectSettings: Boolean,
+    val subScreenOrigin: ShellDestination?,
+)
 
 /**
  * [from] から [to] への遷移を決める。設定の変更が起こりうる画面（設定・取り込み）を離れるときは、
@@ -71,7 +87,17 @@ fun shellNavigate(from: ShellDestination, to: ShellDestination): ShellNavigation
         destination = to,
         reflectSettings = from != to &&
             (from == ShellDestination.Settings || from == ShellDestination.PairingImport),
+        subScreenOrigin = if (to in ORIGIN_TRACKED_DESTINATIONS) from else null,
     )
+
+/**
+ * 設定サブ画面（受信のセットアップ・動作チェック・接続設定と暗号キーの取り込み）での「戻る」の行き先を
+ * 決める。[current] が [ORIGIN_TRACKED_DESTINATIONS] のときだけ [origin]（[ShellNavigation.subScreenOrigin]
+ * として覚えた入場元）へ戻し、覚えが無ければ（プロセス再生成での復元等）タイムラインへ戻す。それ以外の
+ * 画面（設定・アプリフィルタ等）は現状どおりタイムラインへ戻す（§10.0）。
+ */
+fun shellReturnDestination(current: ShellDestination, origin: ShellDestination?): ShellDestination =
+    if (current in ORIGIN_TRACKED_DESTINATIONS) origin ?: ShellDestination.Timeline else ShellDestination.Timeline
 
 /**
  * 起動時の動作チェックで未達だった項目 id の集合から、警告バナーのタップで開く画面を導く（§10.5）。
@@ -93,7 +119,7 @@ fun setupBannerTarget(unmetHealthCheckIds: Set<String>): ShellDestination? {
  * タイムラインをメインに、サブ画面をアプリバー共有で差し替える画面シェル（§10）。
  *
  * コンテンツ幅で出し方を切り替える。狭幅（[WIDE_LAYOUT_MIN_WIDTH] 未満）は [ModalNavigationDrawer] で、
- * タイムライン表示時はアプリバー左端にドロワー開閉、サブ画面表示時は左端が戻る（タイムラインへ
+ * タイムライン表示時はアプリバー左端にドロワー開閉、サブ画面表示時は左端が戻る（[backDestination] へ
  * [onNavigate]）になり、ドロワーはエッジスワイプで開ける（標準挙動）。広幅（[WIDE_LAYOUT_MIN_WIDTH]
  * 以上）は [PermanentNavigationDrawer] で左に常設ドロワーを置き、アプリバー左端のアイコンは出さない
  * （現在地は常設一覧のハイライトが示し、タイムラインへはドロワーの「タイムライン」で戻る）。
@@ -107,6 +133,10 @@ fun setupBannerTarget(unmetHealthCheckIds: Set<String>): ShellDestination? {
  * 接続設定と暗号キーの取り込みは設定画面のセットアップ状況の行から開くため、ドロワーには並べない。
  * 現在地は [NavigationDrawerItem] の選択でハイライトする。項目タップで [onNavigate] へ一元化して遷移し、
  * 狭幅ではあわせてドロワーを閉じる。[drawerExtras] はドロワーヘッダ下の将来スロット。
+ *
+ * 狭幅サブ画面のアプリバー左端の戻る（←）は [backDestination] へ [onNavigate] する（既定はタイムライン）。
+ * 設定サブ画面（受信のセットアップ・動作チェック・接続設定と暗号キーの取り込み）では、呼び出し側が
+ * [shellReturnDestination] で解決した値を渡すことで、開いた元の画面へ戻せる（§10.0）。
  */
 @Composable
 fun PerantaShell(
@@ -115,6 +145,7 @@ fun PerantaShell(
     serverLabel: String?,
     deviceLabel: String?,
     modifier: Modifier = Modifier,
+    backDestination: ShellDestination = ShellDestination.Timeline,
     serverTrailing: (@Composable () -> Unit)? = null,
     drawerExtras: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable (ShellDestination) -> Unit,
@@ -140,6 +171,7 @@ fun PerantaShell(
             NarrowShell(
                 destination = destination,
                 onNavigate = onNavigate,
+                backDestination = backDestination,
                 serverLabel = serverLabel,
                 deviceLabel = deviceLabel,
                 serverTrailing = serverTrailing,
@@ -155,6 +187,7 @@ fun PerantaShell(
 private fun NarrowShell(
     destination: ShellDestination,
     onNavigate: (ShellDestination) -> Unit,
+    backDestination: ShellDestination,
     serverLabel: String?,
     deviceLabel: String?,
     serverTrailing: (@Composable () -> Unit)?,
@@ -183,6 +216,7 @@ private fun NarrowShell(
     ) {
         ShellContent(
             destination = destination,
+            backDestination = backDestination,
             serverLabel = serverLabel,
             deviceLabel = deviceLabel,
             serverTrailing = serverTrailing,
@@ -243,11 +277,13 @@ private fun ShellContent(
     onOpenDrawer: () -> Unit,
     onNavigate: (ShellDestination) -> Unit,
     content: @Composable (ShellDestination) -> Unit,
+    backDestination: ShellDestination = ShellDestination.Timeline,
 ) {
     Scaffold(
         topBar = {
             ShellTopBar(
                 destination = destination,
+                backDestination = backDestination,
                 serverLabel = serverLabel,
                 deviceLabel = deviceLabel,
                 serverTrailing = serverTrailing,
@@ -273,6 +309,7 @@ private fun ShellTopBar(
     showNavigationIcon: Boolean,
     onOpenDrawer: () -> Unit,
     onNavigate: (ShellDestination) -> Unit,
+    backDestination: ShellDestination = ShellDestination.Timeline,
 ) {
     TopAppBar(
         navigationIcon = {
@@ -283,7 +320,7 @@ private fun ShellTopBar(
                     }
                 } else {
                     IconButton(
-                        onClick = { onNavigate(ShellDestination.Timeline) },
+                        onClick = { onNavigate(backDestination) },
                         modifier = Modifier.testTag(TAG_SHELL_BACK),
                     ) {
                         Text(text = "←", style = MaterialTheme.typography.titleLarge)

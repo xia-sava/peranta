@@ -48,10 +48,12 @@ class PerantaShellTest {
         destination: ShellDestination,
         onNavigate: (ShellDestination) -> Unit = {},
         modifier: Modifier = narrowShellModifier,
+        backDestination: ShellDestination = ShellDestination.Timeline,
     ) {
         PerantaShell(
             destination = destination,
             onNavigate = onNavigate,
+            backDestination = backDestination,
             serverLabel = "peranta.example.com",
             deviceLabel = "Pixel 9",
             modifier = modifier,
@@ -100,7 +102,7 @@ class PerantaShellTest {
         onNodeWithTag(drawerTag(ShellDestination.Settings)).assertIsNotSelected()
     }
 
-    /** サブ画面では戻る（←）が出てハンバーガーは出ず、押すとタイムラインへ遷移する。 */
+    /** サブ画面では戻る（←）が出てハンバーガーは出ず、押すとタイムラインへ遷移する（既定の戻り先）。 */
     @Test
     fun subScreenShowsBackAndNavigatesToTimeline() = runComposeUiTest {
         var navigated: ShellDestination? = null
@@ -109,6 +111,24 @@ class PerantaShellTest {
         onNodeWithTag(TAG_SHELL_BACK).assertIsDisplayed()
         onNodeWithTag(TAG_SHELL_BACK).performClick()
         assertEquals(ShellDestination.Timeline, navigated)
+    }
+
+    /**
+     * 設定サブ画面で戻る（←）を押すと、呼び出し側が指定した戻り先（例: 開いた元の設定画面）へ
+     * 遷移する（§10.0）。
+     */
+    @Test
+    fun subScreenBackNavigatesToProvidedBackDestination() = runComposeUiTest {
+        var navigated: ShellDestination? = null
+        setContent {
+            shell(
+                ShellDestination.HealthCheck,
+                onNavigate = { navigated = it },
+                backDestination = ShellDestination.Settings,
+            )
+        }
+        onNodeWithTag(TAG_SHELL_BACK).performClick()
+        assertEquals(ShellDestination.Settings, navigated)
     }
 
     /** ドロワー項目タップで onNavigate が呼ばれ、ドロワーが閉じる。 */

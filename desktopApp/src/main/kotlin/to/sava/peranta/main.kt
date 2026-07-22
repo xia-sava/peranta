@@ -64,6 +64,7 @@ import to.sava.peranta.ui.shell.SetupWarningBanner
 import to.sava.peranta.ui.shell.ShellDestination
 import to.sava.peranta.ui.shell.setupBannerTarget
 import to.sava.peranta.ui.shell.shellNavigate
+import to.sava.peranta.ui.shell.shellReturnDestination
 import to.sava.peranta.update.DesktopUpdater
 import java.awt.EventQueue
 import java.awt.Frame
@@ -207,6 +208,9 @@ fun main(args: Array<String>) {
         var showWizard by remember { mutableStateOf(!desktopSettings.config.hasSharedKey) }
         // 画面シェル内の現在地。
         var destination by remember { mutableStateOf(ShellDestination.Timeline) }
+        // 設定サブ画面（受信のセットアップ・動作チェック・接続設定と暗号キーの取り込み）へ入ったときの
+        // 遷移元を1段だけ覚え、戻る操作をその画面へ戻す（§10.0）。destination と同じ場所に保持する。
+        var subScreenOrigin by remember { mutableStateOf<ShellDestination?>(null) }
         val windowState = rememberWindowState()
 
         // タイムラインを表示するたびに動作チェックを実行し、対処の要る未達があればタイムライン上部の
@@ -226,6 +230,7 @@ fun main(args: Array<String>) {
         val onNavigate: (ShellDestination) -> Unit = { target ->
             val nav = shellNavigate(from = destination, to = target)
             destination = nav.destination
+            subScreenOrigin = nav.subScreenOrigin
             if (nav.reflectSettings) configGeneration++
         }
 
@@ -318,6 +323,7 @@ fun main(args: Array<String>) {
                     PerantaShell(
                         destination = destination,
                         onNavigate = onNavigate,
+                        backDestination = shellReturnDestination(destination, subScreenOrigin),
                         serverLabel = labelConfig.host.takeIf { it.isNotBlank() },
                         deviceLabel = labelConfig.deviceName?.takeIf { it.isNotBlank() },
                     ) { shellDestination ->

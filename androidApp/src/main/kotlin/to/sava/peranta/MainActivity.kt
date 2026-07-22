@@ -74,6 +74,7 @@ import to.sava.peranta.ui.shell.SetupWarningBanner
 import to.sava.peranta.ui.shell.ShellDestination
 import to.sava.peranta.ui.shell.setupBannerTarget
 import to.sava.peranta.ui.shell.shellNavigate
+import to.sava.peranta.ui.shell.shellReturnDestination
 import to.sava.peranta.ui.setup.WizardScreen
 import to.sava.peranta.update.AndroidUpdater
 
@@ -188,6 +189,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             // シェル内の現在地。設定を離れる遷移でも再生成後に生存させるため rememberSaveable で保持する。
             var destination: ShellDestination by rememberSaveable { mutableStateOf(ShellDestination.Timeline) }
+            // 設定サブ画面（受信のセットアップ・動作チェック・接続設定と暗号キーの取り込み）へ入ったときの
+            // 遷移元を1段だけ覚え、戻る操作をその画面へ戻す（§10.0）。destination と同じ場所に保持する。
+            var subScreenOrigin: ShellDestination? by rememberSaveable { mutableStateOf(null) }
             // シェル外のモーダルなタスク。未ペアリングはウィザードから始め、共有はファイル送信へ入る。
             // ただし取り込み画面への遷移が再生成をまたいで復元されたときは、未ペアリングでも
             // ウィザードを被せず取り込み画面をそのまま出す（明示的な取り込み操作を優先する）。
@@ -223,6 +227,7 @@ class MainActivity : ComponentActivity() {
             val onNavigate: (ShellDestination) -> Unit = { target ->
                 val nav = shellNavigate(from = destination, to = target)
                 destination = nav.destination
+                subScreenOrigin = nav.subScreenOrigin
                 if (nav.reflectSettings) resetReceiveAndRecreate()
             }
 
@@ -248,14 +253,16 @@ class MainActivity : ComponentActivity() {
             }
             val onShareCancel: () -> Unit = { finish() }
 
-            // バックキーはタイムラインへ戻す。シェル外のタスクは各タスク固有の後処理を通す。設定から戻る時は
-            // onNavigate 経由で設定反映を通し、既存の後処理の共有を崩さない。
+            // バックキーはタイムラインへ戻す。設定サブ画面（受信のセットアップ・動作チェック・接続設定と
+            // 暗号キーの取り込み）では開いた元の画面（設定 or タイムライン）へ戻す（§10.0）。シェル外の
+            // タスクは各タスク固有の後処理を通す。設定から戻る時は onNavigate 経由で設定反映を通し、
+            // 既存の後処理の共有を崩さない。
             BackHandler(enabled = overlay != null || destination != ShellDestination.Timeline) {
                 when (overlay) {
                     Overlay.Wizard -> onWizardClose()
                     Overlay.PairingLanding -> (onPairingLandingBack ?: { overlay = null })()
                     is Overlay.Share -> onShareCancel()
-                    null -> onNavigate(ShellDestination.Timeline)
+                    null -> onNavigate(shellReturnDestination(destination, subScreenOrigin))
                 }
             }
 
@@ -313,6 +320,7 @@ class MainActivity : ComponentActivity() {
                         null -> PerantaShell(
                             destination = destination,
                             onNavigate = onNavigate,
+                            backDestination = shellReturnDestination(destination, subScreenOrigin),
                             serverLabel = config.host.takeIf { it.isNotBlank() },
                             deviceLabel = config.deviceName?.takeIf { it.isNotBlank() },
                         ) { shellDestination ->
