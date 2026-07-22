@@ -21,6 +21,7 @@ import to.sava.peranta.receive.ReceivePipeline
 import to.sava.peranta.timeline.FileTimelineFile
 import to.sava.peranta.timeline.JsonlTimelineStore
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.timeline.TimelineFeed
 import java.io.File
 import kotlin.io.encoding.Base64
 import kotlin.random.Random
@@ -57,7 +58,7 @@ class IntegrationReceiveTest {
                 val tempFile = File.createTempFile("peranta-it", ".jsonl").also { it.deleteOnExit() }
                 val store = JsonlTimelineStore(FileTimelineFile(tempFile))
                 val ntfy = KtorNtfyClient(config, httpClient)
-                val pipeline = ReceivePipeline(ntfy, cipher, store, "it-desk")
+                val pipeline = ReceivePipeline(ntfy, cipher, TimelineFeed(store), "it-desk")
 
                 val subscription = launch { pipeline.start(topic) }
                 withTimeout(10_000) {

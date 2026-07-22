@@ -12,6 +12,6 @@ class PerantaApplication : Application() {
         AndroidApp.init(this)
         val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         PerantaSend.configureLogging(debuggable)
-        PerantaSend.pruneTimelineInBackground()
+        PerantaSend.primeTimelineInBackground()
     }
 }

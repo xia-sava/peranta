@@ -23,6 +23,7 @@ import to.sava.peranta.timeline.FakeTimelineFile
 import to.sava.peranta.timeline.JsonlTimelineStore
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.timeline.TimelineStore
 import kotlin.io.encoding.Base64
@@ -40,7 +41,7 @@ class ReceivePipelineTest {
     private fun store(): TimelineStore = JsonlTimelineStore(FakeTimelineFile())
 
     private fun pipeline(store: TimelineStore = store()) =
-        ReceivePipeline(FakeNtfyClient(), cipher, store, deviceName, now = { now })
+        ReceivePipeline(FakeNtfyClient(), cipher, TimelineFeed(store), deviceName, now = { now })
 
     private fun notification(
         to: String = "*",
@@ -159,7 +160,7 @@ class ReceivePipelineTest {
             ),
         )
         val ntfy = FakeNtfyClient(flowOf(eventFor(notification())))
-        val p = ReceivePipeline(ntfy, cipher, store, deviceName, now = { now })
+        val p = ReceivePipeline(ntfy, cipher, TimelineFeed(store), deviceName, now = { now })
         p.start("my-topic")
         assertEquals(1, p.items.value.size)
     }
@@ -263,7 +264,7 @@ class ReceivePipelineTest {
         val seen = mutableListOf<TimelineItem>()
         val store = store()
         val p = ReceivePipeline(
-            FakeNtfyClient(), cipher, store, deviceName,
+            FakeNtfyClient(), cipher, TimelineFeed(store), deviceName,
             now = { now },
             onItemAppended = { seen.add(it) },
         )
@@ -280,7 +281,7 @@ class ReceivePipelineTest {
         val store = store()
         val event = eventFor(notification())
         val ntfy = FakeNtfyClient(flowOf(event))
-        val p = ReceivePipeline(ntfy, cipher, store, deviceName, now = { now })
+        val p = ReceivePipeline(ntfy, cipher, TimelineFeed(store), deviceName, now = { now })
         p.start("my-topic")
         assertEquals(listOf("n1"), p.items.value.map { it.id })
     }

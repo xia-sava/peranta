@@ -120,7 +120,7 @@ class SendRetryWorker(
         val metaJson = inputData.getString(KEY_META) ?: return
         runCatching {
             val meta = decodeRetryDisplayMeta(metaJson)
-            PerantaSend.timelineStore.append(
+            PerantaSend.timelineFeed.append(
                 meta.toSentNotification(from = deviceName.orEmpty(), timestamp = nowEpochMillis()),
             )
         }.onFailure { log.w(it) { "failed to record retried sent notification" } }
@@ -129,7 +129,7 @@ class SendRetryWorker(
     /** [message] をタイムラインへ ErrorItem として残す。 */
     private suspend fun recordError(message: String) {
         runCatching {
-            PerantaSend.timelineStore.append(
+            PerantaSend.timelineFeed.append(
                 ErrorItem(
                     id = newPayloadId(),
                     timestampEpochMillis = nowEpochMillis(),

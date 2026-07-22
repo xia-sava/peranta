@@ -7,6 +7,7 @@ import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.encodeEnvelope
 import to.sava.peranta.net.FakeNtfyClient
 import to.sava.peranta.net.NtfyEvent
+import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.timeline.TimelineStore
 import java.io.IOException
@@ -45,7 +46,7 @@ class ReceivePipelinePersistenceTest {
     /** store.append が I/O 例外を投げても、後続メッセージの処理は継続しメモリ上には反映される。 */
     @Test
     fun appendFailureDoesNotStopPipeline() = runTest {
-        val pipeline = ReceivePipeline(FakeNtfyClient(), cipher, FailingAppendStore(), deviceName, now = { now })
+        val pipeline = ReceivePipeline(FakeNtfyClient(), cipher, TimelineFeed(FailingAppendStore()), deviceName, now = { now })
         pipeline.handleEvent(eventFor("n1"))
         pipeline.handleEvent(eventFor("n2"))
         assertEquals(listOf("n1", "n2"), pipeline.items.value.map { it.id })

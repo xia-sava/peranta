@@ -47,6 +47,7 @@ import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.JsonlTimelineStore
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.timeline.defaultTimelineFile
 import to.sava.peranta.toast.ToastResult
@@ -128,12 +129,12 @@ class DesktopReceiver(
     private val log: Logger = Logger.withTag("DesktopReceiver"),
 ) {
     private val httpClient = createNtfyHttpClient()
-    private val store = JsonlTimelineStore(defaultTimelineFile())
+    private val feed = TimelineFeed(JsonlTimelineStore(defaultTimelineFile()))
     private val cipher = MessageCipher(Base64.decode(config.sharedKeyBase64!!), config.keyId!!)
     private val ntfy = KtorNtfyClient(config, httpClient, Logger.withTag("NtfyClient"))
     private val toastJob = SupervisorJob()
     private val toastScope = CoroutineScope(toastJob + ioDispatcher)
-    private val commandSender = CommandSender(config, cipher, ntfy, SendPipeline(cipher, ntfy, store))
+    private val commandSender = CommandSender(config, cipher, ntfy, SendPipeline(cipher, ntfy, feed))
 
     private val attachmentCache = DesktopAttachmentCache(
         transport = KtorBlobTransport(config, httpClient),
@@ -157,7 +158,7 @@ class DesktopReceiver(
     private val pipeline = ReceivePipeline(
         ntfy = ntfy,
         cipher = cipher,
-        store = store,
+        feed = feed,
         deviceId = config.deviceId!!,
         commandExecutor = dismissExecutor,
         persistSensitiveHistory = config.persistSensitiveHistory,
@@ -171,7 +172,7 @@ class DesktopReceiver(
 
     /** 起動時剪定と presence 告知を行い、受信 topic の購読を開始する。キャンセルまで戻らない。 */
     suspend fun run() {
-        store.prune(now = nowEpochMillis())
+        feed.prune(now = nowEpochMillis())
         runCatching { attachmentCache.prune() }
             .onFailure { log.w(it) { "attachment cache prune failed" } }
         announcePresence()

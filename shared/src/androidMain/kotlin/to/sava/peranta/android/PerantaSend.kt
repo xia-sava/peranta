@@ -28,7 +28,7 @@ import to.sava.peranta.send.resolveSendTopics
 import to.sava.peranta.send.SmsDedupeTracker
 import to.sava.peranta.send.NotificationRepostTracker
 import to.sava.peranta.timeline.JsonlTimelineStore
-import to.sava.peranta.timeline.TimelineStore
+import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.defaultTimelineFile
 import kotlin.io.encoding.Base64
 
@@ -60,8 +60,8 @@ object PerantaSend {
 
     private val httpClient by lazy { createNtfyHttpClient() }
 
-    /** アプリ専用領域の JSONL タイムラインストア（プロセス内で共有）。 */
-    val timelineStore: TimelineStore by lazy { JsonlTimelineStore(defaultTimelineFile()) }
+    /** アプリ専用領域の JSONL タイムラインを覆う feed（プロセス内で共有、送受信・Service・Worker 全員が使う単一ソース）。 */
+    val timelineFeed: TimelineFeed by lazy { TimelineFeed(JsonlTimelineStore(defaultTimelineFile())) }
 
     /**
      * ログの最小重大度を設定する（§16）。
@@ -71,15 +71,21 @@ object PerantaSend {
         Logger.setMinSeverity(if (debuggable) Severity.Debug else Severity.Info)
     }
 
-    /** 起動時にタイムラインを剪定する。失敗しても起動を妨げない。 */
-    fun pruneTimelineInBackground() {
+    /**
+     * 起動時にタイムラインを剪定してから feed へ読み込む。失敗しても起動を妨げない。
+     * 受信設定が未完了の送信専用端末では [PerantaReceive.prime] が走らないため、
+     * ここで読み込んでおくことで履歴・送信済みアイテムをタイムラインに表示できるようにする。
+     */
+    fun primeTimelineInBackground() {
         scope.launch {
             try {
-                timelineStore.prune(now = nowEpochMillis())
+                val now = nowEpochMillis()
+                timelineFeed.prune(now = now)
+                timelineFeed.load(now)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
-                log.w(error) { "timeline prune failed" }
+                log.w(error) { "timeline prime failed" }
             }
         }
     }
@@ -103,7 +109,7 @@ object PerantaSend {
         return try {
             val cipher = perantaCipher(config)
             val ntfy = KtorNtfyClient(config, httpClient)
-            val pipeline = SendPipeline(cipher = cipher, ntfy = ntfy, store = timelineStore)
+            val pipeline = SendPipeline(cipher = cipher, ntfy = ntfy, store = timelineFeed)
             pipeline.dispatch(
                 payload = payload,
                 topics = resolveSendTopics(config, cipher, ntfy),
@@ -189,7 +195,7 @@ object PerantaSend {
         return try {
             val cipher = perantaCipher(config)
             val ntfy = KtorNtfyClient(config, httpClient)
-            val sender = CommandSender(config, cipher, ntfy, SendPipeline(cipher = cipher, ntfy = ntfy, store = timelineStore))
+            val sender = CommandSender(config, cipher, ntfy, SendPipeline(cipher = cipher, ntfy = ntfy, store = timelineFeed))
             sender.dismiss(notificationKey)
         } catch (cancellation: CancellationException) {
             throw cancellation

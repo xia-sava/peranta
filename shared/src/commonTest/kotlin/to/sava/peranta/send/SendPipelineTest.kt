@@ -17,6 +17,7 @@ import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyConnectionState
 import to.sava.peranta.net.NtfyEvent
 import to.sava.peranta.timeline.SentNotification
+import to.sava.peranta.timeline.TimelineFeed
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -54,6 +55,20 @@ class SendPipelineTest {
         val recorded = store.appended.single() as SentNotification
         assertEquals(p.id, recorded.id)
         assertEquals(5000, recorded.timestampEpochMillis)
+    }
+
+    /** recordSent（send 経由）で記録した送信済みアイテムは feed.items へ即時反映される。 */
+    @Test
+    fun recordSentReflectsImmediatelyInFeedItems() = runTest {
+        val ntfy = FakeNtfyClient()
+        val feed = TimelineFeed(FakeTimelineStore())
+        val pipeline = SendPipeline(cipher(), ntfy, feed, now = { 5000 })
+        val p = payload(Priority.NORMAL)
+
+        pipeline.send(p, listOf("topic-a"))
+
+        val reflected = feed.items.value.single() as SentNotification
+        assertEquals(p.id, reflected.id)
     }
 
     /** high 優先は短キャッシュ（60s）で publish し、通常はキャッシュ指定なし。 */

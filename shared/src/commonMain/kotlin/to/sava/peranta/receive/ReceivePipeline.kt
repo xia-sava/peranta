@@ -1,11 +1,7 @@
 package to.sava.peranta.receive
 
 import co.touchlab.kermit.Logger
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.serialization.SerializationException
 import to.sava.peranta.crypto.DecryptionException
 import to.sava.peranta.crypto.KeyIdMismatchException
@@ -29,8 +25,8 @@ import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.TimelineItem
-import to.sava.peranta.timeline.TimelineStore
 
 /** keyId 不一致時にタイムラインへ出す文言。 */
 private const val KEY_MISMATCH_MESSAGE =
@@ -55,7 +51,7 @@ private const val DEDUPE_CAPACITY = 1000
 class ReceivePipeline(
     private val ntfy: NtfyClient?,
     private val cipher: MessageCipher,
-    private val store: TimelineStore,
+    private val feed: TimelineFeed,
     private val deviceId: String,
     private val commandExecutor: CommandExecutor? = null,
     private val persistSensitiveHistory: Boolean = false,
@@ -64,10 +60,8 @@ class ReceivePipeline(
     private val onItemAppended: (TimelineItem) -> Unit = {},
 ) {
 
-    private val _items = MutableStateFlow<List<TimelineItem>>(emptyList())
-
     /** 現在のタイムライン。UI はこれを購読する。 */
-    val items: StateFlow<List<TimelineItem>> = _items.asStateFlow()
+    val items: StateFlow<List<TimelineItem>> = feed.items
 
     /** 受信済み payload.id の集合。FIFO で [DEDUPE_CAPACITY] に丸める。 */
     private val seenIds = LinkedHashSet<String>()
@@ -77,17 +71,9 @@ class ReceivePipeline(
      * UnifiedPush 駆動時はメッセージ処理の前にこれを呼び、履歴に対する重複排除を効かせる。
      */
     suspend fun loadHistory() {
-        val history = store.loadAll()
-        val at = now()
-        _items.value = history.filterNot { isExpiredItem(it, at) }
+        val history = feed.load(now())
         history.forEach { rememberId(it.id) }
         log.i { "receive pipeline primed: history=${history.size}" }
-    }
-
-    /** 履歴アイテムが表示時点で失効しているか（表示から除外する判定）。 */
-    private fun isExpiredItem(item: TimelineItem, at: Long): Boolean {
-        val expiresAt = item.expiresAtEpochMillis ?: return false
-        return expiresAt < at
     }
 
     /** 保存済み履歴を読み込み、[topic] の購読を開始する。呼び出しはキャンセルまで戻らない。 */
@@ -320,16 +306,10 @@ class ReceivePipeline(
      * [persistItem] を永続化し、[displayItem] を表示（[items]・[onItemAppended]）へ流す。
      * 受信通知では [persistItem] を伏せ字適用後に、[displayItem] を伏せ字前にすることで、
      * 表示は本文を保ちつつ永続だけを伏せる（§11）。エラー等は両者が同一でよい。
+     * 永続失敗の握り潰しとログ化は [feed] の契約（[TimelineFeed.record]）に委ねる。
      */
     private suspend fun record(displayItem: TimelineItem, persistItem: TimelineItem = displayItem) {
-        try {
-            store.append(persistItem)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            log.e { "failed to persist timeline item id=${displayItem.id} (${e::class.simpleName})" }
-        }
-        _items.update { it + displayItem }
+        feed.record(displayItem, persistItem)
         onItemAppended(displayItem)
     }
 }

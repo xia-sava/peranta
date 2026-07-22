@@ -12,6 +12,7 @@ import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.FakeTimelineFile
 import to.sava.peranta.timeline.JsonlTimelineStore
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.timeline.TimelineStore
 import kotlin.io.encoding.Base64
@@ -38,7 +39,7 @@ class UnifiedPushMessageTest {
         val pipeline = ReceivePipeline(
             ntfy = null,
             cipher = cipher,
-            store = store,
+            feed = TimelineFeed(store),
             deviceId = deviceId,
             now = { now },
             onItemAppended = { shown.add(it) },

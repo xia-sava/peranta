@@ -5,9 +5,7 @@ import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -54,10 +52,8 @@ object PerantaReceive {
     private val commandScope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val httpClient by lazy { createNtfyHttpClient() }
 
-    private val _items = MutableStateFlow<List<TimelineItem>>(emptyList())
-
     /** 受信・送信・エラーを載せた現在のタイムライン。UI はこれを購読する。 */
-    val items: StateFlow<List<TimelineItem>> = _items.asStateFlow()
+    val items: StateFlow<List<TimelineItem>> get() = PerantaSend.timelineFeed.items
 
     /**
      * 受信設定が揃った端末の起動時に履歴を読み込み、以後の受信で即時更新できるよう待機状態にする。
@@ -105,7 +101,6 @@ object PerantaReceive {
      * 画面回転などで同じエラーが連続して積まれないよう、直近の同一メッセージは抑止する。
      */
     suspend fun reportError(context: Context, message: String) {
-        val appContext = context.applicationContext
         mutex.withLock {
             if (isRecentDuplicateError(message, nowEpochMillis())) {
                 log.i { "suppressing duplicate error: $message" }
@@ -117,14 +112,7 @@ object PerantaReceive {
                 message = message,
                 kind = ErrorKind.OTHER,
             )
-            try {
-                PerantaSend.timelineStore.append(item)
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (error: Exception) {
-                log.w(error) { "failed to persist error item" }
-            }
-            _items.value = _items.value + item
+            PerantaSend.timelineFeed.record(item)
         }
     }
 
@@ -148,28 +136,26 @@ object PerantaReceive {
             isForwardingIntended = { androidConfigRepository(appContext).load().sendEnabled },
             notificationOps = AndroidCommandExecutor(appContext),
             localDismiss = LocalDismissCommandExecutor(
-                items = { _items.value },
+                items = { PerantaSend.timelineFeed.items.value },
                 dismissLocal = { payloadId -> presenter.cancel(payloadId) },
             ),
         )
         val created = ReceivePipeline(
             ntfy = null,
             cipher = perantaCipher(config),
-            store = PerantaSend.timelineStore,
+            feed = PerantaSend.timelineFeed,
             deviceId = androidConfigRepository(appContext).ensureDeviceId(),
             commandExecutor = commandExecutor,
             persistSensitiveHistory = config.persistSensitiveHistory,
             onItemAppended = { item -> onAppended(presenter, item) },
         )
         created.loadHistory()
-        _items.value = created.items.value
         pipeline = created
         return created
     }
 
     private fun onAppended(presenter: AndroidNotificationPresenter, item: TimelineItem) {
         present(presenter, item)
-        pipeline?.let { _items.value = it.items.value }
     }
 
     private fun present(presenter: AndroidNotificationPresenter, item: TimelineItem) {
@@ -276,7 +262,7 @@ object PerantaReceive {
         }
         val cipher = perantaCipher(config)
         val ntfy = KtorNtfyClient(config, httpClient)
-        return CommandSender(config, cipher, ntfy, SendPipeline(cipher, ntfy, PerantaSend.timelineStore))
+        return CommandSender(config, cipher, ntfy, SendPipeline(cipher, ntfy, PerantaSend.timelineFeed))
     }
 
     /** UnifiedPush メッセージ処理をエラーで落とさないためのラッパ。例外はログに残す。 */

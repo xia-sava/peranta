@@ -18,6 +18,7 @@ import to.sava.peranta.timeline.FakeTimelineFile
 import to.sava.peranta.timeline.JsonlTimelineStore
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.TimelineStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -34,7 +35,7 @@ class ReceiveRedactionTest {
     private fun pipeline(store: TimelineStore, persistSensitive: Boolean) = ReceivePipeline(
         ntfy = FakeNtfyClient(),
         cipher = cipher,
-        store = store,
+        feed = TimelineFeed(store),
         deviceId = deviceId,
         persistSensitiveHistory = persistSensitive,
         now = { now },
@@ -147,7 +148,7 @@ class ReceiveRedactionTest {
         val pipeline = ReceivePipeline(
             ntfy = FakeNtfyClient(),
             cipher = cipher,
-            store = store(),
+            feed = TimelineFeed(store()),
             deviceId = deviceId,
             persistSensitiveHistory = false,
             now = { now },

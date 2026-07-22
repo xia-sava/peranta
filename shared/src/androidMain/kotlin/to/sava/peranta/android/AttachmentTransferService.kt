@@ -392,7 +392,7 @@ class AttachmentTransferService : Service() {
 
     private suspend fun recordError(message: String) {
         runCatching {
-            PerantaSend.timelineStore.append(
+            PerantaSend.timelineFeed.append(
                 ErrorItem(
                     id = newPayloadId(),
                     timestampEpochMillis = nowEpochMillis(),
