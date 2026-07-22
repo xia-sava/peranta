@@ -1,5 +1,6 @@
 package to.sava.peranta.ui
 
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.Text
@@ -303,6 +304,40 @@ class TimelineScreenTest {
 
         assertEquals(indexBeforeNewItem, listState.firstVisibleItemIndex)
         onNodeWithText("item-${TEST_ITEM_COUNT + 1}").assertDoesNotExist()
+    }
+
+    /**
+     * 最新アイテムが画面内に見えていても、末尾までスクロールしきっていなければ新着に追従しない
+     * （追従の基準は「下方向にこれ以上スクロールできない」こと。§10.1）。
+     */
+    @Test
+    fun doesNotFollowWhenSlightlyScrolledUpEvenIfLatestVisible() = runComposeUiTest {
+        val listState = LazyListState()
+        val flow = MutableStateFlow(chronologicalItems(TEST_ITEM_COUNT))
+        var scrollUp by mutableStateOf(false)
+        setContent {
+            LaunchedEffect(scrollUp) {
+                if (scrollUp) listState.scrollBy(-20f)
+            }
+            TimelineScreen(
+                items = flow,
+                listState = listState,
+                modifier = Modifier.size(width = LIST_TEST_WIDTH, height = LIST_TEST_HEIGHT),
+            )
+        }
+        waitForIdle()
+        scrollUp = true
+        waitForIdle()
+        assertTrue(listState.canScrollForward)
+        onNodeWithText("item-$TEST_ITEM_COUNT").assertExists()
+        val indexBefore = listState.firstVisibleItemIndex
+        val offsetBefore = listState.firstVisibleItemScrollOffset
+
+        flow.value = flow.value + receivedItem(TEST_ITEM_COUNT + 1)
+        waitForIdle()
+
+        assertEquals(indexBefore, listState.firstVisibleItemIndex)
+        assertEquals(offsetBefore, listState.firstVisibleItemScrollOffset)
     }
 
     /** スクロールバースロットには LazyColumn と同一の listState が渡され、注入した内容が描画される。 */

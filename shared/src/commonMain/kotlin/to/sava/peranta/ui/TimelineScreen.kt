@@ -114,10 +114,10 @@ fun TimelineScreen(
                     listState.scrollToItem(lastIndex)
                     initialScrollDone = true
                 } else {
-                    // この時点の layoutInfo はまだ今回の追加前のレイアウトを反映しているため、
-                    // 「最後の可視 index が新リストの末尾直前以上」で追加直前の最下部表示を判定できる。
-                    val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-                    if (lastVisibleIndex >= lastIndex - 1) {
+                    // この時点のレイアウトはまだ今回の追加前を反映しているため、「下方向にこれ以上
+                    // スクロールできない＝末尾まで到達していた」ときだけ追従する。最新アイテムが
+                    // 画面内に見えていても、少しでも上へスクロールしていれば追従しない。
+                    if (!listState.canScrollForward) {
                         listState.animateScrollToItem(lastIndex)
                     }
                 }
