@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.DropdownMenu
@@ -151,6 +150,7 @@ private fun ReceivedFileBubble(item: ReceivedFile, attachments: AttachmentUi?) {
         alignment = Alignment.CenterStart,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        speaker = item.payload.speakerName(),
         time = item.timestampEpochMillis,
     ) {
         FilePayloadContent(item.payload, attachments)
@@ -180,6 +180,7 @@ private fun ReceivedBubble(item: ReceivedNotification, fullText: FullTextUi?) {
         alignment = Alignment.CenterStart,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        speaker = item.payload.speakerName(),
         time = item.timestampEpochMillis,
     ) {
         ReceivedContent(item.payload, fullText)
@@ -231,18 +232,13 @@ private fun InteractiveReceivedBubble(
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 shape = MaterialTheme.shapes.medium,
                 modifier = Modifier
-                    .widthIn(max = 320.dp)
                     .testTag(TAG_TIMELINE_RECEIVED)
                     .timelineContextGesture(enabled = true) { menuOpen = true },
             ) {
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     ReceivedContent(item.payload, fullText)
                     ActionButtons(item.payload, actions)
-                    Text(
-                        text = formatTimeOfDay(item.timestampEpochMillis),
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
+                    SpeakerTimeRow(speaker = item.payload.speakerName(), time = item.timestampEpochMillis)
                 }
             }
             ContextMenu(
@@ -331,16 +327,30 @@ private fun ReceivedContent(payload: Payload, fullText: FullTextUi?) {
     }
 }
 
+/**
+ * 送信済みバブル（§3.3）。[FilePayload] は受信側と同じ表示（ファイル名+サイズ+キャプション）を再利用し、
+ * それ以外はヘッダ+タイトル+本文のテキスト表示にとどめる。自分の端末からの送信のため、アクションボタンや
+ * 全文添付の展開は出さない（手元の通知は端末側で直接操作でき、全文も手元にある）。
+ */
 @Composable
 private fun SentBubble(item: SentNotification) {
     Bubble(
         alignment = Alignment.CenterEnd,
         containerColor = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        speaker = item.payload.speakerName(),
         time = item.timestampEpochMillis,
     ) {
-        Text(text = item.payload.displayHeader(), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
-        Text(text = item.payload.displayText(), style = MaterialTheme.typography.bodyMedium)
+        val payload = item.payload
+        if (payload is FilePayload) {
+            FilePayloadContent(payload, attachments = null)
+        } else {
+            Text(text = payload.displayHeader(), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
+            payload.displayTitle()?.let {
+                Text(text = it, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(text = payload.displayText(), style = MaterialTheme.typography.bodyMedium)
+        }
     }
 }
 
@@ -350,6 +360,7 @@ private fun ErrorBubble(item: ErrorItem) {
         alignment = Alignment.CenterEnd,
         containerColor = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        speaker = null,
         time = item.timestampEpochMillis,
     ) {
         Text(text = item.message, style = MaterialTheme.typography.bodyMedium)
@@ -361,6 +372,7 @@ private fun Bubble(
     alignment: Alignment,
     containerColor: androidx.compose.ui.graphics.Color,
     contentColor: androidx.compose.ui.graphics.Color,
+    speaker: String?,
     time: Long,
     content: @Composable () -> Unit,
 ) {
@@ -369,19 +381,28 @@ private fun Bubble(
             color = containerColor,
             contentColor = contentColor,
             shape = MaterialTheme.shapes.medium,
-            modifier = Modifier.widthIn(max = 320.dp),
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 content()
-                Text(
-                    text = formatTimeOfDay(time),
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
+                SpeakerTimeRow(speaker, time)
             }
         }
     }
 }
+
+/** 時刻行（§3.2）。発言者名があれば「{名前}・{時刻}」、無ければ（ErrorItem 等）時刻のみ表示する。 */
+@Composable
+private fun SpeakerTimeRow(speaker: String?, time: Long) {
+    val text = if (speaker != null) "$speaker・${formatTimeOfDay(time)}" else formatTimeOfDay(time)
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+}
+
+/** 発言者表示名（§3.2）。送信元端末名があればそれ、無ければ deviceId にフォールバックする。 */
+private fun Payload.speakerName(): String = fromName ?: from
 
 private fun Payload.displayHeader(): String = when (this) {
     is NotificationPayload -> appName

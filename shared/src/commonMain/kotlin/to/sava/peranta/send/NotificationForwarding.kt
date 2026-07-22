@@ -125,8 +125,9 @@ fun buildNotificationPayload(
     isImplicitlySystemPackage: (String) -> Boolean = { it in DEFAULT_SYSTEM_PACKAGES },
     idGen: () -> String = ::newPayloadId,
     log: Logger = Logger.withTag("Forward"),
+    deviceName: String? = null,
 ): NotificationPayload? = prepareForwardedNotification(
-    input, mode, rules, deviceId, now, otpSenderPackages, isImplicitlySystemPackage, idGen, log,
+    input, mode, rules, deviceId, now, otpSenderPackages, isImplicitlySystemPackage, idGen, log, deviceName,
 )?.payload
 
 /**
@@ -146,6 +147,7 @@ fun prepareForwardedNotification(
     isImplicitlySystemPackage: (String) -> Boolean = { it in DEFAULT_SYSTEM_PACKAGES },
     idGen: () -> String = ::newPayloadId,
     log: Logger = Logger.withTag("Forward"),
+    deviceName: String? = null,
 ): PreparedForwardedNotification? {
     val isOtp = isOtpNotification("${input.title} ${input.text}", input.packageName, otpSenderPackages)
     val decision = decideFilter(input.packageName, input.priority, isOtp, mode, rules, isImplicitlySystemPackage)
@@ -174,6 +176,7 @@ fun prepareForwardedNotification(
             postedAtEpochMillis = input.postedAtEpochMillis,
             expiresAtEpochMillis = if (isOtp) now + OTP_TTL_MILLIS else null,
             priority = decision.priority,
+            fromName = deviceName,
         ),
         fullText = rawText,
     )
@@ -190,6 +193,7 @@ fun buildSmsPayload(
     now: Long,
     senderName: String? = null,
     idGen: () -> String = ::newPayloadId,
+    deviceName: String? = null,
 ): SmsPayload = SmsPayload(
     id = idGen(),
     from = deviceId,
@@ -201,6 +205,7 @@ fun buildSmsPayload(
     postedAtEpochMillis = now,
     expiresAtEpochMillis = now + SMS_TTL_MILLIS,
     priority = Priority.HIGH,
+    fromName = deviceName,
 )
 
 /**

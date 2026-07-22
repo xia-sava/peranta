@@ -48,6 +48,9 @@ sealed class Payload {
     abstract val from: String
     abstract val to: String
     abstract val sentAtEpochMillis: Long
+
+    /** 送信元端末の表示名（§4.1）。旧バージョン由来のペイロードでは未設定（null）で、[from] の deviceId 表示に落ちる。 */
+    open val fromName: String? get() = null
 }
 
 /** アプリ通知の転送。 */
@@ -68,6 +71,7 @@ data class NotificationPayload(
     val expiresAtEpochMillis: Long? = null,
     val priority: Priority = Priority.NORMAL,
     val attachments: List<AttachmentRef> = emptyList(),
+    override val fromName: String? = null,
 ) : Payload()
 
 /** 画像・ファイルの転送（§4.3）。本体は暗号化 blob として別送し、[attachments] で参照する。 */
@@ -83,6 +87,7 @@ data class FilePayload(
     val postedAtEpochMillis: Long,
     val expiresAtEpochMillis: Long? = null,
     val priority: Priority = Priority.NORMAL,
+    override val fromName: String? = null,
 ) : Payload()
 
 /** SMS の転送。 */
@@ -100,6 +105,7 @@ data class SmsPayload(
     val expiresAtEpochMillis: Long? = null,
     val priority: Priority = Priority.HIGH,
     val attachments: List<AttachmentRef> = emptyList(),
+    override val fromName: String? = null,
 ) : Payload()
 
 /** 送信元端末への操作指示。 */

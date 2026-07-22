@@ -60,6 +60,7 @@ fun buildFilePayload(
     caption: String? = null,
     priority: Priority = Priority.NORMAL,
     idGen: () -> String = ::newPayloadId,
+    deviceName: String? = null,
 ): FilePayload {
     require(attachments.isNotEmpty()) { "FilePayload requires at least one attachment" }
     val trimmedCaption = caption
@@ -74,6 +75,7 @@ fun buildFilePayload(
         attachments = attachments,
         postedAtEpochMillis = now,
         priority = priority,
+        fromName = deviceName,
     )
 }
 
@@ -94,6 +96,7 @@ fun buildFilePayloads(
     priority: Priority = Priority.NORMAL,
     maxEnvelopeBytes: Int = UNIFIED_PUSH_ENVELOPE_BUDGET,
     idGen: () -> String = ::newPayloadId,
+    deviceName: String? = null,
 ): List<FilePayload> {
     require(attachments.isNotEmpty()) { "FilePayload requires at least one attachment" }
     val cappedCaption = caption
@@ -101,9 +104,9 @@ fun buildFilePayloads(
         ?.takeIf { it.isNotBlank() }
     // キャプションは JSON エスケープで最大約 2 倍に膨らむため、封緘後サイズで先頭バッチが予算に収まるよう追加で切り詰める。
     val budgetedCaption = cappedCaption?.let {
-        fitCaptionWithinBudget(deviceId, attachments.first(), keyId, now, it, priority, maxEnvelopeBytes)
+        fitCaptionWithinBudget(deviceId, attachments.first(), keyId, now, it, priority, maxEnvelopeBytes, deviceName)
     }
-    return packAttachments(deviceId, attachments, keyId, now, budgetedCaption, priority, maxEnvelopeBytes)
+    return packAttachments(deviceId, attachments, keyId, now, budgetedCaption, priority, maxEnvelopeBytes, deviceName)
         .mapIndexed { index, batch ->
             FilePayload(
                 id = idGen(),
@@ -114,6 +117,7 @@ fun buildFilePayloads(
                 attachments = batch,
                 postedAtEpochMillis = now,
                 priority = priority,
+                fromName = deviceName,
             )
         }
 }
@@ -132,10 +136,11 @@ private fun fitCaptionWithinBudget(
     caption: String,
     priority: Priority,
     maxEnvelopeBytes: Int,
+    deviceName: String?,
 ): String? {
     fun envelopeSizeWith(candidate: String?): Int =
         forwardedEnvelopeSize(
-            sizingPayload(deviceId, listOf(firstAttachment), now, candidate, priority),
+            sizingPayload(deviceId, listOf(firstAttachment), now, candidate, priority, deviceName),
             keyId,
         )
     if (envelopeSizeWith(caption) <= maxEnvelopeBytes) return caption
@@ -170,6 +175,7 @@ private fun packAttachments(
     caption: String?,
     priority: Priority,
     maxEnvelopeBytes: Int,
+    deviceName: String?,
 ): List<List<AttachmentRef>> {
     val batches = mutableListOf<List<AttachmentRef>>()
     var current = mutableListOf<AttachmentRef>()
@@ -177,7 +183,7 @@ private fun packAttachments(
         val captionForBatch = caption.takeIf { batches.isEmpty() }
         val candidate = current + attachment
         val fits = forwardedEnvelopeSize(
-            sizingPayload(deviceId, candidate, now, captionForBatch, priority),
+            sizingPayload(deviceId, candidate, now, captionForBatch, priority, deviceName),
             keyId,
         ) <= maxEnvelopeBytes
         if (fits || current.isEmpty()) {
@@ -198,6 +204,7 @@ private fun sizingPayload(
     now: Long,
     caption: String?,
     priority: Priority,
+    deviceName: String?,
 ): FilePayload = FilePayload(
     id = SIZING_ID_PLACEHOLDER,
     from = deviceId,
@@ -207,4 +214,5 @@ private fun sizingPayload(
     attachments = attachments,
     postedAtEpochMillis = now,
     priority = priority,
+    fromName = deviceName,
 )

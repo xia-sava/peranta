@@ -84,6 +84,7 @@ fun RetryDisplayMeta.toSentNotification(from: String, timestamp: Long): SentNoti
             postedAtEpochMillis = sentAtEpochMillis,
             expiresAtEpochMillis = expiresAtEpochMillis,
             priority = priority,
+            fromName = from,
         )
 
         RetryDisplayKind.SMS -> SmsPayload(
@@ -97,6 +98,7 @@ fun RetryDisplayMeta.toSentNotification(from: String, timestamp: Long): SentNoti
             postedAtEpochMillis = sentAtEpochMillis,
             expiresAtEpochMillis = expiresAtEpochMillis,
             priority = priority,
+            fromName = from,
         )
     }
     return SentNotification(

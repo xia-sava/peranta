@@ -4,6 +4,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTouchInput
@@ -11,8 +12,15 @@ import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.swipeLeft
 import kotlinx.coroutines.flow.MutableStateFlow
+import to.sava.peranta.model.AttachmentKind
+import to.sava.peranta.model.AttachmentRef
+import to.sava.peranta.model.BlobEnc
+import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.NotificationPayload
+import to.sava.peranta.timeline.ErrorItem
+import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.timeline.SentNotification
 import to.sava.peranta.timeline.TimelineItem
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -127,5 +135,69 @@ class TimelineScreenTest {
         onAllNodesWithTag("${TAG_TIMELINE_ACTION_PREFIX}0").assertCountEquals(0)
         onNodeWithTag(TAG_TIMELINE_RECEIVED).performMouseInput { rightClick() }
         onAllNodesWithTag(TAG_TIMELINE_MENU_DISMISS).assertCountEquals(1)
+    }
+
+    private fun attachmentRef(fileName: String = "photo.jpg", sizeBytes: Long = 2048) = AttachmentRef(
+        blobId = "blob-1",
+        url = "https://peranta.sava.to/file/abc",
+        fileName = fileName,
+        mimeType = "image/jpeg",
+        sizeBytes = sizeBytes,
+        kind = AttachmentKind.IMAGE,
+        enc = BlobEnc(keyId = "k1", saltBase64 = "AAAAAAAAAAAAAAAAAAAAAA==", chunkSize = 1_048_576, totalChunks = 1),
+    )
+
+    /** 送信 FilePayload バブルは受信側と同じ表示（ファイル名+サイズ+キャプション）を再利用する（§3.3）。 */
+    @Test
+    fun sentFilePayloadShowsFileNameSizeAndCaption() = runComposeUiTest {
+        val ref = attachmentRef(fileName = "report.pdf", sizeBytes = 4096)
+        val payload = FilePayload(
+            id = "f1",
+            from = "phone",
+            to = "*",
+            sentAtEpochMillis = 1000L,
+            caption = "会議資料です",
+            attachments = listOf(ref),
+            postedAtEpochMillis = 1000L,
+        )
+        setContent {
+            TimelineScreen(
+                MutableStateFlow(listOf(SentNotification(id = "f1", timestampEpochMillis = 1000L, payload = payload))),
+            )
+        }
+        onNodeWithText("会議資料です").assertExists()
+        onNodeWithText("report.pdf (${formatFileSize(4096)})").assertExists()
+    }
+
+    /** fromName が設定されていれば、時刻行にその端末名を表示する（§3.2）。 */
+    @Test
+    fun speakerRowShowsFromNameWhenPresent() = runComposeUiTest {
+        val payload = notification().copy(fromName = "xia-phone")
+        setContent {
+            TimelineScreen(MutableStateFlow(listOf(ReceivedNotification(id = "n1", timestampEpochMillis = 1000L, payload = payload))))
+        }
+        onNodeWithText("xia-phone・${formatTimeOfDay(1000L)}").assertExists()
+    }
+
+    /** fromName が無ければ from（deviceId）を時刻行に表示する（旧バージョン発のアイテム互換）。 */
+    @Test
+    fun speakerRowFallsBackToDeviceIdWhenFromNameAbsent() = runComposeUiTest {
+        setContent {
+            TimelineScreen(items(notification(from = "phone")))
+        }
+        onNodeWithText("phone・${formatTimeOfDay(1000L)}").assertExists()
+    }
+
+    /** ErrorItem は payload を持たないため、時刻行に発言者名を出さず時刻のみ表示する（§3.2）。 */
+    @Test
+    fun errorItemShowsTimeOnly() = runComposeUiTest {
+        setContent {
+            TimelineScreen(
+                MutableStateFlow(
+                    listOf(ErrorItem(id = "e1", timestampEpochMillis = 1000L, message = "送信に失敗しました", kind = ErrorKind.OTHER)),
+                ),
+            )
+        }
+        onNodeWithText(formatTimeOfDay(1000L)).assertExists()
     }
 }

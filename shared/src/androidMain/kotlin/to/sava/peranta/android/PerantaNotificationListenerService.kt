@@ -196,6 +196,7 @@ class PerantaNotificationListenerService : NotificationListenerService() {
                 applicationContext.packageManager,
                 isCrossProfilePackage = isCrossProfilePackage,
             ),
+            deviceName = config.deviceName,
         ) ?: run {
             log.d { "filtered out notification from ${input.packageName}" }
             return

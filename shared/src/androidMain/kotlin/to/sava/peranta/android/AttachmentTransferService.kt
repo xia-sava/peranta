@@ -238,6 +238,7 @@ class AttachmentTransferService : Service() {
             keyId = config.keyId!!,
             now = nowEpochMillis(),
             caption = caption,
+            deviceName = config.deviceName,
         )
         payloads.forEach { payload -> PerantaSend.dispatch(applicationContext, payload, config) }
         log.i {

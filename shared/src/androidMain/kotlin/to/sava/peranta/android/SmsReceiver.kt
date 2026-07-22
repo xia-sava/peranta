@@ -62,6 +62,7 @@ class SmsReceiver : BroadcastReceiver() {
             text = body,
             deviceId = deviceId,
             now = now,
+            deviceName = config.deviceName,
         )
         dispatchAsync(context, payload, body, config.copy(deviceId = deviceId))
     }

@@ -104,4 +104,24 @@ class PayloadTest {
         val json = """{"type":"bogus","id":"x","from":"a","to":"b","sentAtEpochMillis":1}"""
         assertFailsWith<SerializationException> { decodePayload(json) }
     }
+
+    /** fromName（§4.1）を持たない旧バージョン由来の JSON も復号でき、fromName は null になる。 */
+    @Test
+    fun decodeWithoutFromNameFallsBackToNull() {
+        val json = """
+            {"type":"notification","id":"n","from":"phone","to":"*","sentAtEpochMillis":1,
+            "packageName":"p","appName":"a","title":"t","text":"b","notificationKey":"k",
+            "postedAtEpochMillis":1}
+        """.trimIndent()
+        val decoded = decodePayload(json) as NotificationPayload
+        assertEquals(null, decoded.fromName)
+        assertEquals("phone", decoded.from)
+    }
+
+    /** fromName ありのペイロードは JSON を往復しても保持される。 */
+    @Test
+    fun fromNameRoundTrips() {
+        val decoded = decodePayload(encodePayload(notification(Priority.NORMAL).copy(fromName = "xia-phone"))) as NotificationPayload
+        assertEquals("xia-phone", decoded.fromName)
+    }
 }
