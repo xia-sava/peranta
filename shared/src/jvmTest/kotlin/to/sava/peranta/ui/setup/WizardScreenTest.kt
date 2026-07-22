@@ -77,7 +77,7 @@ class WizardScreenTest {
 
     // --- ページ遷移（次へ / 戻る） ---
 
-    /** Desktop の接続ページで入力して「次へ」で端末名ページへ進み、「戻る」で接続ページへ戻る。 */
+    /** Desktop でも冒頭で受け取り方を選ぶ。「設定元にする」で接続ページへ進み、端末名との間を次へ/戻るで往復する。 */
     @Test
     fun desktopNextAndBackNavigateBetweenPages() = runComposeUiTest {
         val controller = SettingsController(ConfigRepository(MapSettings()))
@@ -90,6 +90,9 @@ class WizardScreenTest {
             )
         }
 
+        onNodeWithTag(TAG_WIZARD_SOURCE_BE).performClick()
+        onNodeWithTag(TAG_WIZARD_NEXT).performClick()
+
         onNodeWithTag("wizard-settings-token").performTextReplacement("tk")
         onNodeWithTag(TAG_WIZARD_NEXT).performClick()
         onNodeWithTag("wizard-settings-deviceName").assertIsDisplayed()
@@ -98,7 +101,7 @@ class WizardScreenTest {
         onNodeWithTag("wizard-settings-host").assertIsDisplayed()
     }
 
-    /** 完了条件を満たすまで「次へ」は無効で、条件を満たすと有効になる。 */
+    /** 完了条件を満たすまで「次へ」は無効で、条件を満たすと有効になる（接続ページのトークン入力）。 */
     @Test
     fun nextDisabledUntilPageComplete() = runComposeUiTest {
         val controller = SettingsController(ConfigRepository(MapSettings()))
@@ -110,6 +113,9 @@ class WizardScreenTest {
                 healthChecker = emptyHealthChecker,
             )
         }
+
+        onNodeWithTag(TAG_WIZARD_SOURCE_BE).performClick()
+        onNodeWithTag(TAG_WIZARD_NEXT).performClick()
 
         onNodeWithTag(TAG_WIZARD_NEXT).assertIsNotEnabled()
         onNodeWithTag("wizard-settings-token").performTextReplacement("tk")
@@ -220,6 +226,26 @@ class WizardScreenTest {
         onNodeWithTag("wizard-settings-host").assertIsDisplayed()
     }
 
+    /** Desktop caps で「QR で参加」を選ぶと、貼り付け取り込み欄（カメラ無し）へ遷移する。 */
+    @Test
+    fun desktopSourceJoinBranchesToPasteImport() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        val controller = SettingsController(repo)
+        setContent {
+            WizardScreen(
+                caps = desktopCaps,
+                controller = controller,
+                provider = FakeProvider(),
+                healthChecker = emptyHealthChecker,
+                importController = PairingImportController(repo),
+            )
+        }
+
+        onNodeWithTag(TAG_WIZARD_SOURCE_JOIN).performClick()
+        onNodeWithTag(TAG_WIZARD_NEXT).performClick()
+        onNodeWithTag(TAG_PAIRING_MANUAL_INPUT).assertIsDisplayed()
+    }
+
     // --- 再入時 firstIncompletePage ---
 
     /** 取得済みで自動転送が未回答なら、再入時は自動転送ページ（2 択）から始まる。 */
@@ -287,6 +313,11 @@ class WizardScreenTest {
             )
         }
 
+        // 冒頭の受け取り方で「設定元にする」を選び、接続ページへ進む（選択自体は保存契機にしない）。
+        onNodeWithTag(TAG_WIZARD_SOURCE_BE).performClick()
+        onNodeWithTag(TAG_WIZARD_NEXT).performClick()
+        assertEquals(0, savedCount)
+
         // 接続ページ: 入力して「次へ」で保存契機が 1 回。
         onNodeWithTag("wizard-settings-token").performTextReplacement("tk")
         onNodeWithTag(TAG_WIZARD_NEXT).performClick()
@@ -317,6 +348,9 @@ class WizardScreenTest {
             )
         }
 
+        // 受け取り方の選択と次への遷移だけでは（編集していないため）保存契機は生じない。
+        onNodeWithTag(TAG_WIZARD_SOURCE_BE).performClick()
+        onNodeWithTag(TAG_WIZARD_NEXT).performClick()
         onNodeWithTag("wizard-settings-host").assertIsDisplayed()
         assertEquals(0, savedCount)
     }

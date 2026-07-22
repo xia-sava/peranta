@@ -55,42 +55,11 @@ class WizardFlowTest {
         if (config.isReadyForUnifiedPushReceive && !config.sendEnabled) add(WizardFlow.ITEM_POST_NOTIFICATIONS)
     }
 
-    // --- ロール別ページ列 ---
+    // --- 単一ページ列 × capability フィルタ（caps × source × forward の直積） ---
 
-    /** Desktop は接続→端末名→鍵→端末追加→自動起動→完了の 6 ページ。 */
+    /** Desktop で「設定元にする」を選ぶと接続系 4 ページ→自動起動→完了で、能力の無い受信系ページは湧かない。 */
     @Test
-    fun desktopPagesCoverFullSequence() {
-        assertEquals(
-            listOf(
-                WizardFlow.PAGE_CONNECTION,
-                WizardFlow.PAGE_DEVICE_NAME,
-                WizardFlow.PAGE_KEY,
-                WizardFlow.PAGE_PAIRING,
-                WizardFlow.PAGE_AUTOSTART,
-                WizardFlow.PAGE_DONE,
-            ),
-            pageIds(desktopCaps, PerantaConfig(), WizardAnswers()),
-        )
-    }
-
-    /** Android 冒頭は A1（設定の受け取り方）から始まり、既定/参加では QR 取り込みページを挟む。 */
-    @Test
-    fun androidStartsWithSourceThenQrImportByDefault() {
-        val ids = pageIds(androidCaps, PerantaConfig(), WizardAnswers())
-        assertEquals(WizardFlow.PAGE_SOURCE, ids.first())
-        assertTrue(ids.contains(WizardFlow.PAGE_QR_IMPORT))
-        assertFalse(ids.contains(WizardFlow.PAGE_CONNECTION))
-    }
-
-    /** A1 で「設定元にする」を選ぶと接続→端末名→鍵→端末追加の順（W-D と同順）に分岐する。 */
-    @Test
-    fun androidBeSourceBranchExpandsToConnectionDeviceNameKeyPairingInOrder() {
-        val ids = pageIds(
-            androidCaps,
-            PerantaConfig(),
-            WizardAnswers(source = WizardSourceChoice.BE_SOURCE),
-        )
-        assertFalse(ids.contains(WizardFlow.PAGE_QR_IMPORT))
+    fun desktopBeSourceExpandsToConnectionThenAutostart() {
         assertEquals(
             listOf(
                 WizardFlow.PAGE_SOURCE,
@@ -98,28 +67,84 @@ class WizardFlowTest {
                 WizardFlow.PAGE_DEVICE_NAME,
                 WizardFlow.PAGE_KEY,
                 WizardFlow.PAGE_PAIRING,
-                WizardFlow.PAGE_ROLE,
+                WizardFlow.PAGE_AUTOSTART,
+                WizardFlow.PAGE_DONE,
             ),
-            ids,
+            pageIds(desktopCaps, PerantaConfig(), WizardAnswers(source = WizardSourceChoice.BE_SOURCE)),
         )
     }
 
-    /** QR 取り込み経路では端末名ページは取り込みの後に来る。 */
+    /** Desktop でも「QR で参加」を選べる。取り込み→端末名→自動起動→完了の 5 ページになる。 */
     @Test
-    fun androidJoinBranchPlacesDeviceNameAfterQrImport() {
-        val ids = pageIds(
+    fun desktopJoinExpandsToQrImportThenAutostart() {
+        assertEquals(
+            listOf(
+                WizardFlow.PAGE_SOURCE,
+                WizardFlow.PAGE_QR_IMPORT,
+                WizardFlow.PAGE_DEVICE_NAME,
+                WizardFlow.PAGE_AUTOSTART,
+                WizardFlow.PAGE_DONE,
+            ),
+            pageIds(desktopCaps, PerantaConfig(), WizardAnswers(source = WizardSourceChoice.JOIN)),
+        )
+    }
+
+    /** 全端末が冒頭で受け取り方（PAGE_SOURCE）を問う。Desktop も未選択なら参加（QR 取り込み）を既定にする。 */
+    @Test
+    fun sourcePageLeadsOnEveryPlatform() {
+        assertEquals(WizardFlow.PAGE_SOURCE, pageIds(desktopCaps, PerantaConfig(), WizardAnswers()).first())
+        assertEquals(WizardFlow.PAGE_SOURCE, pageIds(androidCaps, PerantaConfig(), WizardAnswers()).first())
+        assertTrue(pageIds(desktopCaps, PerantaConfig(), WizardAnswers()).contains(WizardFlow.PAGE_QR_IMPORT))
+    }
+
+    /** QR 取り込み経路では端末名ページは取り込みの後に来る（両プラットフォーム共通）。 */
+    @Test
+    fun joinBranchPlacesDeviceNameAfterQrImport() {
+        listOf(desktopCaps, androidCaps).forEach { caps ->
+            val ids = pageIds(caps, PerantaConfig(), WizardAnswers(source = WizardSourceChoice.JOIN))
+            assertTrue(
+                ids.indexOf(WizardFlow.PAGE_QR_IMPORT) < ids.indexOf(WizardFlow.PAGE_DEVICE_NAME),
+                "caps=$caps",
+            )
+        }
+    }
+
+    /** 通知の自動転送・捕捉側権限・自動起動は capability で出し分ける（能力の無い端末では湧かない）。 */
+    @Test
+    fun capabilityFiltersGovernPlatformSpecificPages() {
+        val android = pageIds(
             androidCaps,
-            PerantaConfig(),
-            WizardAnswers(source = WizardSourceChoice.JOIN),
+            paired(PerantaConfig(smsDirectReceive = true)),
+            WizardAnswers(source = WizardSourceChoice.JOIN, forward = true),
         )
-        assertTrue(ids.indexOf(WizardFlow.PAGE_QR_IMPORT) < ids.indexOf(WizardFlow.PAGE_DEVICE_NAME))
+        assertTrue(
+            android.containsAll(
+                listOf(
+                    WizardFlow.PAGE_ROLE,
+                    WizardFlow.PAGE_PERM_NLS,
+                    WizardFlow.PAGE_PERM_SELF_BATTERY,
+                    WizardFlow.PAGE_PERM_SMS,
+                    WizardFlow.PAGE_PERM_POST_NOTIFICATIONS,
+                ),
+            ),
+        )
+        assertFalse(android.contains(WizardFlow.PAGE_AUTOSTART))
+
+        val desktop = pageIds(desktopCaps, paired(), WizardAnswers(source = WizardSourceChoice.BE_SOURCE))
+        listOf(
+            WizardFlow.PAGE_ROLE,
+            WizardFlow.PAGE_PERM_NLS,
+            WizardFlow.PAGE_PERM_SELF_BATTERY,
+            WizardFlow.PAGE_PERM_SMS,
+            WizardFlow.PAGE_PERM_POST_NOTIFICATIONS,
+        ).forEach { assertFalse(desktop.contains(it), "Desktop に $it が湧いている") }
+        assertFalse(desktop.any { it in ReceiveSetupSteps.orderedIds })
+        assertTrue(desktop.contains(WizardFlow.PAGE_AUTOSTART))
     }
 
-    // --- A4 役割 3 択による分岐 ---
-
-    /** 自動転送 ON は権限系 3 ページ＋逆方向チャネル（S4）で終わる。 */
+    /** 自動転送 ON は捕捉側権限 3 ページ＋通知表示＋逆方向チャネル（S4 集約）で終わる。 */
     @Test
-    fun forwardOnShowsPermissionsAndReverseChannel() {
+    fun forwardOnShowsPermissionsPostNotificationsAndReverseChannel() {
         val ids = pageIds(
             androidCaps,
             paired(PerantaConfig(smsDirectReceive = true)),
@@ -131,10 +156,13 @@ class WizardFlowTest {
                     WizardFlow.PAGE_PERM_NLS,
                     WizardFlow.PAGE_PERM_SELF_BATTERY,
                     WizardFlow.PAGE_PERM_SMS,
+                    WizardFlow.PAGE_PERM_POST_NOTIFICATIONS,
                     WizardFlow.PAGE_REVERSE_CHANNEL,
                 ),
             ),
         )
+        // 転送 ON では受信手順は逆方向チャネル 1 ページへ集約され、R2-R6 の個別ページには展開しない。
+        assertFalse(ids.any { it in ReceiveSetupSteps.orderedIds })
     }
 
     /** SMS 直接受信が OFF なら自動転送 ON でも SMS ページは出ない。 */
@@ -148,7 +176,7 @@ class WizardFlowTest {
         assertFalse(ids.contains(WizardFlow.PAGE_PERM_SMS))
     }
 
-    /** 自動転送 OFF は通知表示＋受信手順で、S4 は出ない。 */
+    /** 自動転送 OFF は通知表示＋受信手順（R2-R6）で、逆方向チャネル（S4）は出ない。 */
     @Test
     fun forwardOffShowsPostNotificationsAndReceiveStepsWithoutReverseChannel() {
         val ids = pageIds(
@@ -159,6 +187,19 @@ class WizardFlowTest {
         assertTrue(ids.contains(WizardFlow.PAGE_PERM_POST_NOTIFICATIONS))
         assertTrue(ids.containsAll(ReceiveSetupSteps.orderedIds))
         assertFalse(ids.contains(WizardFlow.PAGE_REVERSE_CHANNEL))
+    }
+
+    /** 通知表示権限は送信・受信を問わず出す（送信端末もエラー通知・受信通知を表示するため）。 */
+    @Test
+    fun postNotificationsAppearsRegardlessOfForward() {
+        listOf(true, false).forEach { forward ->
+            val ids = pageIds(
+                androidCaps,
+                paired(),
+                WizardAnswers(source = WizardSourceChoice.JOIN, forward = forward),
+            )
+            assertTrue(ids.contains(WizardFlow.PAGE_PERM_POST_NOTIFICATIONS), "forward=$forward")
+        }
     }
 
     // --- skippable フラグ ---
@@ -183,7 +224,7 @@ class WizardFlowTest {
         assertTrue(receive.first { it.id == ReceiveSetupSteps.SELF_TEST_ID }.skippable)
         assertFalse(receive.first { it.id == ReceiveSetupSteps.UNIFIED_PUSH_ID }.skippable)
 
-        val desktop = WizardFlow.pages(desktopCaps, PerantaConfig(), WizardAnswers())
+        val desktop = WizardFlow.pages(desktopCaps, PerantaConfig(), WizardAnswers(source = WizardSourceChoice.BE_SOURCE))
         assertTrue(desktop.first { it.id == WizardFlow.PAGE_AUTOSTART }.skippable)
         assertFalse(desktop.first { it.id == WizardFlow.PAGE_CONNECTION }.skippable)
     }
@@ -358,7 +399,19 @@ class WizardFlowTest {
         )
     }
 
-    // --- §2.3 被覆検証 ---
+    /** Desktop で取得済み・端末名未設定なら、最初の未完了は端末名ページ（初回判定を hasSharedKey に寄せた退行防止）。 */
+    @Test
+    fun firstIncompleteIsDeviceNameOnDesktopWhenPairedWithoutDeviceName() {
+        val config = PerantaConfig(sharedKeyBase64 = Base64.encode(ByteArray(32)), keyId = "1")
+        val answers = WizardAnswers(source = WizardSourceChoice.JOIN)
+        val pages = WizardFlow.pages(desktopCaps, config, answers)
+        assertEquals(
+            WizardFlow.PAGE_DEVICE_NAME,
+            WizardFlow.firstIncompletePage(pages, config, answers, emptyList())?.id,
+        )
+    }
+
+    // --- §2.3 被覆検証（caps 直積） ---
 
     /**
      * ウィザードの全ページ itemIds が、その config で健康診断が出す全項目 id を覆う。
@@ -367,19 +420,26 @@ class WizardFlowTest {
      */
     @Test
     fun wizardPagesCoverAllHealthItemsAndNonSkippableCompletionLeavesOnlySkippable() {
-        data class Scenario(val config: PerantaConfig, val answers: WizardAnswers)
+        data class Scenario(val caps: PlatformCapabilities, val config: PerantaConfig, val answers: WizardAnswers)
         val scenarios = listOf(
             Scenario(
+                androidCaps,
                 paired(PerantaConfig(sendEnabled = true, smsDirectReceive = true)),
                 WizardAnswers(source = WizardSourceChoice.JOIN, forward = true),
             ),
             Scenario(
+                androidCaps,
                 paired(PerantaConfig(sendEnabled = false)),
                 WizardAnswers(source = WizardSourceChoice.JOIN, forward = false),
             ),
+            Scenario(
+                androidCaps,
+                paired(PerantaConfig(sendEnabled = true, smsDirectReceive = true)),
+                WizardAnswers(source = WizardSourceChoice.BE_SOURCE, forward = true),
+            ),
         )
-        scenarios.forEach { (config, answers) ->
-            val pages = WizardFlow.pages(androidCaps, config, answers)
+        scenarios.forEach { (caps, config, answers) ->
+            val pages = WizardFlow.pages(caps, config, answers)
             val healthIds = expectedHealthIds(config)
             val allItemIds = pages.flatMap { it.itemIds }.toSet()
             assertTrue(allItemIds.containsAll(healthIds), "被覆漏れ: ${healthIds - allItemIds} (forward=${answers.forward})")
@@ -394,10 +454,10 @@ class WizardFlowTest {
         }
     }
 
-    /** Desktop の自動起動（診断 id: autostart）は D5（skippable）が覆う。 */
+    /** Desktop の自動起動（診断 id: autostart）は自動起動ページ（skippable）が覆う。 */
     @Test
     fun desktopAutostartIsCoveredBySkippablePage() {
-        val autostartPage = WizardFlow.pages(desktopCaps, PerantaConfig(), WizardAnswers())
+        val autostartPage = WizardFlow.pages(desktopCaps, PerantaConfig(), WizardAnswers(source = WizardSourceChoice.JOIN))
             .first { it.itemIds.contains(WizardFlow.ITEM_AUTOSTART) }
         assertTrue(autostartPage.skippable)
     }
@@ -446,8 +506,13 @@ class WizardFlowTest {
     }
 
     @Test
-    fun desktopFlowWalksToDone() {
-        assertWalkReachesDone(desktopCaps, PerantaConfig(), WizardAnswers())
+    fun desktopBeSourceFlowWalksToDone() {
+        assertWalkReachesDone(desktopCaps, PerantaConfig(), WizardAnswers(source = WizardSourceChoice.BE_SOURCE))
+    }
+
+    @Test
+    fun desktopJoinFlowWalksToDone() {
+        assertWalkReachesDone(desktopCaps, PerantaConfig(), WizardAnswers(source = WizardSourceChoice.JOIN))
     }
 
     @Test
@@ -469,11 +534,20 @@ class WizardFlowTest {
     }
 
     @Test
-    fun androidBeSourceFlowWalksToDone() {
+    fun androidBeSourceForwardOnFlowWalksToDone() {
         assertWalkReachesDone(
             androidCaps,
             PerantaConfig(smsDirectReceive = true),
             WizardAnswers(source = WizardSourceChoice.BE_SOURCE, forward = true),
+        )
+    }
+
+    @Test
+    fun androidBeSourceForwardOffFlowWalksToDone() {
+        assertWalkReachesDone(
+            androidCaps,
+            PerantaConfig(),
+            WizardAnswers(source = WizardSourceChoice.BE_SOURCE, forward = false),
         )
     }
 }

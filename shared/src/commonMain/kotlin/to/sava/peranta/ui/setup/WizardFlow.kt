@@ -3,7 +3,7 @@ package to.sava.peranta.ui.setup
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.platform.PlatformCapabilities
 
-/** 設定の受け取り方（Android 冒頭の選択）。[JOIN] は他端末の QR で参加、[BE_SOURCE] はこの端末を設定元にする。 */
+/** 設定の受け取り方（ウィザード冒頭の選択）。[JOIN] は他端末の QR で参加、[BE_SOURCE] はこの端末を設定元にする。 */
 enum class WizardSourceChoice {
     JOIN,
     BE_SOURCE,
@@ -68,76 +68,81 @@ object WizardFlow {
 
     /**
      * [caps] と回答済み [config] / [answers] から現在のページ列を算出する。
-     * 系統の判別は [isDesktopSourceCaps] に閉じる（自動起動を持ち通知捕捉を持たない Desktop 系統か、
-     * それ以外の Android 系統か）。
+     * 全プラットフォーム共通の 1 本のページ列を組み、各ページの出現は [PlatformCapabilities] の
+     * 能力フラグ・[WizardAnswers] の回答・[PerantaConfig] の設定でフィルタする。
+     * 冒頭の受け取り方（[PAGE_SOURCE]）は全端末で問い、通知の自動転送（[PAGE_ROLE]）や送信側の権限、
+     * 受信手順・自動起動は能力を持つ端末でのみ湧く。
      */
     fun pages(caps: PlatformCapabilities, config: PerantaConfig, answers: WizardAnswers): List<WizardPage> =
-        if (isDesktopSourceCaps(caps)) desktopPages() else androidPages(config, answers)
-
-    /** Desktop 系統（設定元・受信の 1 系統）の caps か。Android 系統は冒頭の選択で分岐し、分岐は [WizardAnswers] が担う。 */
-    private fun isDesktopSourceCaps(caps: PlatformCapabilities): Boolean =
-        caps.supportsAutoStart && !caps.canCaptureNotifications
-
-    private fun desktopPages(): List<WizardPage> =
-        listOf(
-            WizardPage(PAGE_CONNECTION, "接続"),
-            WizardPage(PAGE_DEVICE_NAME, "端末名"),
-            WizardPage(PAGE_KEY, "共有鍵"),
-            WizardPage(PAGE_PAIRING, "端末の追加"),
-            WizardPage(PAGE_AUTOSTART, "自動起動", skippable = true, itemIds = listOf(ITEM_AUTOSTART)),
-            WizardPage(PAGE_DONE, "完了"),
-        )
-
-    private fun androidPages(config: PerantaConfig, answers: WizardAnswers): List<WizardPage> =
         buildList {
             add(WizardPage(PAGE_SOURCE, "設定の受け取り方"))
-            when (answers.source) {
-                // 設定元にする経路は W-D と同順（接続→端末名→鍵→端末の追加）。端末の追加の完了判定
-                // isReadyForSend が deviceName を要求するため、端末名を鍵・QR より前に置く。
-                WizardSourceChoice.BE_SOURCE -> {
-                    add(WizardPage(PAGE_CONNECTION, "接続"))
-                    add(WizardPage(PAGE_DEVICE_NAME, "端末名"))
-                    add(WizardPage(PAGE_KEY, "共有鍵"))
-                    add(WizardPage(PAGE_PAIRING, "端末の追加"))
-                }
-
-                // QR 取り込み経路は取り込み後に端末名を入力する（分岐内では入力欄を持たないため）。
-                WizardSourceChoice.JOIN, null -> {
-                    add(WizardPage(PAGE_QR_IMPORT, "QR で設定を取り込む"))
-                    add(WizardPage(PAGE_DEVICE_NAME, "端末名"))
-                }
+            addAll(sourcePages(answers))
+            // 通知捕捉できる端末だけ自動転送を問い、転送するなら捕捉側の権限ページを続ける。
+            if (caps.canCaptureNotifications) {
+                add(WizardPage(PAGE_ROLE, "通知の自動転送"))
+                if (answers.forward == true) addAll(forwardPermissionPages(caps, config))
             }
-            add(WizardPage(PAGE_ROLE, "通知の自動転送"))
-            when (answers.forward) {
-                true -> addAll(sendPages(config))
-                false -> addAll(receivePages())
-                null -> Unit
+            addAll(receiveDisplayPages(caps, answers))
+            if (caps.supportsAutoStart) {
+                add(WizardPage(PAGE_AUTOSTART, "自動起動", skippable = true, itemIds = listOf(ITEM_AUTOSTART)))
             }
+            add(WizardPage(PAGE_DONE, "完了"))
         }
 
-    private fun sendPages(config: PerantaConfig): List<WizardPage> =
+    /** 受け取り方の分岐ページ。設定元は接続系 4 ページ、QR 参加は取り込み後に端末名を入力する。 */
+    private fun sourcePages(answers: WizardAnswers): List<WizardPage> =
+        when (answers.source) {
+            // 設定元にする経路は接続→端末名→鍵→端末の追加。端末の追加の完了判定 isReadyForSend が
+            // deviceName を要求するため、端末名を鍵・QR より前に置く。
+            WizardSourceChoice.BE_SOURCE -> listOf(
+                WizardPage(PAGE_CONNECTION, "接続"),
+                WizardPage(PAGE_DEVICE_NAME, "端末名"),
+                WizardPage(PAGE_KEY, "共有鍵"),
+                WizardPage(PAGE_PAIRING, "端末の追加"),
+            )
+
+            // QR 取り込み経路は取り込み後に端末名を入力する（分岐内では入力欄を持たないため）。
+            WizardSourceChoice.JOIN, null -> listOf(
+                WizardPage(PAGE_QR_IMPORT, "QR で設定を取り込む"),
+                WizardPage(PAGE_DEVICE_NAME, "端末名"),
+            )
+        }
+
+    /** 自動転送するときの捕捉側権限ページ。SMS は直接受信できる端末で設定が有効なときだけ。 */
+    private fun forwardPermissionPages(caps: PlatformCapabilities, config: PerantaConfig): List<WizardPage> =
         buildList {
             add(WizardPage(PAGE_PERM_NLS, "通知へのアクセス", itemIds = listOf(ITEM_NLS)))
             add(WizardPage(PAGE_PERM_SELF_BATTERY, "バッテリー最適化の除外", itemIds = listOf(ITEM_SELF_BATTERY)))
-            if (config.smsDirectReceive) {
+            if (caps.canReceiveSms && config.smsDirectReceive) {
                 add(WizardPage(PAGE_PERM_SMS, "SMS の受信", itemIds = listOf(ITEM_SMS)))
             }
-            add(
-                WizardPage(
-                    PAGE_REVERSE_CHANNEL,
-                    "逆方向チャネルの受信経路",
-                    skippable = true,
-                    itemIds = ReceiveSetupSteps.orderedIds,
-                ),
-            )
-            add(WizardPage(PAGE_DONE, "完了"))
         }
 
-    private fun receivePages(): List<WizardPage> =
+    /**
+     * 受信・表示に要する能力別ページ。通知表示権限は転送の可否を問わず出す（送信端末もエラー通知・
+     * 受信通知を表示するため）。受信手順は UnifiedPush 経由の端末のみで、転送するなら逆方向チャネルの
+     * 1 ページ集約、しないなら 1 手順 1 ページに展開する。
+     */
+    private fun receiveDisplayPages(caps: PlatformCapabilities, answers: WizardAnswers): List<WizardPage> =
         buildList {
-            add(WizardPage(PAGE_PERM_POST_NOTIFICATIONS, "通知の表示", itemIds = listOf(ITEM_POST_NOTIFICATIONS)))
-            addAll(receiveStepPages())
-            add(WizardPage(PAGE_DONE, "完了"))
+            if (caps.requiresPostNotificationsPermission) {
+                add(WizardPage(PAGE_PERM_POST_NOTIFICATIONS, "通知の表示", itemIds = listOf(ITEM_POST_NOTIFICATIONS)))
+            }
+            if (caps.usesUnifiedPush) {
+                when (answers.forward) {
+                    true -> add(
+                        WizardPage(
+                            PAGE_REVERSE_CHANNEL,
+                            "逆方向チャネルの受信経路",
+                            skippable = true,
+                            itemIds = ReceiveSetupSteps.orderedIds,
+                        ),
+                    )
+
+                    false -> addAll(receiveStepPages())
+                    null -> Unit
+                }
+            }
         }
 
     /**

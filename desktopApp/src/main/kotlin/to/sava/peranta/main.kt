@@ -38,6 +38,7 @@ import to.sava.peranta.autostart.AutoStartManager
 import to.sava.peranta.autostart.AutoStartStatus
 import to.sava.peranta.autostart.DesktopHealthChecker
 import to.sava.peranta.autostart.WindowsRunRegistry
+import to.sava.peranta.pairing.PairingImportController
 import to.sava.peranta.pairing.pairingQrMatrix
 import to.sava.peranta.platform.initLogging
 import to.sava.peranta.platform.ioDispatcher
@@ -161,6 +162,8 @@ fun main(args: Array<String>) {
         .onFailure { log.w(it) { "failed to set system look and feel" } }
     val desktopSettings = DesktopSettings()
     val settingsController = desktopSettings.controller
+    // QR 参加経路（貼り付け取り込み）。カメラは無いため onRequestScan は注入せず貼り付けのみで動く。
+    val pairingImportController = PairingImportController(desktopSettings.repository)
 
     // ログオン自動起動から --minimized で起動された場合はウィンドウを出さずトレイ常駐で開始する（§3.3）。
     val startMinimized = args.contains(AutoStartManager.MINIMIZED_ARGUMENT)
@@ -194,8 +197,8 @@ fun main(args: Array<String>) {
         }
 
         var windowVisible by remember { mutableStateOf(!startMinimized) }
-        // 初回起動（受信の準備が未完了）はウィザードを自動で開始する。
-        var showWizard by remember { mutableStateOf(!desktopSettings.config.isReadyForReceive) }
+        // 初回起動（未ペアリング）はウィザードを自動で開始する。
+        var showWizard by remember { mutableStateOf(!desktopSettings.config.hasSharedKey) }
         var showSettings by remember { mutableStateOf(false) }
         var showAppFilter by remember { mutableStateOf(false) }
         var showHealthCheck by remember { mutableStateOf(false) }
@@ -278,6 +281,7 @@ fun main(args: Array<String>) {
                         controller = settingsController,
                         provider = desktopWizardSetupProvider(autoStart),
                         healthChecker = DesktopHealthChecker(autoStart),
+                        importController = pairingImportController,
                         qrContent = { uri -> DesktopQrCode(uri) },
                         onCopyPairingUri = ::copyToClipboard,
                         scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
