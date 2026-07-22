@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
@@ -18,6 +19,7 @@ import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import to.sava.peranta.ui.platformUiDensitySpec
 
 @OptIn(ExperimentalTestApi::class)
 class PerantaShellTest {
@@ -163,6 +165,14 @@ class PerantaShellTest {
     fun wideDrawerSheetHasFixedWidth() = runComposeUiTest {
         setContent { shell(ShellDestination.Timeline, modifier = wideShellModifier) }
         onNodeWithTag(TAG_SHELL_DRAWER_SHEET).assertWidthIsEqualTo(DRAWER_SHEET_WIDTH)
+    }
+
+    /** ドロワー項目の高さは [to.sava.peranta.ui.platformUiDensitySpec] の drawerItemHeight に従う。 */
+    @Test
+    fun drawerItemHeightMatchesPlatformSpec() = runComposeUiTest {
+        setContent { shell(ShellDestination.Timeline, modifier = wideShellModifier) }
+        onNodeWithTag(drawerTag(ShellDestination.Timeline))
+            .assertHeightIsEqualTo(platformUiDensitySpec().drawerItemHeight)
     }
 
     /** 閾値ちょうどの幅は広幅（常設ドロワー）になる。 */

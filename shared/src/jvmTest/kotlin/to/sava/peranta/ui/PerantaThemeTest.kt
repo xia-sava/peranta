@@ -20,6 +20,7 @@ class PerantaThemeTest {
         assertEquals(0.85f, spec.densityScale)
         assertEquals(1.06f, spec.fontScale)
         assertEquals(38.dp, spec.minInteractiveSize)
+        assertEquals(44.dp, spec.drawerItemHeight)
     }
 
     /** PerantaTheme 配下では、外側の density に対し構造は 0.85 倍・文字は 1.06 倍が掛かる。 */

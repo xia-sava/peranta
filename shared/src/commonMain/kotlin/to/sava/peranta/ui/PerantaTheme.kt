@@ -21,6 +21,8 @@ data class UiDensitySpec(
     val fontScale: Float,
     /** Material 部品の最小インタラクティブターゲット。 */
     val minInteractiveSize: Dp,
+    /** ドロワー項目の高さ。M3 既定は 56dp。 */
+    val drawerItemHeight: Dp,
 )
 
 /** 実行中のプラットフォームの [UiDensitySpec] を返す。 */

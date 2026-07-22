@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import to.sava.peranta.ui.platformUiDensitySpec
 import to.sava.peranta.ui.setup.ReceiveSetupSteps
 
 /** これ以上のコンテンツ幅では常設ドロワーの広幅レイアウトに切り替える閾値。 */
@@ -355,9 +357,10 @@ private fun ShellDrawerContent(
         }
         drawerExtras?.invoke(this)
         HorizontalDivider()
-        DrawerItem(ShellDestination.Timeline, "タイムライン", destination, onSelect)
-        DrawerItem(ShellDestination.AppFilter, "アプリフィルタ", destination, onSelect)
-        DrawerItem(ShellDestination.Settings, "設定", destination, onSelect)
+        val itemHeight = platformUiDensitySpec().drawerItemHeight
+        DrawerItem(ShellDestination.Timeline, "タイムライン", destination, itemHeight, onSelect)
+        DrawerItem(ShellDestination.AppFilter, "アプリフィルタ", destination, itemHeight, onSelect)
+        DrawerItem(ShellDestination.Settings, "設定", destination, itemHeight, onSelect)
     }
 }
 
@@ -366,6 +369,7 @@ private fun DrawerItem(
     target: ShellDestination,
     label: String,
     current: ShellDestination,
+    itemHeight: Dp,
     onSelect: (ShellDestination) -> Unit,
 ) {
     NavigationDrawerItem(
@@ -374,6 +378,7 @@ private fun DrawerItem(
         onClick = { onSelect(target) },
         modifier = Modifier
             .padding(NavigationDrawerItemDefaults.ItemPadding)
+            .height(itemHeight)
             .testTag("$TAG_SHELL_DRAWER_ITEM_PREFIX${target.name}"),
     )
 }
