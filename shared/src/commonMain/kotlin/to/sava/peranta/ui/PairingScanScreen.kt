@@ -1,6 +1,9 @@
 package to.sava.peranta.ui
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,6 +46,7 @@ private const val PAIRING_DEVICE_NAME_MISSING_NOTICE: String =
  * [showHeader] が false のときは見出し行（タイトル＋戻る）を出さない。[showDescription] が false の
  * ときは概要説明文を出さない。外側（ウィザードのページ、シェルのアプリバー）が見出しやタイトルを
  * 持つ埋め込み利用で個別に使い、既定の true では従来どおり見出し・説明つきの単独画面として振る舞う。
+ * スクロールバーの描画はプラットフォーム依存のため [scrollbarContent] スロットで注入する。
  */
 @Composable
 fun PairingScanScreen(
@@ -55,22 +59,27 @@ fun PairingScanScreen(
     onBack: (() -> Unit)? = null,
     showHeader: Boolean = true,
     showDescription: Boolean = true,
+    scrollbarContent: @Composable BoxScope.(scrollState: ScrollState) -> Unit = {},
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            PairingScanContent(
-                controller = controller,
-                onRequestScan = onRequestScan,
-                onOpenSettings = onOpenSettings,
-                onOpenWizard = onOpenWizard,
-                onImported = onImported,
-                onBack = onBack,
-                showHeader = showHeader,
-                showDescription = showDescription,
-            )
+        val scrollState = rememberScrollState()
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                PairingScanContent(
+                    controller = controller,
+                    onRequestScan = onRequestScan,
+                    onOpenSettings = onOpenSettings,
+                    onOpenWizard = onOpenWizard,
+                    onImported = onImported,
+                    onBack = onBack,
+                    showHeader = showHeader,
+                    showDescription = showDescription,
+                )
+            }
+            scrollbarContent(scrollState)
         }
     }
 }

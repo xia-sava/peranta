@@ -1,7 +1,9 @@
 package to.sava.peranta.ui
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -71,6 +73,7 @@ private val ALL_CLEAR_CONTENT: Color = Color(0xFF1B5E20)
  * [LocalClipboardManager] へフォールバックする。
  * [showHeader] が false のときは画面見出し行（タイトルと「戻る」）を出さない。外側のアプリバーが
  * 見出しと戻る導線を持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
+ * スクロールバーの描画はプラットフォーム依存のため [scrollbarContent] スロットで注入する。
  */
 @Composable
 fun HealthCheckScreen(
@@ -80,6 +83,7 @@ fun HealthCheckScreen(
     externalRefreshKey: Int = 0,
     onCopyText: ((text: String, sensitive: Boolean) -> Unit)? = null,
     showHeader: Boolean = true,
+    scrollbarContent: @Composable BoxScope.(scrollState: ScrollState) -> Unit = {},
 ) {
     var manualRefresh by remember { mutableStateOf(0) }
     var followUpRechecks by remember { mutableStateOf(0) }
@@ -98,50 +102,54 @@ fun HealthCheckScreen(
     }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (showHeader) {
-                Header(onBack = onBack)
-            }
-            Text(
-                text = HEALTH_DESCRIPTION,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        val scrollState = rememberScrollState()
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (showHeader) {
+                    Header(onBack = onBack)
+                }
+                Text(
+                    text = HEALTH_DESCRIPTION,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
-            val loaded = items
-            if (loaded == null) {
-                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.testTag(TAG_HEALTH_LOADING))
-                }
-            } else {
-                val visible = loaded.filterNot { it.state == HealthCheckState.NOT_APPLICABLE }
-                if (visible.none { it.state == HealthCheckState.FAILING || it.state == HealthCheckState.INFO }) {
-                    AllClearBanner()
-                }
-                visible.forEach { item ->
-                    // 再チェックで項目の増減・並び替えが起きても行の状態（開いたダイアログ等）を保つ。
-                    key(item.id) {
-                        HealthItemRow(
-                            item = item,
-                            onFixed = {
-                                manualRefresh++
-                                followUpRechecks = FIX_RECHECK_COUNT
-                            },
-                            onCopyText = onCopyText,
-                        )
+                val loaded = items
+                if (loaded == null) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.testTag(TAG_HEALTH_LOADING))
+                    }
+                } else {
+                    val visible = loaded.filterNot { it.state == HealthCheckState.NOT_APPLICABLE }
+                    if (visible.none { it.state == HealthCheckState.FAILING || it.state == HealthCheckState.INFO }) {
+                        AllClearBanner()
+                    }
+                    visible.forEach { item ->
+                        // 再チェックで項目の増減・並び替えが起きても行の状態（開いたダイアログ等）を保つ。
+                        key(item.id) {
+                            HealthItemRow(
+                                item = item,
+                                onFixed = {
+                                    manualRefresh++
+                                    followUpRechecks = FIX_RECHECK_COUNT
+                                },
+                                onCopyText = onCopyText,
+                            )
+                        }
                     }
                 }
-            }
 
-            OutlinedButton(
-                onClick = { manualRefresh++ },
-                modifier = Modifier.testTag(TAG_HEALTH_RECHECK),
-            ) {
-                Text(text = "今すぐ再チェック")
+                OutlinedButton(
+                    onClick = { manualRefresh++ },
+                    modifier = Modifier.testTag(TAG_HEALTH_RECHECK),
+                ) {
+                    Text(text = "今すぐ再チェック")
+                }
             }
+            scrollbarContent(scrollState)
         }
     }
 }

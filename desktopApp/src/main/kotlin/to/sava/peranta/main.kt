@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -105,6 +106,16 @@ private fun desktopScrollbarStyle(): ScrollbarStyle {
 private fun BoxScope.DesktopScrollbar(scrollState: ScrollState) {
     VerticalScrollbar(
         adapter = rememberScrollbarAdapter(scrollState),
+        modifier = Modifier.align(Alignment.CenterEnd),
+        style = desktopScrollbarStyle(),
+    )
+}
+
+/** リスト位置に追従する縦スクロールバー（LazyColumn 版）。commonMain のリスト画面へスロットとして注入する。 */
+@Composable
+private fun BoxScope.DesktopScrollbar(listState: LazyListState) {
+    VerticalScrollbar(
+        adapter = rememberScrollbarAdapter(listState),
         modifier = Modifier.align(Alignment.CenterEnd),
         style = desktopScrollbarStyle(),
     )
@@ -367,6 +378,7 @@ fun main(args: Array<String>) {
                                     controller = currentReceiver.appFilterController(),
                                     items = currentReceiver.items,
                                     showHeader = false,
+                                    lazyScrollbarContent = { listState -> DesktopScrollbar(listState) },
                                 )
                                 errorMessage != null -> App(errorMessage!!)
                                 else -> App()
@@ -375,6 +387,7 @@ fun main(args: Array<String>) {
                             ShellDestination.HealthCheck -> HealthCheckScreen(
                                 checker = DesktopHealthChecker(autoStart),
                                 showHeader = false,
+                                scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
                             )
 
                             ShellDestination.PairingImport -> PairingScanScreen(
@@ -382,6 +395,7 @@ fun main(args: Array<String>) {
                                 onImported = { destination = ShellDestination.Timeline; configGeneration++ },
                                 showHeader = false,
                                 showDescription = true,
+                                scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
                             )
 
                             // Desktop に受信のセットアップ画面は無い（セットアップ状況にも受信経路の行を出さない）。

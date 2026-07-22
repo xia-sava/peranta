@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,7 +12,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -95,6 +98,7 @@ private fun priorityTag(priority: Priority?): String = priority?.name ?: "defaul
  * チェックの意味は現在の [FilterMode] に応じて反転する（denylist=除外 / allowlist=許可）。
  * [showHeader] が false のときは画面見出し行（タイトルと「戻る」）を出さない。外側のアプリバーが
  * 見出しと戻る導線を持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
+ * 受信専用ロールのリストのスクロールバーはプラットフォーム依存のため [lazyScrollbarContent] スロットで注入する。
  */
 @Composable
 fun AppFilterScreen(
@@ -104,6 +108,7 @@ fun AppFilterScreen(
     items: StateFlow<List<TimelineItem>>? = null,
     onBack: (() -> Unit)? = null,
     showHeader: Boolean = true,
+    lazyScrollbarContent: @Composable BoxScope.(listState: LazyListState) -> Unit = {},
 ) {
     val mode = remember { controller.load().filterMode }
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -117,7 +122,7 @@ fun AppFilterScreen(
             if (installedAppsProvider != null) {
                 SendRoleContent(controller = controller, mode = mode, provider = installedAppsProvider)
             } else {
-                ReceiveRoleContent(controller = controller, items = items)
+                ReceiveRoleContent(controller = controller, items = items, lazyScrollbarContent = lazyScrollbarContent)
             }
         }
     }
@@ -369,6 +374,7 @@ private fun DetailDialog(
 private fun ReceiveRoleContent(
     controller: AppFilterController,
     items: StateFlow<List<TimelineItem>>?,
+    lazyScrollbarContent: @Composable BoxScope.(listState: LazyListState) -> Unit,
 ) {
     val timeline = items?.collectAsState()?.value ?: emptyList()
     val candidates = remember(timeline) { historyPackagesFrom(timeline) }
@@ -384,31 +390,36 @@ private fun ReceiveRoleContent(
         return
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        items(candidates, key = { it.packageName }) { candidate ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
-                    Text(text = candidate.appName, style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        text = candidate.packageName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    val listState = rememberLazyListState()
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items(candidates, key = { it.packageName }) { candidate ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
+                        Text(text = candidate.appName, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = candidate.packageName,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Checkbox(
+                        checked = isPackageChecked(rules, candidate.packageName, FilterMode.DENYLIST, isSystemPackage = false),
+                        onCheckedChange = { checked ->
+                            rules = controller.setMirroredMute(candidate.packageName, candidate.senderDeviceId, checked)
+                        },
+                        modifier = Modifier.testTag("$TAG_APP_FILTER_CHECKBOX_PREFIX${candidate.packageName}"),
                     )
                 }
-                Checkbox(
-                    checked = isPackageChecked(rules, candidate.packageName, FilterMode.DENYLIST, isSystemPackage = false),
-                    onCheckedChange = { checked ->
-                        rules = controller.setMirroredMute(candidate.packageName, candidate.senderDeviceId, checked)
-                    },
-                    modifier = Modifier.testTag("$TAG_APP_FILTER_CHECKBOX_PREFIX${candidate.packageName}"),
-                )
             }
         }
+        lazyScrollbarContent(listState)
     }
 }
