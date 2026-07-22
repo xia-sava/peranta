@@ -18,7 +18,6 @@ import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.DEFAULT_EMPTY_TIMELINE_MESSAGE
 import to.sava.peranta.ui.FullTextUi
-import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.TimelineActions
 import to.sava.peranta.ui.TimelineScreen
 
@@ -31,36 +30,30 @@ fun App(
     fullTextUi: FullTextUi? = null,
     emptyStateMessage: String = DEFAULT_EMPTY_TIMELINE_MESSAGE,
 ) {
-    PerantaTheme {
-        Box(modifier = Modifier.fillMaxSize()) {
-            TimelineScreen(
-                items,
-                actions = timelineActions,
-                attachments = attachmentUi,
-                fullText = fullTextUi,
-                emptyStateMessage = emptyStateMessage,
-            )
-        }
+    Box(modifier = Modifier.fillMaxSize()) {
+        TimelineScreen(
+            items,
+            actions = timelineActions,
+            attachments = attachmentUi,
+            fullText = fullTextUi,
+            emptyStateMessage = emptyStateMessage,
+        )
     }
 }
 
 /** 設定が未完了のときに表示する画面。設定 UI 自体は後続マイルストーンで実装する。 */
 @Composable
 fun App() {
-    PerantaTheme {
-        MessageScreen(
-            title = "設定が必要です",
-            body = "サーバ・トークン・共有鍵・端末名を設定すると通知の受信を開始します。",
-        )
-    }
+    MessageScreen(
+        title = "設定が必要です",
+        body = "サーバ・トークン・共有鍵・端末名を設定すると通知の受信を開始します。",
+    )
 }
 
 /** 受信が続行不能なエラーで停止したときに表示する画面。 */
 @Composable
 fun App(errorMessage: String) {
-    PerantaTheme {
-        MessageScreen(title = "エラー", body = errorMessage)
-    }
+    MessageScreen(title = "エラー", body = errorMessage)
 }
 
 @Composable
