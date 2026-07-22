@@ -5,34 +5,28 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import java.awt.Color
+import java.awt.MenuItem
+import java.awt.PopupMenu
 import java.awt.RenderingHints
 import java.awt.SystemTray
 import java.awt.TrayIcon
-import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.image.BufferedImage
-import javax.swing.JDialog
-import javax.swing.JMenuItem
-import javax.swing.JPopupMenu
-import javax.swing.event.PopupMenuEvent
-import javax.swing.event.PopupMenuListener
 
 /**
- * タスクトレイ常駐アイコン。シングルクリックでウィンドウを復帰し、右クリックで Swing の
- * ポップアップメニューを開く。Compose 標準の Tray は AWT PopupMenu 固定で見た目が古く、
- * クリック操作も割り当てられないため、AWT SystemTray を直接扱う。
+ * タスクトレイ常駐アイコン。左シングルクリックでウィンドウを復帰し、右クリックで OS ネイティブの
+ * メニュー（開く／設定／終了）を出す。Compose 標準の Tray は左クリックでの復帰を割り当てられないため、
+ * AWT SystemTray を直接扱う。メニューは [TrayIcon.popupMenu] に委ねて表示位置を OS へ任せる。
  */
 @Composable
 fun PerantaTray(
     onActivate: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenHealthCheck: () -> Unit,
     onExit: () -> Unit,
 ) {
     val activate by rememberUpdatedState(onActivate)
     val openSettings by rememberUpdatedState(onOpenSettings)
-    val openHealthCheck by rememberUpdatedState(onOpenHealthCheck)
     val exit by rememberUpdatedState(onExit)
 
     DisposableEffect(Unit) {
@@ -40,62 +34,19 @@ fun PerantaTray(
             return@DisposableEffect onDispose {}
         }
 
-        val popup = JPopupMenu().apply {
-            add(
-                JMenuItem("設定(S)").apply {
-                    mnemonic = KeyEvent.VK_S
-                    addActionListener { openSettings() }
-                },
-            )
-            add(
-                JMenuItem("健康診断(H)").apply {
-                    mnemonic = KeyEvent.VK_H
-                    addActionListener { openHealthCheck() }
-                },
-            )
+        val popup = PopupMenu().apply {
+            add(MenuItem("開く").apply { addActionListener { activate() } })
+            add(MenuItem("設定").apply { addActionListener { openSettings() } })
             addSeparator()
-            add(
-                JMenuItem("終了(X)").apply {
-                    mnemonic = KeyEvent.VK_X
-                    addActionListener { exit() }
-                },
-            )
-        }
-        // JPopupMenu はフォーカス可能な親が無いと外側クリックで閉じられないため、
-        // 不可視の 1px ダイアログを親にする定石を使う。
-        val anchor = JDialog().apply {
-            isUndecorated = true
-            setSize(1, 1)
-        }
-        popup.addPopupMenuListener(object : PopupMenuListener {
-            override fun popupMenuWillBecomeVisible(e: PopupMenuEvent) {}
-            override fun popupMenuWillBecomeInvisible(e: PopupMenuEvent) {
-                anchor.isVisible = false
-            }
-            override fun popupMenuCanceled(e: PopupMenuEvent) {
-                anchor.isVisible = false
-            }
-        })
-
-        fun showMenuAt(e: MouseEvent) {
-            anchor.setLocation(e.x, e.y)
-            anchor.isVisible = true
-            popup.show(anchor.contentPane, 0, 0)
+            add(MenuItem("終了").apply { addActionListener { exit() } })
         }
 
         val trayIcon = TrayIcon(trayIconImage(), "Peranta").apply {
             isImageAutoSize = true
+            popupMenu = popup
             addMouseListener(object : MouseAdapter() {
                 override fun mouseClicked(e: MouseEvent) {
                     if (e.button == MouseEvent.BUTTON1) activate()
-                }
-
-                override fun mousePressed(e: MouseEvent) {
-                    if (e.isPopupTrigger) showMenuAt(e)
-                }
-
-                override fun mouseReleased(e: MouseEvent) {
-                    if (e.isPopupTrigger) showMenuAt(e)
                 }
             })
         }
@@ -103,7 +54,6 @@ fun PerantaTray(
 
         onDispose {
             SystemTray.getSystemTray().remove(trayIcon)
-            anchor.dispose()
         }
     }
 }

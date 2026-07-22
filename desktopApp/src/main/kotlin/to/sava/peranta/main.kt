@@ -4,20 +4,10 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.ScrollbarStyle
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.defaultScrollbarStyle
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,13 +49,15 @@ import to.sava.peranta.ui.PairingScanScreen
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.QrCodeCanvas
 import to.sava.peranta.ui.SettingsScreen
-import to.sava.peranta.ui.TimelineScreen
 import to.sava.peranta.ui.setup.SetupAction
 import to.sava.peranta.ui.setup.SetupItemUi
 import to.sava.peranta.ui.setup.SetupItemsProvider
 import to.sava.peranta.ui.setup.SetupStatus
 import to.sava.peranta.ui.setup.WizardFlow
 import to.sava.peranta.ui.setup.WizardScreen
+import to.sava.peranta.ui.shell.PerantaShell
+import to.sava.peranta.ui.shell.ShellDestination
+import to.sava.peranta.ui.shell.shellNavigate
 import to.sava.peranta.update.DesktopUpdater
 import java.awt.EventQueue
 import java.awt.Frame
@@ -73,7 +65,6 @@ import java.awt.Toolkit
 import java.awt.Window as AwtWindow
 import java.awt.datatransfer.StringSelection
 import java.util.concurrent.atomic.AtomicReference
-import javax.swing.UIManager
 import kotlin.system.exitProcess
 
 /** トレイ・ウィンドウ用の簡易アイコン。 */
@@ -146,43 +137,6 @@ private fun desktopWizardSetupProvider(autoStart: AutoStartManager): SetupItemsP
         )
     }
 
-/**
- * タイムライン本体の上にナビゲーションリンク行を重ねた Desktop 版の表示。
- * TODO: PerantaShell 適用時にこのリンク行を撤去する。
- */
-@Composable
-private fun DesktopTimeline(
-    receiver: DesktopReceiver,
-    onOpenSettings: () -> Unit,
-    onOpenPairing: () -> Unit,
-    onOpenAppFilter: () -> Unit,
-    onOpenHealthCheck: () -> Unit,
-) {
-    PerantaTheme {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = onOpenHealthCheck) { Text(text = "健康診断") }
-                    TextButton(onClick = onOpenAppFilter) { Text(text = "アプリフィルタ") }
-                    TextButton(onClick = onOpenPairing) { Text(text = "QR で設定を取り込む") }
-                    TextButton(onClick = onOpenSettings) { Text(text = "設定") }
-                }
-            }
-            Box(modifier = Modifier.weight(1f)) {
-                TimelineScreen(
-                    receiver.items,
-                    actions = receiver.timelineActions(),
-                    attachments = receiver.attachmentUi(),
-                    fullText = receiver.fullTextUi(),
-                )
-            }
-        }
-    }
-}
-
 /** ペアリング文字列をシステムクリップボードにコピーする。 */
 private fun copyToClipboard(text: String) {
     Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
@@ -206,9 +160,6 @@ private const val RECEIVER_CLOSE_TIMEOUT_MILLIS: Long = 2_000L
 fun main(args: Array<String>) {
     initLogging()
     val log = Logger.withTag("Main")
-    // トレイメニュー等の Swing 部品を OS ネイティブの見た目にする。失敗しても既定 LaF で続行する。
-    runCatching { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()) }
-        .onFailure { log.w(it) { "failed to set system look and feel" } }
     val desktopSettings = DesktopSettings()
     val settingsController = desktopSettings.controller
     // QR 参加経路（貼り付け取り込み）。カメラは無いため onRequestScan は注入せず貼り付けのみで動く。
@@ -246,13 +197,19 @@ fun main(args: Array<String>) {
         }
 
         var windowVisible by remember { mutableStateOf(!startMinimized) }
-        // 初回起動（未ペアリング）はウィザードを自動で開始する。
+        // 初回起動（未ペアリング）はウィザードを自動で開始する。ウィザードは画面シェルの外に置く。
         var showWizard by remember { mutableStateOf(!desktopSettings.config.hasSharedKey) }
-        var showSettings by remember { mutableStateOf(false) }
-        var showAppFilter by remember { mutableStateOf(false) }
-        var showHealthCheck by remember { mutableStateOf(false) }
-        var showPairing by remember { mutableStateOf(false) }
+        // 画面シェル内の現在地。
+        var destination by remember { mutableStateOf(ShellDestination.Timeline) }
         val windowState = rememberWindowState()
+
+        // シェル内の遷移を一元化する。設定・取り込みを離れるときは遷移先に依らず設定反映（受信機の
+        // 再生成）を通し（§10.2）、反映後も遷移先を保つため先に遷移先を確定してから世代を進める。
+        val onNavigate: (ShellDestination) -> Unit = { target ->
+            val nav = shellNavigate(from = destination, to = target)
+            destination = nav.destination
+            if (nav.reflectSettings) configGeneration++
+        }
 
         // トースト経由など Compose 外からの「ウィンドウを出す」要求を可視状態へ橋渡しする。
         LaunchedEffect(Unit) { showWindowRequest.set { windowVisible = true } }
@@ -270,11 +227,7 @@ fun main(args: Array<String>) {
         PerantaTray(
             onActivate = bringToFront,
             onOpenSettings = {
-                showSettings = true
-                bringToFront()
-            },
-            onOpenHealthCheck = {
-                showHealthCheck = true
+                onNavigate(ShellDestination.Settings)
                 bringToFront()
             },
             onExit = closeAndExit,
@@ -324,8 +277,11 @@ fun main(args: Array<String>) {
         ) {
             LaunchedEffect(window) { mainWindow.set(window) }
             val currentReceiver = receiver
-            when {
-                showWizard -> PerantaTheme {
+            // アプリバー・ドロワーのラベルは config 由来（ネットワーク不要）。受信機があればその設定を、
+            // 無ければ起動時設定を使う。
+            val labelConfig = currentReceiver?.config ?: desktopSettings.config
+            if (showWizard) {
+                PerantaTheme {
                     WizardScreen(
                         caps = platformCapabilities(),
                         controller = settingsController,
@@ -339,52 +295,67 @@ fun main(args: Array<String>) {
                         onSaved = { configGeneration++ },
                     )
                 }
-                showHealthCheck -> PerantaTheme {
-                    HealthCheckScreen(
-                        checker = DesktopHealthChecker(autoStart),
-                        onBack = { showHealthCheck = false },
-                    )
+            } else {
+                PerantaTheme {
+                    PerantaShell(
+                        destination = destination,
+                        onNavigate = onNavigate,
+                        serverLabel = labelConfig.host.takeIf { it.isNotBlank() },
+                        deviceLabel = labelConfig.deviceName?.takeIf { it.isNotBlank() },
+                        showReceiveSetup = false,
+                    ) { shellDestination ->
+                        when (shellDestination) {
+                            ShellDestination.Timeline -> when {
+                                errorMessage != null -> App(errorMessage!!)
+                                currentReceiver != null -> App(
+                                    items = currentReceiver.items,
+                                    timelineActions = currentReceiver.timelineActions(),
+                                    attachmentUi = currentReceiver.attachmentUi(),
+                                    fullTextUi = currentReceiver.fullTextUi(),
+                                )
+                                else -> App()
+                            }
+
+                            ShellDestination.Settings -> SettingsScreen(
+                                controller = settingsController,
+                                qrContent = { uri -> DesktopQrCode(uri) },
+                                scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
+                                onCopyPairingUri = ::copyToClipboard,
+                                onOpenWizard = { showWizard = true },
+                                updateController = updater.controller,
+                                onInstallUpdate = { url -> updater.install(url) },
+                                // 鍵の作成は例外として即時反映する（§10.2）。画面を離れたときの反映は onNavigate が担う。
+                                onSaved = { configGeneration++ },
+                                showHeader = false,
+                            )
+
+                            ShellDestination.AppFilter -> when {
+                                currentReceiver != null -> AppFilterScreen(
+                                    controller = currentReceiver.appFilterController(),
+                                    items = currentReceiver.items,
+                                    showHeader = false,
+                                )
+                                errorMessage != null -> App(errorMessage!!)
+                                else -> App()
+                            }
+
+                            ShellDestination.HealthCheck -> HealthCheckScreen(
+                                checker = DesktopHealthChecker(autoStart),
+                                showHeader = false,
+                            )
+
+                            ShellDestination.PairingImport -> PairingScanScreen(
+                                controller = pairingImportController,
+                                onImported = { destination = ShellDestination.Timeline; configGeneration++ },
+                                showHeader = false,
+                                showDescription = true,
+                            )
+
+                            // Desktop に受信のセットアップ画面は無い（showReceiveSetup=false でドロワーにも出さない）。
+                            ShellDestination.ReceiveSetup -> App()
+                        }
+                    }
                 }
-                showPairing -> PerantaTheme {
-                    PairingScanScreen(
-                        controller = pairingImportController,
-                        onImported = { showPairing = false; configGeneration++ },
-                        onBack = { showPairing = false },
-                    )
-                }
-                showSettings -> PerantaTheme {
-                    SettingsScreen(
-                        controller = settingsController,
-                        qrContent = { uri -> DesktopQrCode(uri) },
-                        onOpenTimeline = if (currentReceiver != null) {
-                            { showSettings = false }
-                        } else {
-                            null
-                        },
-                        scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
-                        onCopyPairingUri = ::copyToClipboard,
-                        onSaved = { configGeneration++ },
-                        onOpenWizard = { showWizard = true },
-                        updateController = updater.controller,
-                        onInstallUpdate = { url -> updater.install(url) },
-                    )
-                }
-                showAppFilter && currentReceiver != null -> PerantaTheme {
-                    AppFilterScreen(
-                        controller = currentReceiver.appFilterController(),
-                        items = currentReceiver.items,
-                        onBack = { showAppFilter = false },
-                    )
-                }
-                errorMessage != null -> App(errorMessage!!)
-                currentReceiver != null -> DesktopTimeline(
-                    receiver = currentReceiver,
-                    onOpenSettings = { showSettings = true },
-                    onOpenPairing = { showPairing = true },
-                    onOpenAppFilter = { showAppFilter = true },
-                    onOpenHealthCheck = { showHealthCheck = true },
-                )
-                else -> App()
             }
         }
     }
