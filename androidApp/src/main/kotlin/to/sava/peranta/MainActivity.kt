@@ -189,11 +189,14 @@ class MainActivity : ComponentActivity() {
             // シェル内の現在地。設定を離れる遷移でも再生成後に生存させるため rememberSaveable で保持する。
             var destination: ShellDestination by rememberSaveable { mutableStateOf(ShellDestination.Timeline) }
             // シェル外のモーダルなタスク。未ペアリングはウィザードから始め、共有はファイル送信へ入る。
+            // ただし取り込み画面への遷移が再生成をまたいで復元されたときは、未ペアリングでも
+            // ウィザードを被せず取り込み画面をそのまま出す（明示的な取り込み操作を優先する）。
             var overlay: Overlay? by remember {
                 mutableStateOf(
                     when {
                         sharedFiles.isNotEmpty() && config.hasSharedKey -> Overlay.Share(sharedFiles)
                         config.hasSharedKey -> null
+                        destination == ShellDestination.PairingImport -> null
                         else -> Overlay.Wizard
                     },
                 )
@@ -351,6 +354,7 @@ class MainActivity : ComponentActivity() {
                                     onOpenWizard = { overlay = Overlay.Wizard },
                                     loadHealthItems = { healthChecker.check() },
                                     onOpenHealthCheck = { onNavigate(ShellDestination.HealthCheck) },
+                                    onOpenPairingImport = { onNavigate(ShellDestination.PairingImport) },
                                     hasReceiveSetup = receiveSetupAvailable,
                                     loadReceiveSetupItems = if (receiveSetupAvailable) {
                                         suspend { receiveSetupProvider.items() }

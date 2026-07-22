@@ -27,6 +27,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import to.sava.peranta.ui.setup.ReceiveSetupSteps
@@ -80,9 +81,10 @@ fun setupBannerTarget(unmetHealthCheckIds: Set<String>): ShellDestination? {
  * アンカースロット。サブ画面表示時は左端が戻る（タイムラインへ [onNavigate]）に変わり、タイトルは
  * 画面名になる。ドロワーはサブ画面でもエッジスワイプで開ける（[ModalNavigationDrawer] の標準挙動）。
  *
- * ドロワーには行き先を列挙する。受信のセットアップと動作チェックは設定画面のセットアップ状況の行から開くため、
- * ドロワーには並べない。現在地は [NavigationDrawerItem] の選択でハイライトする。項目タップで
- * [onNavigate] へ一元化して遷移し、ドロワーを閉じる。[drawerExtras] はドロワーヘッダ下の将来スロット。
+ * ドロワーには行き先を列挙する。受信のセットアップ・動作チェック・接続設定と暗号キーの取り込みは
+ * 設定画面のセットアップ状況の行から開くため、ドロワーには並べない。現在地は [NavigationDrawerItem]
+ * の選択でハイライトする。項目タップで [onNavigate] へ一元化して遷移し、ドロワーを閉じる。
+ * [drawerExtras] はドロワーヘッダ下の将来スロット。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -166,6 +168,8 @@ private fun ShellTopBar(
                 Text(
                     text = destinationTitle(destination),
                     style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.testTag(TAG_SHELL_TITLE),
                 )
             }
@@ -226,8 +230,6 @@ private fun ShellDrawer(
             DrawerItem(ShellDestination.Timeline, "タイムライン", destination, onSelect)
             DrawerItem(ShellDestination.AppFilter, "アプリフィルタ", destination, onSelect)
             DrawerItem(ShellDestination.Settings, "設定", destination, onSelect)
-            HorizontalDivider()
-            DrawerItem(ShellDestination.PairingImport, "QR で設定を取り込む", destination, onSelect)
         }
     }
 }
@@ -264,7 +266,7 @@ private fun destinationTitle(destination: ShellDestination): String = when (dest
     ShellDestination.Settings -> "設定"
     ShellDestination.ReceiveSetup -> "受信のセットアップ"
     ShellDestination.HealthCheck -> "動作チェック"
-    ShellDestination.PairingImport -> "QR で設定を取り込む"
+    ShellDestination.PairingImport -> "接続設定と暗号キーを取り込む"
 }
 
 /** ドロワー開閉（ハンバーガー）のタグ。 */

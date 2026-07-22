@@ -21,12 +21,14 @@ class PerantaShellTest {
     private fun drawerTag(destination: ShellDestination): String =
         "$TAG_SHELL_DRAWER_ITEM_PREFIX${destination.name}"
 
-    /** ドロワーに並ぶ行き先。受信のセットアップと動作チェックは設定画面のセットアップ状況から開くため含めない。 */
+    /**
+     * ドロワーに並ぶ行き先。受信のセットアップ・動作チェック・接続設定と暗号キーの取り込みは
+     * 設定画面のセットアップ状況から開くため含めない。
+     */
     private val drawerDestinations = listOf(
         ShellDestination.Timeline,
         ShellDestination.AppFilter,
         ShellDestination.Settings,
-        ShellDestination.PairingImport,
     )
 
     @Composable
@@ -61,13 +63,17 @@ class PerantaShellTest {
         }
     }
 
-    /** 受信のセットアップと動作チェックはドロワーに出さない（入口は設定画面のセットアップ状況に集約）。 */
+    /**
+     * 受信のセットアップ・動作チェック・接続設定と暗号キーの取り込みはドロワーに出さない
+     * （入口は設定画面のセットアップ状況に集約）。
+     */
     @Test
-    fun receiveSetupAndHealthCheckAbsentFromDrawer() = runComposeUiTest {
+    fun receiveSetupHealthCheckAndPairingImportAbsentFromDrawer() = runComposeUiTest {
         setContent { shell(ShellDestination.Timeline) }
         onNodeWithTag(TAG_SHELL_MENU).performClick()
         onAllNodesWithTag(drawerTag(ShellDestination.ReceiveSetup)).assertCountEquals(0)
         onAllNodesWithTag(drawerTag(ShellDestination.HealthCheck)).assertCountEquals(0)
+        onAllNodesWithTag(drawerTag(ShellDestination.PairingImport)).assertCountEquals(0)
         onNodeWithTag(drawerTag(ShellDestination.Settings)).assertExists()
     }
 

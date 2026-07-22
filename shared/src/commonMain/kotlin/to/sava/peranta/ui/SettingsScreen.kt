@@ -102,8 +102,8 @@ private const val SECTION_DANGER: String = "危険な操作"
  * [onOpenWizard] が非 null のとき、セットアップをページ列で案内するウィザードへの導線を出す。
  * [loadHealthItems] が非 null のとき冒頭に「セットアップ状況」セクションを出し、初回コンポジションで一度だけ
  * 動作チェック項目を取得して集計する（取得中は未確認表示）。[hasReceiveSetup] が真なら受信経路の行も出し、
- * [loadReceiveSetupItems] で受信のセットアップ項目を取得する。[onOpenHealthCheck] / [onOpenReceiveSetup] は
- * 各行の [開く] 導線で、null なら該当行の [開く] を出さない。
+ * [loadReceiveSetupItems] で受信のセットアップ項目を取得する。[onOpenHealthCheck] / [onOpenReceiveSetup] /
+ * [onOpenPairingImport] は各行の導線で、null なら該当行の導線を出さない。
  * [updateController] が非 null のとき「アプリの更新」セクションを出し、ボタン押下時だけ更新確認を実行する（§12）。
  * [showHeader] が false のときは画面見出し行（タイトルと「タイムラインへ」）を出さない。外側のアプリバーが
  * 見出しと戻る導線を持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
@@ -122,6 +122,7 @@ fun SettingsScreen(
     onOpenWizard: (() -> Unit)? = null,
     loadHealthItems: (suspend () -> List<HealthCheckItem>)? = null,
     onOpenHealthCheck: (() -> Unit)? = null,
+    onOpenPairingImport: (() -> Unit)? = null,
     hasReceiveSetup: Boolean = false,
     loadReceiveSetupItems: (suspend () -> List<SetupItemUi>)? = null,
     onOpenReceiveSetup: (() -> Unit)? = null,
@@ -243,6 +244,7 @@ fun SettingsScreen(
                         ),
                         onOpenHealthCheck = onOpenHealthCheck,
                         onOpenReceiveSetup = onOpenReceiveSetup,
+                        onOpenPairingImport = onOpenPairingImport,
                     )
                 }
                 if (onOpenWizard != null) {
@@ -407,12 +409,14 @@ private fun SetupOverviewSection(
     rows: List<SetupOverviewRow>,
     onOpenHealthCheck: (() -> Unit)?,
     onOpenReceiveSetup: (() -> Unit)?,
+    onOpenPairingImport: (() -> Unit)?,
 ) {
     SectionHeader(title = SECTION_SETUP_OVERVIEW)
     rows.forEach { row ->
         val onOpen = when (row.target) {
             SetupOverviewTarget.HealthCheck -> onOpenHealthCheck
             SetupOverviewTarget.ReceiveSetup -> onOpenReceiveSetup
+            SetupOverviewTarget.PairingImport -> onOpenPairingImport
             null -> null
         }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

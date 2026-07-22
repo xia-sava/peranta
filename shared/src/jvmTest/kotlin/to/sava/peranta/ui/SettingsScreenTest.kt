@@ -247,6 +247,41 @@ class SettingsScreenTest {
         assertEquals(true, opened)
     }
 
+    /** 接続とペアリングの行の導線で onOpenPairingImport が呼ばれる（達成状態でも導線は常設）。 */
+    @Test
+    fun overviewConnectionOpenInvokesPairingImportCallback() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        var opened = false
+
+        setContent {
+            SettingsScreen(
+                controller = SettingsController(repo),
+                loadHealthItems = { emptyList() },
+                onOpenPairingImport = { opened = true },
+            )
+        }
+
+        onNodeWithTag("$TAG_OVERVIEW_OPEN_PREFIX$OVERVIEW_ROW_CONNECTION").performScrollTo().performClick()
+        assertEquals(true, opened)
+    }
+
+    /** onOpenPairingImport が未指定（既定）なら接続とペアリングの行に導線は出ない。 */
+    @Test
+    fun overviewConnectionOpenHiddenWhenCallbackNotProvided() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+
+        setContent {
+            SettingsScreen(
+                controller = SettingsController(repo),
+                loadHealthItems = { emptyList() },
+            )
+        }
+
+        onNodeWithTag("$TAG_OVERVIEW_OPEN_PREFIX$OVERVIEW_ROW_CONNECTION").assertDoesNotExist()
+    }
+
     /** hasReceiveSetup=true なら受信経路の行が出て、[開く]で onOpenReceiveSetup が呼ばれる。 */
     @Test
     fun overviewReceiveRowShownAndOpenInvokesCallback() = runComposeUiTest {

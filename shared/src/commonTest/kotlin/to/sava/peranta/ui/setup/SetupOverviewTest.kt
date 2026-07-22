@@ -34,13 +34,17 @@ class SetupOverviewTest {
         receiveSetupItems = receiveSetupItems,
     )
 
-    /** 接続先（ホスト名・トークン）と共有鍵が揃えば接続とペアリングは達成で、誘導先は持たない。 */
+    /**
+     * 接続先（ホスト名・トークン）と共有鍵が揃えば接続とペアリングは達成だが、誘導先（接続設定と暗号キーの取り込み）
+     * は達成状態でも常設する（鍵ローテ後の読み直し等、再取り込みの余地があるため）。
+     */
     @Test
     fun connectionMetWhenAllConfigured() {
         val row = rowOf(overview(), OVERVIEW_ROW_CONNECTION)
         assertEquals(SetupOverviewStatus.MET, row.status)
         assertEquals("接続先と共有鍵設定済み", row.detail)
-        assertNull(row.target)
+        assertEquals(SetupOverviewTarget.PairingImport, row.target)
+        assertEquals("接続設定と暗号キーを取り込む", row.openLabel)
     }
 
     /** 共有鍵が無ければ接続とペアリングは未達で、足りない項目を列挙する。 */

@@ -7,9 +7,9 @@ import to.sava.peranta.ui.HealthCheckState
 enum class SetupOverviewStatus { MET, UNMET, UNKNOWN }
 
 /**
- * セットアップ状況の 1 行が誘導する画面。接続とペアリングの行は設定画面自身で編集するため誘導先を持たない。
+ * セットアップ状況の 1 行が誘導する画面。
  */
-enum class SetupOverviewTarget { HealthCheck, ReceiveSetup }
+enum class SetupOverviewTarget { PairingImport, HealthCheck, ReceiveSetup }
 
 /**
  * 「セットアップ状況」セクションの 1 行（§10.2）。機能単位で「何を設定するのに何が必要か」を示す。
@@ -44,7 +44,8 @@ private val FORWARD_EXCLUDED_IDS: Set<String> = ReceiveSetupSteps.orderedIds.toS
  * 新たな判定は発明しない。
  *
  * 行①接続とペアリングは接続先（[hasHost]・[hasToken]）と共有鍵（[hasSharedKey]）の設定有無から
- * 達成/未達を出し、未達なら足りない項目を列挙する。
+ * 達成/未達を出し、未達なら足りない項目を列挙する。誘導先は他端末から接続設定と暗号キーを取り込む画面で、
+ * 達成状態でも常設する（鍵ローテ後の読み直し等、再取り込みの余地があるため）。
  * 行②通知の転送はこの端末の権限・常駐系の動作チェック項目（[healthItems]、受信経路の項目は行③が持つため除く）
  * の未達数を集計する。[healthItems] が null のときは取得前とみなし未確認にする。
  * 行③受信経路は受信のセットアップ項目（[receiveSetupItems]）の未達・未確認を集計する。
@@ -77,8 +78,8 @@ private fun connectionRow(hasHost: Boolean, hasToken: Boolean, hasSharedKey: Boo
         title = "接続とペアリング",
         status = if (missing.isEmpty()) SetupOverviewStatus.MET else SetupOverviewStatus.UNMET,
         detail = if (missing.isEmpty()) "接続先と共有鍵設定済み" else "未設定: ${missing.joinToString("・")}",
-        openLabel = null,
-        target = null,
+        openLabel = "接続設定と暗号キーを取り込む",
+        target = SetupOverviewTarget.PairingImport,
     )
 }
 

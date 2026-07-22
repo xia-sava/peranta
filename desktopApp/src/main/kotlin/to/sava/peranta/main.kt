@@ -348,6 +348,7 @@ fun main(args: Array<String>) {
                                 onOpenWizard = { showWizard = true },
                                 loadHealthItems = { DesktopHealthChecker(autoStart).check() },
                                 onOpenHealthCheck = { onNavigate(ShellDestination.HealthCheck) },
+                                onOpenPairingImport = { onNavigate(ShellDestination.PairingImport) },
                                 updateController = updater.controller,
                                 onInstallUpdate = { url -> updater.install(url) },
                                 // 鍵の作成は例外として即時反映する（§10.2）。画面を離れたときの反映は onNavigate が担う。
