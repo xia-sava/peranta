@@ -42,8 +42,8 @@ class WizardFlowTest {
 
     /**
      * 健康診断（AndroidHealthChecker）が生成する診断項目 id を config から写す契約。
-     * 送信ロールで nls/self-battery/(sms)、受信可能で受信手順 5 種、受信表示ロールで post-notifications。
-     * INFO の oem-power-save は合否を出さないため被覆対象に含めない。
+     * 送信ロールで nls/self-battery/(sms)、受信可能で受信手順 5 種、受信可能なら送信の可否を問わず
+     * post-notifications。INFO の oem-power-save は合否を出さないため被覆対象に含めない。
      */
     private fun expectedHealthIds(config: PerantaConfig): Set<String> = buildSet {
         if (config.sendEnabled) {
@@ -51,8 +51,10 @@ class WizardFlowTest {
             add(WizardFlow.ITEM_SELF_BATTERY)
             if (config.smsDirectReceive) add(WizardFlow.ITEM_SMS)
         }
-        if (config.isReadyForUnifiedPushReceive) addAll(ReceiveSetupSteps.orderedIds)
-        if (config.isReadyForUnifiedPushReceive && !config.sendEnabled) add(WizardFlow.ITEM_POST_NOTIFICATIONS)
+        if (config.isReadyForUnifiedPushReceive) {
+            addAll(ReceiveSetupSteps.orderedIds)
+            add(WizardFlow.ITEM_POST_NOTIFICATIONS)
+        }
     }
 
     // --- 単一ページ列 × capability フィルタ（caps × source × forward の直積） ---

@@ -46,9 +46,9 @@ class AndroidHealthChecker(
         }
     }
 
-    /** 受信して通知を表示する端末か（受信設定が揃い、かつ送信ロールでない）。 */
+    /** 受信して通知を表示する端末か（受信設定が揃っている）。送信端末もエラー通知・受信通知を表示する。 */
     private fun displaysNotifications(config: PerantaConfig): Boolean =
-        config.isReadyForUnifiedPushReceive && !config.sendEnabled
+        config.isReadyForUnifiedPushReceive
 
     private fun notificationListenerItem(): HealthCheckItem {
         val granted = probe.nlsGranted()

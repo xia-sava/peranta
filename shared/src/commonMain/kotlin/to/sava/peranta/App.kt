@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.StateFlow
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.ui.AttachmentUi
+import to.sava.peranta.ui.DEFAULT_EMPTY_TIMELINE_MESSAGE
 import to.sava.peranta.ui.FullTextUi
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.TimelineActions
@@ -37,6 +38,7 @@ fun App(
     timelineActions: TimelineActions? = null,
     attachmentUi: AttachmentUi? = null,
     fullTextUi: FullTextUi? = null,
+    emptyStateMessage: String = DEFAULT_EMPTY_TIMELINE_MESSAGE,
 ) {
     PerantaTheme {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -73,7 +75,13 @@ fun App(
                 }
             }
             Box(modifier = Modifier.weight(1f)) {
-                TimelineScreen(items, actions = timelineActions, attachments = attachmentUi, fullText = fullTextUi)
+                TimelineScreen(
+                    items,
+                    actions = timelineActions,
+                    attachments = attachmentUi,
+                    fullText = fullTextUi,
+                    emptyStateMessage = emptyStateMessage,
+                )
             }
         }
     }
@@ -95,56 +103,6 @@ fun App() {
 fun App(errorMessage: String) {
     PerantaTheme {
         MessageScreen(title = "エラー", body = errorMessage)
-    }
-}
-
-/** 送信ロールの状態を簡易表示する（本格 UI は後続マイルストーン）。 */
-@Composable
-fun SendRoleApp(
-    sendEnabled: Boolean,
-    onOpenSettings: (() -> Unit)? = null,
-    onOpenPairing: (() -> Unit)? = null,
-    onOpenAppFilter: (() -> Unit)? = null,
-    onOpenReceiveSetup: (() -> Unit)? = null,
-    onOpenHealthCheck: (() -> Unit)? = null,
-) {
-    PerantaTheme {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-                    Text(
-                        text = if (sendEnabled) "通知を送信する: 有効" else "通知を送信する: 無効",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        if (onOpenReceiveSetup != null) {
-                            TextButton(onClick = onOpenReceiveSetup) { Text(text = "受信のセットアップ") }
-                        }
-                        if (onOpenHealthCheck != null) {
-                            TextButton(onClick = onOpenHealthCheck) { Text(text = "健康診断") }
-                        }
-                        if (onOpenAppFilter != null) {
-                            TextButton(onClick = onOpenAppFilter) { Text(text = "アプリフィルタ") }
-                        }
-                        if (onOpenPairing != null) {
-                            TextButton(onClick = onOpenPairing) { Text(text = "QR で設定を取り込む") }
-                        }
-                        if (onOpenSettings != null) {
-                            TextButton(onClick = onOpenSettings) { Text(text = "設定") }
-                        }
-                    }
-                }
-            }
-            Box(modifier = Modifier.weight(1f)) {
-                MessageScreen(
-                    title = "Peranta 送信端末",
-                    body = "設定が完了すると通知と SMS の転送を開始します。",
-                )
-            }
-        }
     }
 }
 

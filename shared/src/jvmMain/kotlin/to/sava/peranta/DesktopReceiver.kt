@@ -40,9 +40,8 @@ import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
 import to.sava.peranta.send.CommandSender
 import to.sava.peranta.send.SendPipeline
-import to.sava.peranta.roster.CAPABILITY_COMMAND
-import to.sava.peranta.roster.CAPABILITY_DISPLAY
 import to.sava.peranta.roster.buildPresencePayload
+import to.sava.peranta.roster.presenceCapabilities
 import to.sava.peranta.roster.publishPresence
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.JsonlTimelineStore
@@ -211,7 +210,9 @@ class DesktopReceiver(
                 deviceId = deviceId,
                 deviceName = config.deviceName ?: deviceId,
                 endpoint = "${config.httpBaseUrl()}/$receiveTopic",
-                capabilities = listOf(CAPABILITY_DISPLAY, CAPABILITY_COMMAND),
+                // 受信中は通知を表示できる。元通知への操作は通知捕捉（NLS）を持たない Desktop では
+                // 実行できないためコマンド能力は持たない（自表示通知の取り下げは表示能力に含む、§3.5）。
+                capabilities = presenceCapabilities(canDisplay = true, canCommand = false),
                 sender = config.sendEnabled,
                 now = nowEpochMillis(),
             )

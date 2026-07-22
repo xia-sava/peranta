@@ -11,8 +11,23 @@ import to.sava.peranta.net.NtfyClient
 /** display（受信表示）能力を表す capability 文字列。 */
 const val CAPABILITY_DISPLAY: String = "display"
 
-/** command（逆方向コマンド）能力を表す capability 文字列。 */
+/**
+ * command（逆方向コマンド）能力を表す capability 文字列。
+ * 元通知への操作（アクション発火・返信・元通知の取り下げ）を実行できること、すなわち通知捕捉（NLS）を
+ * 実接続している端末が持つ能力を指す。自分が表示した通知のローカル取り下げは表示能力に含意され、これには当たらない。
+ */
 const val CAPABILITY_COMMAND: String = "command"
+
+/**
+ * 自端末の実能力から presence の capability 列を組む（§3.5）。
+ * [canDisplay] は受信通知を表示できるか、[canCommand] は逆方向コマンド（通知操作）を実行できるか。
+ * 能力を持つものだけを既定順（display, command）で並べる。
+ */
+fun presenceCapabilities(canDisplay: Boolean, canCommand: Boolean): List<String> =
+    buildList {
+        if (canDisplay) add(CAPABILITY_DISPLAY)
+        if (canCommand) add(CAPABILITY_COMMAND)
+    }
 
 /**
  * 自端末の presence を組み立てる（§4.1）。

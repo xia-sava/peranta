@@ -59,6 +59,9 @@ const val TAG_TIMELINE_MENU_MUTE: String = "timeline-menu-mute"
 /** コンテキストメニューのアクション項目のタグ接頭辞（末尾に action の index を付ける）。 */
 const val TAG_TIMELINE_MENU_ACTION_PREFIX: String = "timeline-menu-action-"
 
+/** 受信可能な端末でタイムラインが空のときの文言。 */
+const val DEFAULT_EMPTY_TIMELINE_MESSAGE: String = "まだ通知はありません"
+
 /**
  * 受信通知アイテムに対する操作（§3.4 / §10.1）。受信端末から送信元へ command を返送する。
  * すべて fire-and-forget で、呼び出し側（プラットフォーム配線）がコルーチンで実際の送信を行う。
@@ -82,13 +85,14 @@ fun TimelineScreen(
     actions: TimelineActions? = null,
     attachments: AttachmentUi? = null,
     fullText: FullTextUi? = null,
+    emptyStateMessage: String = DEFAULT_EMPTY_TIMELINE_MESSAGE,
 ) {
     val list by items.collectAsState()
     val locallyDismissed = remember { mutableStateListOf<String>() }
     val visible = list.filterNot { it.id in locallyDismissed }
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (visible.isEmpty()) {
-            EmptyState()
+            EmptyState(emptyStateMessage)
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -110,10 +114,10 @@ fun TimelineScreen(
 }
 
 @Composable
-private fun EmptyState() {
+private fun EmptyState(message: String) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
-            text = "まだ通知はありません",
+            text = message,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

@@ -36,6 +36,15 @@ class PresenceTest {
         assertEquals(5000, presence.sentAtEpochMillis)
     }
 
+    /** capability 列は実能力のフラグから組み、持つ能力だけを display, command の順で並べる。 */
+    @Test
+    fun assemblesCapabilitiesFromRealFlags() {
+        assertEquals(listOf("display", "command"), presenceCapabilities(canDisplay = true, canCommand = true))
+        assertEquals(listOf("display"), presenceCapabilities(canDisplay = true, canCommand = false))
+        assertEquals(listOf("command"), presenceCapabilities(canDisplay = false, canCommand = true))
+        assertEquals(emptyList(), presenceCapabilities(canDisplay = false, canCommand = false))
+    }
+
     /** publishPresence は control topic へ暗号文を送り、キャッシュ短縮ヘッダは付けない。 */
     @Test
     fun publishesEncryptedPresenceWithoutCacheHeader() = runTest {

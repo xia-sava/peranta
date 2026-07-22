@@ -57,6 +57,7 @@ import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.AppFilterScreen
 import to.sava.peranta.ui.AttachmentUi
+import to.sava.peranta.ui.DEFAULT_EMPTY_TIMELINE_MESSAGE
 import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.healthCheckNeedsAttention
 import to.sava.peranta.ui.PairingScanScreen
@@ -76,12 +77,16 @@ private const val NOTIFICATIONS_DENIED_MESSAGE =
 private const val CAMERA_DENIED_MESSAGE =
     "カメラの権限が許可されていません。ペアリング文字列を貼り付けて取り込んでください"
 
+/** 受信設定が未完了の端末で空のタイムラインに出す文言（設定の完了を促す）。 */
+private const val RECEIVE_NOT_READY_MESSAGE =
+    "受信の設定が完了すると通知が表示されます。設定から続きを行ってください"
+
 /** SAF 保存要求中の blobId を Activity 再生成越しに引き継ぐための保存キー。 */
 private const val KEY_PENDING_SAVE_BLOB_ID = "pendingSaveBlobId"
 
 /**
  * MainActivity が表示する画面（§10）。
- * [Main] はロール（受信/送信）に応じて本体を出し、[Pairing] は QR 取り込み画面、
+ * [Main] はタイムライン本体を出し、[Pairing] は QR 取り込み画面、
  * [Settings] は設定画面（§10.2）、[AppFilter] はアプリフィルタ画面（§10.4）、
  * [HealthCheck] は健康診断画面（§10.5）、[ReceiveSetup] は受信のセットアップ常設画面、
  * [Wizard] は設定・診断をページ列で案内するウィザードを出す。
@@ -133,7 +138,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-    /** 受信添付の「開く」「保存」「共有」を担う。受信ロールで設定が揃ったときだけ生成する（§4.3）。 */
+    /** 受信添付の「開く」「保存」「共有」を担う。受信設定が揃ったときだけ生成する（§4.3）。 */
     private var attachmentActions: AndroidAttachmentActions? = null
 
     /** 添付保存（SAF）のドキュメント作成ランチャー。返った Uri へキャッシュからコピーする。 */
@@ -155,8 +160,9 @@ class MainActivity : ComponentActivity() {
         if (config.isReadyForUnifiedPushReceive) {
             PerantaUnifiedPush.register(this)
         }
-        val receiveRole = !config.sendEnabled && config.isReadyForUnifiedPushReceive
-        val attachmentUi = if (receiveRole) {
+        // 受信タイムライン・添付表示・通知権限は受信設定が揃えば送信の可否を問わず有効化する（§10）。
+        val canReceive = config.isReadyForUnifiedPushReceive
+        val attachmentUi = if (canReceive) {
             attachmentActions = buildAttachmentActions(config).also {
                 it.restorePendingSaveState(savedInstanceState?.getString(KEY_PENDING_SAVE_BLOB_ID))
             }
@@ -164,7 +170,7 @@ class MainActivity : ComponentActivity() {
         } else {
             null
         }
-        if (receiveRole) {
+        if (canReceive) {
             requestNotificationsPermissionIfNeeded()
             lifecycleScope.launch { PerantaReceive.prime(this@MainActivity) }
             primeAttachmentCache(config)
@@ -233,37 +239,35 @@ class MainActivity : ComponentActivity() {
                             },
                         )
 
-                        Screen.Main -> if (receiveRole) {
-                            App(
-                                items = PerantaReceive.items,
-                                receiveEndpoint = config.unifiedPushEndpoint,
-                                onOpenSettings = { screen = Screen.Settings },
-                                onOpenPairing = { screen = Screen.Pairing },
-                                onOpenAppFilter = { screen = Screen.AppFilter },
-                                onOpenReceiveSetup = if (showReceiveSetup) {
-                                    { screen = Screen.ReceiveSetup }
-                                } else {
-                                    null
-                                },
-                                onOpenHealthCheck = { screen = Screen.HealthCheck },
-                                timelineActions = PerantaReceive.timelineActions(this@MainActivity),
-                                attachmentUi = attachmentUi,
-                                fullTextUi = AndroidAttachmentReceive.fullTextUi(this@MainActivity, config),
-                            )
-                        } else {
-                            SendRoleApp(
-                                sendEnabled = config.sendEnabled,
-                                onOpenSettings = { screen = Screen.Settings },
-                                onOpenPairing = { screen = Screen.Pairing },
-                                onOpenAppFilter = { screen = Screen.AppFilter },
-                                onOpenReceiveSetup = if (showReceiveSetup) {
-                                    { screen = Screen.ReceiveSetup }
-                                } else {
-                                    null
-                                },
-                                onOpenHealthCheck = { screen = Screen.HealthCheck },
-                            )
-                        }
+                        Screen.Main -> App(
+                            items = PerantaReceive.items,
+                            receiveEndpoint = config.unifiedPushEndpoint,
+                            onOpenSettings = { screen = Screen.Settings },
+                            onOpenPairing = { screen = Screen.Pairing },
+                            onOpenAppFilter = { screen = Screen.AppFilter },
+                            onOpenReceiveSetup = if (showReceiveSetup) {
+                                { screen = Screen.ReceiveSetup }
+                            } else {
+                                null
+                            },
+                            onOpenHealthCheck = { screen = Screen.HealthCheck },
+                            timelineActions = if (canReceive) {
+                                PerantaReceive.timelineActions(this@MainActivity)
+                            } else {
+                                null
+                            },
+                            attachmentUi = attachmentUi,
+                            fullTextUi = if (canReceive) {
+                                AndroidAttachmentReceive.fullTextUi(this@MainActivity, config)
+                            } else {
+                                null
+                            },
+                            emptyStateMessage = if (canReceive) {
+                                DEFAULT_EMPTY_TIMELINE_MESSAGE
+                            } else {
+                                RECEIVE_NOT_READY_MESSAGE
+                            },
+                        )
 
                         Screen.Settings -> SettingsScreen(
                             controller = SettingsController(androidConfigRepository()),
@@ -302,16 +306,18 @@ class MainActivity : ComponentActivity() {
                             },
                         )
 
-                        Screen.AppFilter -> if (receiveRole) {
+                        // 捕捉端末（送信）はインストール済みアプリ一覧から転送フィルタを編集し、
+                        // 受信端末は受信履歴のミラーから送信元ごとに mute する（§10.4）。
+                        Screen.AppFilter -> if (config.sendEnabled) {
                             AppFilterScreen(
-                                controller = PerantaReceive.appFilterController(this@MainActivity),
-                                items = PerantaReceive.items,
+                                controller = AppFilterController(androidConfigRepository()),
+                                installedAppsProvider = AndroidInstalledAppsProvider(this@MainActivity),
                                 onBack = { screen = Screen.Main },
                             )
                         } else {
                             AppFilterScreen(
-                                controller = AppFilterController(androidConfigRepository()),
-                                installedAppsProvider = AndroidInstalledAppsProvider(this@MainActivity),
+                                controller = PerantaReceive.appFilterController(this@MainActivity),
+                                items = PerantaReceive.items,
                                 onBack = { screen = Screen.Main },
                             )
                         }

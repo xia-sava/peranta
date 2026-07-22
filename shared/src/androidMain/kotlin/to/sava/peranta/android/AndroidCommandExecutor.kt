@@ -12,7 +12,7 @@ private const val NLS_NOT_CONNECTED_MESSAGE =
     "通知へのアクセスが有効でないためコマンドを実行できません"
 
 /**
- * 送信ロール端末（スマホ）でのコマンド実行（§3.4）。
+ * 通知捕捉（NLS）を持つ端末でのコマンド実行（§3.4）。
  * 通知操作（dismiss / invokeAction / reply）は生存中の [PerantaNotificationListenerService] へ委ね、
  * muteApp / unmuteApp は [androidConfigRepository] のフィルタルール部分更新で denylist へ反映する（§7）。
  */

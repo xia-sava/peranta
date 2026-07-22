@@ -6,9 +6,8 @@ import kotlinx.coroutines.CancellationException
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.createNtfyHttpClient
-import to.sava.peranta.roster.CAPABILITY_COMMAND
-import to.sava.peranta.roster.CAPABILITY_DISPLAY
 import to.sava.peranta.roster.buildPresencePayload
+import to.sava.peranta.roster.presenceCapabilities
 import to.sava.peranta.roster.publishPresence
 
 private val presenceLog = Logger.withTag("PerantaPresence")
@@ -34,7 +33,11 @@ suspend fun announcePresence(context: Context) {
             deviceId = deviceId,
             deviceName = deviceName,
             endpoint = endpoint,
-            capabilities = listOf(CAPABILITY_DISPLAY, CAPABILITY_COMMAND),
+            // 表示能力は受信設定の充足、コマンド実行能力は通知捕捉（NLS）の実接続で決まる（§3.5）。
+            capabilities = presenceCapabilities(
+                canDisplay = config.isReadyForUnifiedPushReceive,
+                canCommand = PerantaNotificationListenerService.activeInstance != null,
+            ),
             sender = config.sendEnabled,
             now = nowEpochMillis(),
         )

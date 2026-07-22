@@ -21,6 +21,7 @@ import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
+import to.sava.peranta.receive.RoutingCommandExecutor
 import to.sava.peranta.send.CommandSender
 import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.timeline.ErrorItem
@@ -59,7 +60,7 @@ object PerantaReceive {
     val items: StateFlow<List<TimelineItem>> = _items.asStateFlow()
 
     /**
-     * 受信ロールの起動時に履歴を読み込み、以後の受信で即時更新できるよう待機状態にする。
+     * 受信設定が揃った端末の起動時に履歴を読み込み、以後の受信で即時更新できるよう待機状態にする。
      * 何度呼んでもパイプラインは 1 つに保たれる（プロセス内シングルトン）。設定不足なら何もしない。
      */
     suspend fun prime(context: Context) {
@@ -140,16 +141,17 @@ object PerantaReceive {
     ): ReceivePipeline {
         pipeline?.let { return it }
         val presenter = AndroidNotificationPresenter(appContext)
-        // 送信ロール端末（NLS 保有）は通知操作を実行する。受信専用端末は既読同期の dismiss のみ
-        // 意味を持つ executor を注入し、対象通知を表示済みローカル通知から取り下げる（§3.4）。
-        val commandExecutor = if (config.sendEnabled) {
-            AndroidCommandExecutor(appContext)
-        } else {
-            LocalDismissCommandExecutor(
+        // 通知操作は実行時点の NLS 接続で選び、設定更新（mute/unmute）は接続に依らず常に反映する（§3.4/§7）。
+        // NLS の許可・切断や設定変更が後から起きても、コマンドごとに実態を問い直して振る舞う。
+        val commandExecutor = RoutingCommandExecutor(
+            isNlsConnected = { PerantaNotificationListenerService.activeInstance != null },
+            isForwardingIntended = { androidConfigRepository(appContext).load().sendEnabled },
+            notificationOps = AndroidCommandExecutor(appContext),
+            localDismiss = LocalDismissCommandExecutor(
                 items = { _items.value },
                 dismissLocal = { payloadId -> presenter.cancel(payloadId) },
-            )
-        }
+            ),
+        )
         val created = ReceivePipeline(
             ntfy = null,
             cipher = perantaCipher(config),

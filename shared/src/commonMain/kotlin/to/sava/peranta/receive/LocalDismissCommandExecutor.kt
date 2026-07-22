@@ -6,7 +6,7 @@ import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineItem
 
 /**
- * 受信専用端末（Desktop・受信ロール Android）向けの [CommandExecutor]（§3.4）。
+ * 受信専用端末（Desktop・NLS 未接続の Android）向けの [CommandExecutor]（§3.4）。
  * NLS を持たないためアクション発火・返信・denylist 反映はできず、既読同期の dismiss のみ意味を持つ。
  *
  * dismiss はタイムライン [items] を走査して同じ notificationKey の受信通知を探し、
