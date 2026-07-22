@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import to.sava.peranta.ui.setup.ReceiveSetupSteps
 
 /**
  * 画面シェルが束ねる行き先（§10）。タイムラインをメインに、サブ画面をアプリバー共有で差し替える。
@@ -53,6 +54,22 @@ fun shellNavigate(from: ShellDestination, to: ShellDestination): ShellNavigation
         reflectSettings = from != to &&
             (from == ShellDestination.Settings || from == ShellDestination.PairingImport),
     )
+
+/**
+ * 起動時の動作チェックで未達だった項目 id の集合から、警告バナーのタップで開く画面を導く（§10.5）。
+ * [unmetHealthCheckIds] が空なら誘導先は無く、バナーを出さない（null）。未達がすべて受信経路系
+ * （[ReceiveSetupSteps.orderedIds] の手順）なら、その作業台の受信のセットアップへ導く。受信経路系以外を
+ * 1 つでも含むなら、権限・常駐も点検できる動作チェックへ導く。
+ */
+fun setupBannerTarget(unmetHealthCheckIds: Set<String>): ShellDestination? {
+    if (unmetHealthCheckIds.isEmpty()) return null
+    val receivePathIds = ReceiveSetupSteps.orderedIds.toSet()
+    return if (unmetHealthCheckIds.all { it in receivePathIds }) {
+        ShellDestination.ReceiveSetup
+    } else {
+        ShellDestination.HealthCheck
+    }
+}
 
 /**
  * タイムラインをメインに、サブ画面をアプリバー共有で差し替える画面シェル（§10）。

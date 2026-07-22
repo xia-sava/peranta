@@ -64,12 +64,12 @@ fun interface HealthChecker {
 }
 
 /**
- * 動作チェックの結果に、利用者の対処を要する不合格項目が 1 つでもあるか（§10.5）。
- * 情報項目（[HealthCheckState.INFO]）や対象外項目（[HealthCheckState.NOT_APPLICABLE]）は対処不要とみなす。
- * 起動時にこれが真なら動作チェック画面へ自動遷移する判定に使う。
+ * 動作チェックの結果のうち、利用者の対処を要する不合格項目（[HealthCheckState.FAILING]）の id 集合（§10.5）。
+ * 情報項目（[HealthCheckState.INFO]）や対象外項目（[HealthCheckState.NOT_APPLICABLE]）は対処不要とみなし含めない。
+ * タイムライン上部の警告バナーの誘導先を導く判定に使う。
  */
-fun healthCheckNeedsAttention(items: List<HealthCheckItem>): Boolean =
-    items.any { it.state == HealthCheckState.FAILING }
+fun failingHealthCheckIds(items: List<HealthCheckItem>): Set<String> =
+    items.filter { it.state == HealthCheckState.FAILING }.map { it.id }.toSet()
 
 /** 画面見出しのタグ。 */
 const val TAG_HEALTH_TITLE: String = "health-title"

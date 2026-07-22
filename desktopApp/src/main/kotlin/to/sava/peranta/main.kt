@@ -4,7 +4,10 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.ScrollbarStyle
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.defaultScrollbarStyle
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +52,7 @@ import to.sava.peranta.ui.PairingScanScreen
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.QrCodeCanvas
 import to.sava.peranta.ui.SettingsScreen
+import to.sava.peranta.ui.failingHealthCheckIds
 import to.sava.peranta.ui.setup.SetupAction
 import to.sava.peranta.ui.setup.SetupItemUi
 import to.sava.peranta.ui.setup.SetupItemsProvider
@@ -56,7 +60,9 @@ import to.sava.peranta.ui.setup.SetupStatus
 import to.sava.peranta.ui.setup.WizardFlow
 import to.sava.peranta.ui.setup.WizardScreen
 import to.sava.peranta.ui.shell.PerantaShell
+import to.sava.peranta.ui.shell.SetupWarningBanner
 import to.sava.peranta.ui.shell.ShellDestination
+import to.sava.peranta.ui.shell.setupBannerTarget
 import to.sava.peranta.ui.shell.shellNavigate
 import to.sava.peranta.update.DesktopUpdater
 import java.awt.EventQueue
@@ -203,6 +209,18 @@ fun main(args: Array<String>) {
         var destination by remember { mutableStateOf(ShellDestination.Timeline) }
         val windowState = rememberWindowState()
 
+        // タイムラインを表示するたびに動作チェックを実行し、対処の要る未達があればタイムライン上部の
+        // 警告バナーの誘導先を確定する（§10.5）。取得が済むまで・未達が無いときは null でバナーを出さない。
+        // 誘導先の画面で未達を直して戻ったときにバナーが実態へ追従するよう、表示のたびに再評価する。
+        var bannerTarget by remember { mutableStateOf<ShellDestination?>(null) }
+        LaunchedEffect(destination, showWizard) {
+            if (!showWizard && destination == ShellDestination.Timeline &&
+                withContext(ioDispatcher) { desktopSettings.reloadConfig() }.hasSharedKey
+            ) {
+                bannerTarget = setupBannerTarget(failingHealthCheckIds(DesktopHealthChecker(autoStart).check()))
+            }
+        }
+
         // シェル内の遷移を一元化する。設定・取り込みを離れるときは遷移先に依らず設定反映（受信機の
         // 再生成）を通し（§10.2）、反映後も遷移先を保つため先に遷移先を確定してから世代を進める。
         val onNavigate: (ShellDestination) -> Unit = { target ->
@@ -304,15 +322,22 @@ fun main(args: Array<String>) {
                         deviceLabel = labelConfig.deviceName?.takeIf { it.isNotBlank() },
                     ) { shellDestination ->
                         when (shellDestination) {
-                            ShellDestination.Timeline -> when {
-                                errorMessage != null -> App(errorMessage!!)
-                                currentReceiver != null -> App(
-                                    items = currentReceiver.items,
-                                    timelineActions = currentReceiver.timelineActions(),
-                                    attachmentUi = currentReceiver.attachmentUi(),
-                                    fullTextUi = currentReceiver.fullTextUi(),
-                                )
-                                else -> App()
+                            ShellDestination.Timeline -> Column(modifier = Modifier.fillMaxSize()) {
+                                bannerTarget?.let { target ->
+                                    SetupWarningBanner(onConfirm = { onNavigate(target) })
+                                }
+                                Box(modifier = Modifier.weight(1f)) {
+                                    when {
+                                        errorMessage != null -> App(errorMessage!!)
+                                        currentReceiver != null -> App(
+                                            items = currentReceiver.items,
+                                            timelineActions = currentReceiver.timelineActions(),
+                                            attachmentUi = currentReceiver.attachmentUi(),
+                                            fullTextUi = currentReceiver.fullTextUi(),
+                                        )
+                                        else -> App()
+                                    }
+                                }
                             }
 
                             ShellDestination.Settings -> SettingsScreen(

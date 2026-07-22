@@ -19,6 +19,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -61,7 +62,7 @@ import to.sava.peranta.ui.AppFilterScreen
 import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.DEFAULT_EMPTY_TIMELINE_MESSAGE
 import to.sava.peranta.ui.HealthCheckScreen
-import to.sava.peranta.ui.healthCheckNeedsAttention
+import to.sava.peranta.ui.failingHealthCheckIds
 import to.sava.peranta.ui.PairingScanScreen
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.QrCodeCanvas
@@ -69,7 +70,9 @@ import to.sava.peranta.ui.SettingsScreen
 import to.sava.peranta.ui.ShareScreen
 import to.sava.peranta.ui.setup.ReceiveSetupScreen
 import to.sava.peranta.ui.shell.PerantaShell
+import to.sava.peranta.ui.shell.SetupWarningBanner
 import to.sava.peranta.ui.shell.ShellDestination
+import to.sava.peranta.ui.shell.setupBannerTarget
 import to.sava.peranta.ui.shell.shellNavigate
 import to.sava.peranta.ui.setup.WizardScreen
 import to.sava.peranta.update.AndroidUpdater
@@ -201,13 +204,14 @@ class MainActivity : ComponentActivity() {
                 AndroidHealthChecker(this@MainActivity) { destination = ShellDestination.ReceiveSetup }
             }
 
-            // 起動時にペアリング済みなら動作チェックを実行し、対処の要る未達があれば診断画面へ誘導する（§10.5）。
-            // 未セットアップは初回ウィザードが最優先のため、タイムライン表示中のときだけ遷移する。強制ブロックはしない。
-            LaunchedEffect(Unit) {
-                if (config.hasSharedKey && overlay == null && destination == ShellDestination.Timeline &&
-                    healthCheckNeedsAttention(healthChecker.check())
-                ) {
-                    destination = ShellDestination.HealthCheck
+            // タイムラインを表示するたびに動作チェックを実行し、対処の要る未達があればタイムライン上部の
+            // 警告バナーの誘導先を確定する（§10.5）。取得が済むまで・未達が無いときは null でバナーを出さない。
+            // 誘導先の画面で未達を直して戻ったときにバナーが実態へ追従するよう、表示のたびに再評価する。
+            // 未セットアップは初回ウィザードが最優先のため、シェル表示に入るときだけ取得する。
+            var bannerTarget: ShellDestination? by remember { mutableStateOf(null) }
+            LaunchedEffect(destination, overlay) {
+                if (config.hasSharedKey && overlay == null && destination == ShellDestination.Timeline) {
+                    bannerTarget = setupBannerTarget(failingHealthCheckIds(healthChecker.check()))
                 }
             }
 
@@ -310,25 +314,32 @@ class MainActivity : ComponentActivity() {
                             deviceLabel = config.deviceName?.takeIf { it.isNotBlank() },
                         ) { shellDestination ->
                             when (shellDestination) {
-                                ShellDestination.Timeline -> App(
-                                    items = PerantaReceive.items,
-                                    timelineActions = if (canReceive) {
-                                        PerantaReceive.timelineActions(this@MainActivity)
-                                    } else {
-                                        null
-                                    },
-                                    attachmentUi = attachmentUi,
-                                    fullTextUi = if (canReceive) {
-                                        AndroidAttachmentReceive.fullTextUi(this@MainActivity, config)
-                                    } else {
-                                        null
-                                    },
-                                    emptyStateMessage = if (canReceive) {
-                                        DEFAULT_EMPTY_TIMELINE_MESSAGE
-                                    } else {
-                                        RECEIVE_NOT_READY_MESSAGE
-                                    },
-                                )
+                                ShellDestination.Timeline -> Column(modifier = Modifier.fillMaxSize()) {
+                                    bannerTarget?.let { target ->
+                                        SetupWarningBanner(onConfirm = { onNavigate(target) })
+                                    }
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        App(
+                                            items = PerantaReceive.items,
+                                            timelineActions = if (canReceive) {
+                                                PerantaReceive.timelineActions(this@MainActivity)
+                                            } else {
+                                                null
+                                            },
+                                            attachmentUi = attachmentUi,
+                                            fullTextUi = if (canReceive) {
+                                                AndroidAttachmentReceive.fullTextUi(this@MainActivity, config)
+                                            } else {
+                                                null
+                                            },
+                                            emptyStateMessage = if (canReceive) {
+                                                DEFAULT_EMPTY_TIMELINE_MESSAGE
+                                            } else {
+                                                RECEIVE_NOT_READY_MESSAGE
+                                            },
+                                        )
+                                    }
+                                }
 
                                 ShellDestination.Settings -> SettingsScreen(
                                     controller = SettingsController(androidConfigRepository()),
