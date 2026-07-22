@@ -351,6 +351,7 @@ fun main(args: Array<String>) {
                                             timelineActions = currentReceiver.timelineActions(),
                                             attachmentUi = currentReceiver.attachmentUi(),
                                             fullTextUi = currentReceiver.fullTextUi(),
+                                            lazyScrollbarContent = { listState -> DesktopScrollbar(listState) },
                                         )
                                         else -> App()
                                     }

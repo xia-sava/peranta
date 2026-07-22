@@ -1,7 +1,17 @@
 package to.sava.peranta.ui
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -11,6 +21,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.MutableStateFlow
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
@@ -50,6 +61,29 @@ class TimelineScreenTest {
 
     private fun items(payload: NotificationPayload = notification()): MutableStateFlow<List<TimelineItem>> =
         MutableStateFlow(listOf(ReceivedNotification(id = payload.id, timestampEpochMillis = 1000L, payload = payload)))
+
+    /** 並び順テスト用の通知アイテム。id/本文/時刻は index で一意にし、追記順（古い順）を再現する。 */
+    private fun timelineNotification(index: Int) = NotificationPayload(
+        id = "n$index",
+        from = "phone",
+        to = "*",
+        sentAtEpochMillis = 1000L + index,
+        packageName = "com.example",
+        appName = "Example",
+        title = "Verification",
+        text = "item-$index",
+        notificationKey = "k$index",
+        actions = emptyList(),
+        postedAtEpochMillis = 1000L + index,
+    )
+
+    private fun receivedItem(index: Int): TimelineItem {
+        val payload = timelineNotification(index)
+        return ReceivedNotification(id = payload.id, timestampEpochMillis = payload.postedAtEpochMillis, payload = payload)
+    }
+
+    /** 追記順（古い順）で [count] 件のタイムラインアイテム列を作る。 */
+    private fun chronologicalItems(count: Int): List<TimelineItem> = (1..count).map { receivedItem(it) }
 
     /** インラインのアクションボタンは、対応する index の invokeAction を送信元へ返送する。 */
     @Test
@@ -199,5 +233,101 @@ class TimelineScreenTest {
             )
         }
         onNodeWithText(formatTimeOfDay(1000L)).assertExists()
+    }
+
+    /** 初期表示では reverseLayout により index 0 = 画面最下部に最新アイテムが来る（§10.1）。 */
+    @Test
+    fun initialDisplayShowsLatestItemAtBottom() = runComposeUiTest {
+        val listState = LazyListState()
+        val flow = MutableStateFlow(chronologicalItems(TEST_ITEM_COUNT))
+        setContent {
+            TimelineScreen(
+                items = flow,
+                listState = listState,
+                modifier = Modifier.size(width = LIST_TEST_WIDTH, height = LIST_TEST_HEIGHT),
+            )
+        }
+        waitForIdle()
+        assertEquals(0, listState.firstVisibleItemIndex)
+        onNodeWithText("item-$TEST_ITEM_COUNT").assertExists()
+    }
+
+    /** 最下部（index 0）にいるときに新着が追加されると、追従スクロールして最新が見え続ける（§10.1）。 */
+    @Test
+    fun followsNewestItemWhenAtBottom() = runComposeUiTest {
+        val listState = LazyListState()
+        val flow = MutableStateFlow(chronologicalItems(TEST_ITEM_COUNT))
+        setContent {
+            TimelineScreen(
+                items = flow,
+                listState = listState,
+                modifier = Modifier.size(width = LIST_TEST_WIDTH, height = LIST_TEST_HEIGHT),
+            )
+        }
+        waitForIdle()
+
+        flow.value = flow.value + receivedItem(TEST_ITEM_COUNT + 1)
+        waitForIdle()
+
+        assertEquals(0, listState.firstVisibleItemIndex)
+        onNodeWithText("item-${TEST_ITEM_COUNT + 1}").assertExists()
+    }
+
+    /**
+     * 読み返し中（最下部から離れている）に新着が来ても、key 基準で表示位置が維持され最下部へは戻らない（§10.1）。
+     * `scrollToItem` で読み返し位置へ移動したうえで新着を足し、既読アイテムの index が
+     * 新着分だけずれて（+1）同じ位置を指し続けることを確認する。
+     */
+    @Test
+    fun preservesReadingPositionWhenNewItemArrivesWhileScrolledAway() = runComposeUiTest {
+        val listState = LazyListState()
+        val flow = MutableStateFlow(chronologicalItems(TEST_ITEM_COUNT))
+        var scrollTarget by mutableStateOf<Int?>(null)
+        setContent {
+            LaunchedEffect(scrollTarget) {
+                scrollTarget?.let { listState.scrollToItem(it) }
+            }
+            TimelineScreen(
+                items = flow,
+                listState = listState,
+                modifier = Modifier.size(width = LIST_TEST_WIDTH, height = LIST_TEST_HEIGHT),
+            )
+        }
+        scrollTarget = READING_POSITION_INDEX
+        waitForIdle()
+        val indexBeforeNewItem = listState.firstVisibleItemIndex
+
+        flow.value = flow.value + receivedItem(TEST_ITEM_COUNT + 1)
+        waitForIdle()
+
+        assertEquals(indexBeforeNewItem + 1, listState.firstVisibleItemIndex)
+    }
+
+    /** スクロールバースロットには LazyColumn と同一の listState が渡され、注入した内容が描画される。 */
+    @Test
+    fun lazyScrollbarContentSlotIsInvokedWithListState() = runComposeUiTest {
+        val flow = MutableStateFlow(chronologicalItems(TEST_ITEM_COUNT))
+        var receivedListState: LazyListState? = null
+        setContent {
+            TimelineScreen(
+                items = flow,
+                modifier = Modifier.size(width = LIST_TEST_WIDTH, height = LIST_TEST_HEIGHT),
+                lazyScrollbarContent = { listState ->
+                    receivedListState = listState
+                    Text(text = "scrollbar", modifier = Modifier.testTag(SCROLLBAR_SLOT_TAG))
+                },
+            )
+        }
+        onNodeWithTag(SCROLLBAR_SLOT_TAG).assertIsDisplayed()
+        assertTrue(receivedListState != null)
+    }
+
+    private companion object {
+        /** スクロール確認用のアイテム件数。画面高に対して十分にオーバーフローする件数にする。 */
+        const val TEST_ITEM_COUNT = 30
+        const val READING_POSITION_INDEX = 10
+        val LIST_TEST_WIDTH = 300.dp
+        val LIST_TEST_HEIGHT = 200.dp
+        const val SCROLLBAR_SLOT_TAG = "scrollbar-slot"
     }
 }

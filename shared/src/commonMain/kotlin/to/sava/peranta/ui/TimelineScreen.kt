@@ -3,6 +3,7 @@ package to.sava.peranta.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -10,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -21,12 +24,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -76,6 +82,8 @@ class TimelineActions(
  * チャット風タイムライン（§10.1）。受信通知は左寄せ、エラー・送信通知は右寄せに並べる。
  * [actions] が渡されると受信通知にアクションボタン・スワイプで消す・長押し/右クリックメニューを付ける。
  * 「消す」はブロードキャスト送信と同時に、往復を待たず自端末の表示から即座に取り下げる。
+ * 並び順は最下部=最新（reverseLayout）。[listState] を呼び出し側から注入でき、
+ * [lazyScrollbarContent] スロットで Desktop 用スクロールバー等を注入できる（`AppFilterScreen` と同型）。
  */
 @Composable
 fun TimelineScreen(
@@ -84,29 +92,50 @@ fun TimelineScreen(
     actions: TimelineActions? = null,
     attachments: AttachmentUi? = null,
     fullText: FullTextUi? = null,
+    listState: LazyListState = rememberLazyListState(),
+    lazyScrollbarContent: @Composable BoxScope.(listState: LazyListState) -> Unit = {},
     emptyStateMessage: String = DEFAULT_EMPTY_TIMELINE_MESSAGE,
 ) {
     val list by items.collectAsState()
     val locallyDismissed = remember { mutableStateListOf<String>() }
     val visible = list.filterNot { it.id in locallyDismissed }
+    // 最下部=最新（§10.1）。表示リストを新しい順にし、reverseLayout で index 0 を画面最下部に固定する。
+    val displayed = visible.asReversed()
+
+    // 最下部（index 0）が見えているときだけ新着へ追従する。読み返し中（それ以外）は何もしない。
+    val currentDisplayed by rememberUpdatedState(displayed)
+    LaunchedEffect(listState) {
+        snapshotFlow { currentDisplayed.firstOrNull()?.id }
+            .collect { newestId ->
+                if (newestId != null && listState.firstVisibleItemIndex == 0) {
+                    listState.animateScrollToItem(0)
+                }
+            }
+    }
+
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (visible.isEmpty()) {
             EmptyState(emptyStateMessage)
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(visible, key = { it.id }) { item ->
-                    TimelineRow(
-                        item = item,
-                        actions = actions,
-                        attachments = attachments,
-                        fullText = fullText,
-                        onLocalDismiss = { locallyDismissed.add(item.id) },
-                    )
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = listState,
+                    reverseLayout = true,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(displayed, key = { it.id }) { item ->
+                        TimelineRow(
+                            item = item,
+                            actions = actions,
+                            attachments = attachments,
+                            fullText = fullText,
+                            onLocalDismiss = { locallyDismissed.add(item.id) },
+                        )
+                    }
                 }
+                lazyScrollbarContent(listState)
             }
         }
     }
