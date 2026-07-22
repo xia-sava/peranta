@@ -63,7 +63,7 @@ class SetupOverviewTest {
         assertEquals("未設定: サーバホスト名・アクセストークン", row.detail)
     }
 
-    /** 動作チェック項目が未取得（null）なら通知の転送は未確認で、誘導先は動作チェック。 */
+    /** 動作チェック項目が未取得（null）なら権限と常駐は未確認で、誘導先は動作チェック。 */
     @Test
     fun forwardUnknownWhileLoading() {
         val rows = overview(healthItems = null, hasReceiveSetup = false, receiveSetupItems = null)

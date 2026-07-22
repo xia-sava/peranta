@@ -208,7 +208,7 @@ class SettingsScreenTest {
         onNodeWithTag("$TAG_OVERVIEW_STATE_PREFIX$OVERVIEW_ROW_CONNECTION").assertDoesNotExist()
     }
 
-    /** loadHealthItems を渡すと接続とペアリング・通知の転送の行が出る。共有鍵ありなら接続は達成表示。 */
+    /** loadHealthItems を渡すと接続とペアリング・権限と常駐の行が出る。共有鍵ありなら接続は達成表示。 */
     @Test
     fun setupOverviewShowsConnectionAndForwardRows() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
@@ -228,7 +228,7 @@ class SettingsScreenTest {
         onNodeWithTag("$TAG_OVERVIEW_STATE_PREFIX$OVERVIEW_ROW_RECEIVE").assertDoesNotExist()
     }
 
-    /** 通知の転送の行の[開く]で onOpenHealthCheck が呼ばれる。 */
+    /** 権限と常駐の行の[開く]で onOpenHealthCheck が呼ばれる。 */
     @Test
     fun overviewForwardOpenInvokesHealthCheckCallback() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())

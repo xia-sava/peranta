@@ -27,7 +27,7 @@ data class SetupOverviewRow(
 /** 行①接続とペアリングの id。 */
 const val OVERVIEW_ROW_CONNECTION: String = "connection"
 
-/** 行②通知の転送の id。 */
+/** 行②権限と常駐の id。 */
 const val OVERVIEW_ROW_FORWARD: String = "forward"
 
 /** 行③受信経路の id。 */
@@ -46,7 +46,7 @@ private val FORWARD_EXCLUDED_IDS: Set<String> = ReceiveSetupSteps.orderedIds.toS
  * 行①接続とペアリングは接続先（[hasHost]・[hasToken]）と共有鍵（[hasSharedKey]）の設定有無から
  * 達成/未達を出し、未達なら足りない項目を列挙する。誘導先は他端末から接続設定と暗号キーを取り込む画面で、
  * 達成状態でも常設する（鍵ローテ後の読み直し等、再取り込みの余地があるため）。
- * 行②通知の転送はこの端末の権限・常駐系の動作チェック項目（[healthItems]、受信経路の項目は行③が持つため除く）
+ * 行②権限と常駐はこの端末の権限・常駐系の動作チェック項目（[healthItems]、受信経路の項目は行③が持つため除く）
  * の未達数を集計する。[healthItems] が null のときは取得前とみなし未確認にする。
  * 行③受信経路は受信のセットアップ項目（[receiveSetupItems]）の未達・未確認を集計する。
  * [hasReceiveSetup] が false のプラットフォーム（Desktop）ではこの行を出さない。
@@ -87,7 +87,7 @@ private fun forwardRow(healthItems: List<HealthCheckItem>?): SetupOverviewRow {
     val (status, detail) = forwardStatus(healthItems)
     return SetupOverviewRow(
         id = OVERVIEW_ROW_FORWARD,
-        title = "通知の転送（この端末から送る）",
+        title = "権限と常駐",
         status = status,
         detail = detail,
         openLabel = "動作チェックを開く",

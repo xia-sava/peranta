@@ -150,8 +150,10 @@ fun SettingsScreen(
     var overviewHealthItems by remember { mutableStateOf<List<HealthCheckItem>?>(null) }
     var overviewReceiveItems by remember { mutableStateOf<List<SetupItemUi>?>(null) }
 
+    // 動作チェック項目は送信ロールのトグルに応じて顔ぶれが変わるため、トグル変更のたびに取り直して
+    // 同一画面内のセットアップ状況を実態に追従させる。
     if (loadHealthItems != null) {
-        LaunchedEffect(Unit) { overviewHealthItems = loadHealthItems() }
+        LaunchedEffect(sendEnabled, smsDirectReceive) { overviewHealthItems = loadHealthItems() }
     }
     if (loadReceiveSetupItems != null) {
         LaunchedEffect(Unit) { overviewReceiveItems = loadReceiveSetupItems() }
