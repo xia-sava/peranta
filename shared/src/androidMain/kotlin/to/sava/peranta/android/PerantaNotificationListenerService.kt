@@ -37,10 +37,12 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         super.onListenerConnected()
         instance = this
         log.i { "notification listener connected" }
+        requestPresenceReannounce(applicationContext)
     }
 
     override fun onListenerDisconnected() {
         if (instance === this) instance = null
+        requestPresenceReannounce(applicationContext)
         log.i { "notification listener disconnected" }
         super.onListenerDisconnected()
     }
