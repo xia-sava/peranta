@@ -291,6 +291,7 @@ class MainActivity : ComponentActivity() {
                             onRequestScan = { onResult -> requestScan(onResult) },
                             externalRefreshKey = resumeTick,
                             onClose = onWizardClose,
+                            onSaved = { rebuildReceivePipeline() },
                         )
 
                         Overlay.PairingLanding -> PairingScanScreen(
@@ -377,6 +378,7 @@ class MainActivity : ComponentActivity() {
                                     updateController = updater.controller,
                                     onInstallUpdate = { url -> updater.install(url) },
                                     showHeader = false,
+                                    onSaved = { rebuildReceivePipeline() },
                                 )
 
                                 // 捕捉端末（送信）はインストール済みアプリ一覧から転送フィルタを編集し、
@@ -512,6 +514,14 @@ class MainActivity : ComponentActivity() {
             PerantaReceive.reset()
             recreate()
         }
+    }
+
+    /**
+     * 鍵の作成・作り直しを受信パイプラインへ即時反映する（§10.2 の例外）。
+     * Activity は作り直さないため、設定画面に表示中の QR は消えない。
+     */
+    private fun rebuildReceivePipeline() {
+        lifecycleScope.launch { PerantaReceive.rebuildIfPipelineConfigChanged(this@MainActivity) }
     }
 
     /**

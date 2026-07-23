@@ -10,6 +10,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import to.sava.peranta.config.PerantaConfig
+import to.sava.peranta.config.PipelineKey
+import to.sava.peranta.config.toPipelineKey
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.model.nowEpochMillis
@@ -48,6 +50,7 @@ object PerantaReceive {
     private val log = Logger.withTag("PerantaReceive")
     private val mutex = Mutex()
     private var pipeline: ReceivePipeline? = null
+    private var pipelineConfigKey: PipelineKey? = null
     private val recentErrors = mutableMapOf<String, Long>()
     private val commandScope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val httpClient by lazy { createNtfyHttpClient() }
@@ -76,7 +79,29 @@ object PerantaReceive {
      * その直前に呼んで確実に最新設定を反映させる。
      */
     suspend fun reset() {
-        mutex.withLock { pipeline = null }
+        mutex.withLock {
+            pipeline = null
+            pipelineConfigKey = null
+        }
+    }
+
+    /**
+     * 設定がパイプライン構成（[PipelineKey]）に影響する形で変わっていたら、保持中の受信
+     * パイプラインを破棄して最新設定で組み直す。変わっていなければ何もしない。
+     * 鍵の作成・作り直しの即時反映（§10.2）に使う。Activity の再生成を伴わない。
+     */
+    suspend fun rebuildIfPipelineConfigChanged(context: Context) {
+        val appContext = context.applicationContext
+        val repo = androidConfigRepository(appContext)
+        val nextKey = repo.load().copy(deviceId = repo.ensureDeviceId()).toPipelineKey()
+        val unchanged = mutex.withLock {
+            if (pipeline != null && pipelineConfigKey == nextKey) return@withLock true
+            pipeline = null
+            pipelineConfigKey = null
+            false
+        }
+        if (unchanged) return
+        prime(appContext)
     }
 
     /**
@@ -151,6 +176,7 @@ object PerantaReceive {
         )
         created.loadHistory()
         pipeline = created
+        pipelineConfigKey = config.copy(deviceId = androidConfigRepository(appContext).ensureDeviceId()).toPipelineKey()
         return created
     }
 
