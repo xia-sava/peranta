@@ -39,11 +39,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.StateFlow
+import to.sava.peranta.model.ActionExecutionKind
 import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.FilePayload
+import to.sava.peranta.model.actionKindAt
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
@@ -68,6 +70,17 @@ const val TAG_TIMELINE_MENU_ACTION_PREFIX: String = "timeline-menu-action-"
 
 /** 受信可能な端末でタイムラインが空のときの文言。 */
 const val DEFAULT_EMPTY_TIMELINE_MESSAGE: String = "まだ通知はありません"
+
+/** 発出元で画面が開くアクションのボタンラベルに付ける注記（§10.1）。 */
+const val ACTION_OPENS_ON_SENDER_SUFFIX: String = "（スマホで）"
+
+/** [payload] の [index] 番アクションの表示ラベル。発出元で開くアクションには注記を付ける。 */
+private fun actionLabel(payload: NotificationPayload, index: Int, name: String): String =
+    if (payload.actionKindAt(index) == ActionExecutionKind.OPENS_ON_SENDER) {
+        "$name$ACTION_OPENS_ON_SENDER_SUFFIX"
+    } else {
+        name
+    }
 
 /**
  * 受信通知アイテムに対する操作（§3.4 / §10.1）。受信端末から送信元へ command を返送する。
@@ -316,7 +329,7 @@ private fun ActionButtons(payload: Payload, actions: TimelineActions) {
                 onClick = { actions.invokeAction(payload, index) },
                 modifier = Modifier.testTag("$TAG_TIMELINE_ACTION_PREFIX$index"),
             ) {
-                Text(text = name)
+                Text(text = actionLabel(payload, index, name))
             }
         }
     }
@@ -352,7 +365,7 @@ private fun ContextMenu(
         if (payload is NotificationPayload) {
             payload.actions.forEachIndexed { index, name ->
                 DropdownMenuItem(
-                    text = { Text(name) },
+                    text = { Text(actionLabel(payload, index, name)) },
                     onClick = {
                         onDismissRequest()
                         actions.invokeAction(payload, index)

@@ -29,6 +29,7 @@ import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BlobEnc
 import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.MessagePayload
+import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
@@ -45,6 +46,7 @@ class TimelineScreenTest {
 
     private fun notification(
         actions: List<String> = listOf("アーカイブ", "返信"),
+        actionDetails: List<NotificationActionDetail> = emptyList(),
         key: String = "0|com.example|1|null|10",
         from: String = "phone",
         packageName: String = "com.example",
@@ -59,6 +61,7 @@ class TimelineScreenTest {
         text = "code 123456",
         notificationKey = key,
         actions = actions,
+        actionDetails = actionDetails,
         postedAtEpochMillis = 1000L,
     )
 
@@ -155,6 +158,62 @@ class TimelineScreenTest {
         onNodeWithTag(TAG_TIMELINE_RECEIVED).performMouseInput { rightClick() }
         onNodeWithTag("${TAG_TIMELINE_MENU_ACTION_PREFIX}0").performClick()
         assertEquals(0, invokedIndex)
+    }
+
+    /** opensActivity=true に分類されるアクションのボタンラベルには「（スマホで）」が付記される。 */
+    @Test
+    fun opensOnSenderActionButtonShowsSuffix() = runComposeUiTest {
+        val payload = notification(
+            actions = listOf("地図"),
+            actionDetails = listOf(NotificationActionDetail(opensActivity = true)),
+        )
+        setContent {
+            TimelineScreen(items(payload), actions = TimelineActions())
+        }
+        onNodeWithText("地図${ACTION_OPENS_ON_SENDER_SUFFIX}").assertExists()
+    }
+
+    /** SENDER_EFFECT・UNKNOWN に分類されるアクションは従来どおりのラベルのまま表示される。 */
+    @Test
+    fun senderEffectAndUnknownActionButtonsShowUnchangedLabel() = runComposeUiTest {
+        val payload = notification(
+            actions = listOf("アーカイブ", "開く"),
+            actionDetails = listOf(
+                NotificationActionDetail(opensActivity = false),
+                NotificationActionDetail(),
+            ),
+        )
+        setContent {
+            TimelineScreen(items(payload), actions = TimelineActions())
+        }
+        onNodeWithText("アーカイブ").assertExists()
+        onNodeWithText("開く").assertExists()
+    }
+
+    /** 付記付きボタンを押しても、従来どおり invokeAction が対応する index で送信される。 */
+    @Test
+    fun opensOnSenderActionButtonStillSendsInvokeAction() = runComposeUiTest {
+        var invokedIndex: Int? = null
+        val payload = notification(
+            actions = listOf("地図"),
+            actionDetails = listOf(NotificationActionDetail(opensActivity = true)),
+        )
+        setContent {
+            TimelineScreen(items(payload), actions = TimelineActions(invokeAction = { _, i -> invokedIndex = i }))
+        }
+        onNodeWithTag("${TAG_TIMELINE_ACTION_PREFIX}0").performClick()
+        assertEquals(0, invokedIndex)
+    }
+
+    /** actionDetails を持たない payload（旧送信元由来）は全ボタンが従来どおりのラベルで表示される。 */
+    @Test
+    fun payloadWithoutActionDetailsShowsUnchangedLabels() = runComposeUiTest {
+        val payload = notification(actions = listOf("アーカイブ", "地図"), actionDetails = emptyList())
+        setContent {
+            TimelineScreen(items(payload), actions = TimelineActions())
+        }
+        onNodeWithText("アーカイブ").assertExists()
+        onNodeWithText("地図").assertExists()
     }
 
     /** actions を渡さない画面（送信ロール・空状態）では操作アフォーダンスを出さない。 */
