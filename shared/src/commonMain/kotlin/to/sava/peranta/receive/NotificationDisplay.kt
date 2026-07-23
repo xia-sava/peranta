@@ -3,6 +3,7 @@ package to.sava.peranta.receive
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
+import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 
 /** タイトルが空のときの代替表示。 */
@@ -49,6 +50,15 @@ fun displayFor(item: ReceivedNotification): NotificationDisplay? =
 
         else -> null
     }
+
+/** 受信メッセージを OS 通知の表示内容へ変換する。タイトルは送信元端末名。 */
+fun displayFor(item: ReceivedMessage): NotificationDisplay = NotificationDisplay(
+    id = item.payload.id,
+    title = (item.payload.fromName ?: item.payload.from).ifBlank { TITLE_FALLBACK },
+    body = item.payload.text.ifBlank { BODY_FALLBACK },
+    priority = Priority.NORMAL,
+    expiresAtEpochMillis = null,
+)
 
 /** 通知チャネルの区分。優先度から一意に定まり、OS の重要度へ対応させる（§4）。 */
 enum class NotificationChannelKind {

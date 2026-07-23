@@ -17,6 +17,7 @@ import to.sava.peranta.receive.channelKindFor
 import to.sava.peranta.receive.displayFor
 import to.sava.peranta.shared.R
 import to.sava.peranta.timeline.ErrorItem
+import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 
 private val notificationIdAllocatorLock = Any()
@@ -62,6 +63,15 @@ class AndroidNotificationPresenter(
             log.d { "notification skipped (not displayable) id=${item.id}" }
             return
         }
+        show(display)
+    }
+
+    /** 受信メッセージを NORMAL チャネルで表示する。 */
+    fun show(item: ReceivedMessage) {
+        show(displayFor(item))
+    }
+
+    private fun show(display: NotificationDisplay) {
         val channelId = channelIdFor(channelKindFor(display.priority))
         val notificationId = idAllocator.idFor(display.id)
         val notification = Notification.Builder(context, channelId)

@@ -2,9 +2,11 @@ package to.sava.peranta.receive
 
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
+import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
+import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -113,6 +115,39 @@ class NotificationDisplayTest {
             targetNotificationKey = "0|com.example|1|null|10",
         )
         assertNull(displayFor(received(command)))
+    }
+
+    private fun message(text: String = "会議は 15 時からです", fromName: String? = "xia-phone") = ReceivedMessage(
+        id = "m1",
+        timestampEpochMillis = 1_000L,
+        payload = MessagePayload(
+            id = "m1",
+            from = "phone",
+            to = "*",
+            sentAtEpochMillis = 900L,
+            text = text,
+            fromName = fromName,
+        ),
+    )
+
+    /** fromName があればそれをタイトルにする。 */
+    @Test
+    fun messageMapsFromNameToTitle() {
+        val display = displayFor(message(fromName = "xia-phone"))
+        assertEquals("xia-phone", display.title)
+        assertEquals("会議は 15 時からです", display.body)
+    }
+
+    /** fromName が無ければ from（deviceId）をタイトルにする。 */
+    @Test
+    fun messageWithoutFromNameFallsBackToFrom() {
+        assertEquals("phone", displayFor(message(fromName = null)).title)
+    }
+
+    /** 本文が空なら固定の代替本文になる。 */
+    @Test
+    fun messageBlankBodyFallsBackToConstant() {
+        assertEquals("（本文なし）", displayFor(message(text = "")).body)
     }
 
     /** 優先度は対応する通知チャネル区分へ一対一で写る。 */

@@ -50,6 +50,7 @@ import to.sava.peranta.roster.publishPresence
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.JsonlTimelineStore
 import to.sava.peranta.timeline.ReceivedFile
+import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.TimelineItem
@@ -253,6 +254,7 @@ class DesktopReceiver(
             is ReceivedNotification -> toastScope.launch { showNotificationToast(item) }
             is ErrorItem -> toastScope.launch { showErrorToast(item) }
             is ReceivedFile -> toastScope.launch { toaster.show(toastContentFor(item)) }
+            is ReceivedMessage -> toastScope.launch { toaster.show(toastContentFor(item)) }
             else -> Unit
         }
     }

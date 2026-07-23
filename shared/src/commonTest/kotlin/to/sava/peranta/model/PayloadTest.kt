@@ -124,4 +124,29 @@ class PayloadTest {
         val decoded = decodePayload(encodePayload(notification(Priority.NORMAL).copy(fromName = "xia-phone"))) as NotificationPayload
         assertEquals("xia-phone", decoded.fromName)
     }
+
+    private fun message(fromName: String? = "xia-phone") = MessagePayload(
+        id = "m1",
+        from = "phone",
+        to = BROADCAST_TARGET,
+        sentAtEpochMillis = 1,
+        text = "会議は 15 時からです",
+        fromName = fromName,
+    )
+
+    /** message は JSON を往復しても本文・fromName を含め元の値と一致する。 */
+    @Test
+    fun messageRoundTrips() {
+        val decoded = decodePayload(encodePayload(message())) as MessagePayload
+        assertEquals(message(), decoded)
+    }
+
+    /** fromName を持たない旧バージョン由来の message JSON も復号でき、fromName は null になる。 */
+    @Test
+    fun messageDecodeWithoutFromNameFallsBackToNull() {
+        val json = """{"type":"message","id":"m1","from":"phone","to":"*","sentAtEpochMillis":1,"text":"hi"}"""
+        val decoded = decodePayload(json) as MessagePayload
+        assertEquals(null, decoded.fromName)
+        assertEquals("hi", decoded.text)
+    }
 }

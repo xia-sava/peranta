@@ -6,11 +6,13 @@ import to.sava.peranta.model.BlobEnc
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.FilePayload
+import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.ReceivedFile
+import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -169,6 +171,40 @@ class ToastContentTest {
     @Test
     fun receivedFileFallsBackWhenNameBlank() {
         assertEquals("ファイル", toastContentFor(receivedFile("")).body)
+    }
+
+    private fun receivedMessage(text: String = "会議は 15 時からです", fromName: String? = "xia-phone") = ReceivedMessage(
+        id = "m1",
+        timestampEpochMillis = 1_000,
+        payload = MessagePayload(
+            id = "m1",
+            from = "phone",
+            to = "*",
+            sentAtEpochMillis = 900,
+            text = text,
+            fromName = fromName,
+        ),
+    )
+
+    /** 受信メッセージは fromName をタイトルに、本文を body に写す。 */
+    @Test
+    fun messageMapsFromNameAndText() {
+        assertEquals(
+            ReceivedNotificationToast(id = "m1", title = "xia-phone", body = "会議は 15 時からです"),
+            toastContentFor(receivedMessage()),
+        )
+    }
+
+    /** fromName が無ければ from（deviceId）をタイトルに使う。 */
+    @Test
+    fun messageFallsBackToFromWhenFromNameAbsent() {
+        assertEquals("phone", toastContentFor(receivedMessage(fromName = null)).title)
+    }
+
+    /** 本文が空なら本文なしラベルにフォールバックする。 */
+    @Test
+    fun messageFallsBackWhenBodyBlank() {
+        assertEquals("（本文なし）", toastContentFor(receivedMessage(text = "")).body)
     }
 
     /** エラーアイテムは受信エラー見出しとメッセージ本文のトーストになる。 */

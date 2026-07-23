@@ -39,12 +39,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.StateFlow
+import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.FilePayload
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ReceivedFile
+import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.SentNotification
 import to.sava.peranta.timeline.TimelineItem
@@ -178,8 +180,22 @@ private fun TimelineRow(
             }
 
         is ReceivedFile -> ReceivedFileBubble(item, attachments)
+        is ReceivedMessage -> MessageBubble(item)
         is SentNotification -> SentBubble(item)
         is ErrorItem -> ErrorBubble(item)
+    }
+}
+
+@Composable
+private fun MessageBubble(item: ReceivedMessage) {
+    Bubble(
+        alignment = Alignment.CenterStart,
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        speaker = item.payload.speakerName(),
+        time = item.timestampEpochMillis,
+    ) {
+        Text(text = item.payload.text, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -383,6 +399,8 @@ private fun SentBubble(item: SentNotification) {
         val payload = item.payload
         if (payload is FilePayload) {
             FilePayloadContent(payload, attachments = null)
+        } else if (payload is MessagePayload) {
+            Text(text = payload.text, style = MaterialTheme.typography.bodyMedium)
         } else {
             Text(text = payload.displayHeader(), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
             payload.displayTitle()?.let {

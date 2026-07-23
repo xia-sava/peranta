@@ -108,6 +108,18 @@ data class SmsPayload(
     override val fromName: String? = null,
 ) : Payload()
 
+/** 端末間の自由文メッセージ（§4.1）。本文以外の実体（ファイル等）は [FilePayload] で送る。 */
+@Serializable
+@SerialName("message")
+data class MessagePayload(
+    override val id: String,
+    override val from: String,
+    override val to: String,
+    override val sentAtEpochMillis: Long,
+    val text: String,
+    override val fromName: String? = null,
+) : Payload()
+
 /** 送信元端末への操作指示。 */
 @Serializable
 @SerialName("command")

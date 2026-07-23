@@ -11,6 +11,7 @@ import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.Envelope
 import to.sava.peranta.model.FilePayload
+import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.PresencePayload
@@ -22,6 +23,7 @@ import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.FakeTimelineFile
 import to.sava.peranta.timeline.JsonlTimelineStore
 import to.sava.peranta.timeline.ReceivedFile
+import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.TimelineItem
@@ -205,6 +207,60 @@ class ReceivePipelineTest {
         p.handleEvent(eventFor(filePayload()))
         p.handleEvent(eventFor(filePayload()))
         assertEquals(1, p.items.value.size)
+    }
+
+    private fun messagePayload(id: String = "msg1", to: String = "*"): MessagePayload = MessagePayload(
+        id = id,
+        from = "phone",
+        to = to,
+        sentAtEpochMillis = now - 100,
+        text = "会議は 15 時からです",
+        fromName = "xia-phone",
+    )
+
+    /** 自分宛の MessagePayload は ReceivedMessage として items へ追加される。 */
+    @Test
+    fun messagePayloadIsAppendedAsReceivedMessage() = runTest {
+        val store = store()
+        val p = pipeline(store)
+        p.handleEvent(eventFor(messagePayload()))
+        val received = p.items.value.single() as ReceivedMessage
+        assertEquals("msg1", received.id)
+        assertEquals("会議は 15 時からです", received.payload.text)
+        assertEquals(listOf("msg1"), store.loadAll().map { it.id })
+    }
+
+    /** 同一 id の MessagePayload は重複排除される。 */
+    @Test
+    fun duplicateMessagePayloadIsDeduped() = runTest {
+        val p = pipeline()
+        p.handleEvent(eventFor(messagePayload()))
+        p.handleEvent(eventFor(messagePayload()))
+        assertEquals(1, p.items.value.size)
+    }
+
+    /** message 受信は onItemAppended フックへも流れる。 */
+    @Test
+    fun messageAppendedFlowsToOnItemAppendedHook() = runTest {
+        val seen = mutableListOf<TimelineItem>()
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName,
+            now = { now },
+            onItemAppended = { seen.add(it) },
+        )
+        p.handleEvent(eventFor(messagePayload()))
+        assertEquals(1, seen.size)
+        assertTrue(seen.single() is ReceivedMessage)
+    }
+
+    /** 伏せ字保存（§11）を有効化していなくても、message の本文は永続履歴にそのまま残る。 */
+    @Test
+    fun messageBodyIsKeptInStoreEvenWithoutSensitiveHistoryOptIn() = runTest {
+        val store = store()
+        val p = pipeline(store)
+        p.handleEvent(eventFor(messagePayload()))
+        val stored = store.loadAll().single() as ReceivedMessage
+        assertEquals("会議は 15 時からです", stored.payload.text)
     }
 
     /** 自分宛の CommandPayload は M3 では表示対象外なのでタイムラインに追加されない。 */

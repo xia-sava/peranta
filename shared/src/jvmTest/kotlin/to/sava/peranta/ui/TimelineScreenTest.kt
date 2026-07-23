@@ -28,9 +28,11 @@ import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BlobEnc
 import to.sava.peranta.model.FilePayload
+import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
+import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.SentNotification
 import to.sava.peranta.timeline.TimelineItem
@@ -202,6 +204,39 @@ class TimelineScreenTest {
         }
         onNodeWithText("会議資料です").assertExists()
         onNodeWithText("report.pdf (${formatFileSize(4096)})").assertExists()
+    }
+
+    private fun messagePayload(fromName: String? = "xia-phone") = MessagePayload(
+        id = "m1",
+        from = "phone",
+        to = "*",
+        sentAtEpochMillis = 1000L,
+        text = "会議は 15 時からです",
+        fromName = fromName,
+    )
+
+    /** 受信メッセージは左バブルに本文と「{端末名}・{時刻}」を表示する（§3.4）。 */
+    @Test
+    fun receivedMessageShowsTextAndSpeakerTimeOnLeftBubble() = runComposeUiTest {
+        setContent {
+            TimelineScreen(
+                MutableStateFlow(listOf(ReceivedMessage(id = "m1", timestampEpochMillis = 1000L, payload = messagePayload()))),
+            )
+        }
+        onNodeWithText("会議は 15 時からです").assertExists()
+        onNodeWithText("xia-phone・${formatTimeOfDay(1000L)}").assertExists()
+    }
+
+    /** 送信済みメッセージは右バブルで本文のみ表示し、生の deviceId ヘッダは出ない（§3.4）。 */
+    @Test
+    fun sentMessageShowsTextWithoutDeviceIdHeader() = runComposeUiTest {
+        setContent {
+            TimelineScreen(
+                MutableStateFlow(listOf(SentNotification(id = "m1", timestampEpochMillis = 1000L, payload = messagePayload(fromName = null)))),
+            )
+        }
+        onNodeWithText("会議は 15 時からです").assertExists()
+        onNodeWithText("phone").assertDoesNotExist()
     }
 
     /** fromName が設定されていれば、時刻行にその端末名を表示する（§3.2）。 */

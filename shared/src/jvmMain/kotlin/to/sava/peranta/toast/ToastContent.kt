@@ -4,6 +4,7 @@ import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ReceivedFile
+import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 
 /** タイトルが空のときの代替（SnoreToast はタイトル・本文が空だと表示しない）。 */
@@ -57,3 +58,11 @@ fun toastContentFor(item: ReceivedFile): ReceivedNotificationToast {
     val body = if (attachments.size > 1) "$firstName ほか ${attachments.size - 1} 件" else firstName
     return ReceivedNotificationToast(id = item.id, title = FILE_RECEIVED_TITLE, body = body)
 }
+
+/** 受信メッセージをトースト表示内容へ変換する。タイトルは送信元端末名。 */
+fun toastContentFor(item: ReceivedMessage): ReceivedNotificationToast =
+    ReceivedNotificationToast(
+        id = item.id,
+        title = (item.payload.fromName ?: item.payload.from).ifBlank { TITLE_FALLBACK },
+        body = item.payload.text.ifBlank { BODY_FALLBACK },
+    )

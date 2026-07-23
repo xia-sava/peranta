@@ -3,6 +3,7 @@ package to.sava.peranta.crypto
 import kotlinx.coroutines.test.runTest
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
+import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.PresencePayload
@@ -60,6 +61,14 @@ class MessageCipherTest {
             sentAtEpochMillis = 1_300,
             deviceName = "Pixel",
             endpoint = "e",
+        ),
+        MessagePayload(
+            id = "m1",
+            from = "phone",
+            to = "*",
+            sentAtEpochMillis = 1_400,
+            text = "会議は 15 時からです",
+            fromName = "xia-phone",
         ),
     )
 

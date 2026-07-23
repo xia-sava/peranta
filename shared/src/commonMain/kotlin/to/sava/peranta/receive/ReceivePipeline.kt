@@ -13,6 +13,7 @@ import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.FilePayload
+import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.SmsPayload
@@ -24,6 +25,7 @@ import to.sava.peranta.net.NtfyEvent
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.ReceivedFile
+import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.TimelineItem
@@ -143,6 +145,14 @@ class ReceivePipeline(
                 appendReceivedFile(payload)
             }
 
+            is MessagePayload -> {
+                if (!rememberId(payload.id)) {
+                    log.d { "dropping duplicate payload id=${payload.id}" }
+                    return
+                }
+                appendReceivedMessage(payload)
+            }
+
             is CommandPayload -> executeCommand(payload)
 
             else -> log.d { "ignoring payload id=${payload.id} type=${payload::class.simpleName} (not displayed)" }
@@ -255,6 +265,21 @@ class ReceivePipeline(
         )
         record(displayItem = displayItem, persistItem = persistFileItemFor(displayItem, payload))
         log.i { "received file appended id=${payload.id} attachments=${payload.attachments.size}" }
+    }
+
+    /**
+     * 受信したメッセージ（§4.1 message）をタイムラインへ [ReceivedMessage] として追記する。
+     * 伏せ字（§11）・通知フィルタ（§7）の対象外のため、[payloadForPersistence] を経由せず表示用アイテムを
+     * そのまま永続する。
+     */
+    private suspend fun appendReceivedMessage(payload: MessagePayload) {
+        val displayItem = ReceivedMessage(
+            id = payload.id,
+            timestampEpochMillis = now(),
+            payload = payload,
+        )
+        record(displayItem = displayItem)
+        log.i { "message appended id=${payload.id}" }
     }
 
     /**
