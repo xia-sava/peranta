@@ -29,7 +29,10 @@ private const val HEADER_FILENAME: String = "X-Filename"
  * blobTopic へ暗号化バイト列を PUT し、返ってきた添付 URL を通常ペイロードに埋めて配送する。
  * ダウンロード時も含めて [PerantaConfig.accessToken] による Bearer 認証を必ず付与する。
  * [httpClient] は [to.sava.peranta.net.createNtfyHttpClient] と同じ生成パターンのものを渡す。
- * ダウンロードは [PerantaConfig.host] と異なるホストの URL を拒否し、認証トークンを任意の宛先へ送らない。
+ * ダウンロードは受け取った URL のパスだけを使い、接続先（スキーム・ホスト・ポート）は自端末の接続設定から
+ * 組み立てる。blob は常に自分の ntfy サーバにあり（§4.3）、認証トークンを自サーバ以外へ送らない。
+ * ntfy の base-url が生成する添付 URL のホスト表記が端末側の接続設定と異なる環境（プロキシ経由等）でも
+ * ダウンロードできる。
  */
 class KtorBlobTransport(
     private val config: PerantaConfig,
@@ -70,14 +73,8 @@ class KtorBlobTransport(
     }
 
     override suspend fun download(url: String, blobId: String): ByteReadChannel {
-        val requestHost = Url(url).host
-        if (!requestHost.equals(config.host, ignoreCase = true)) {
-            throw BlobTransportException(
-                HOST_MISMATCH_STATUS,
-                "blob download host mismatch: expected ${config.host}, was $requestHost",
-            )
-        }
-        val response: HttpResponse = httpClient.get(url) {
+        val downloadUrl = "${config.httpBaseUrl()}${Url(url).encodedPath}"
+        val response: HttpResponse = httpClient.get(downloadUrl) {
             config.accessToken?.let { header(HttpHeaders.Authorization, "Bearer $it") }
         }
         if (!response.status.isSuccess()) {
@@ -91,9 +88,6 @@ class KtorBlobTransport(
 
     private companion object {
         const val MILLIS_PER_SECOND: Long = 1000
-
-        /** ホスト不一致で HTTP リクエスト自体を送らなかったことを示す status（HTTP ステータスではない）。 */
-        const val HOST_MISMATCH_STATUS: Int = 0
     }
 }
 

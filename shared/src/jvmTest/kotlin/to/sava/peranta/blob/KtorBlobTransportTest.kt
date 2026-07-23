@@ -98,6 +98,7 @@ class KtorBlobTransportTest {
 
         val request = captured.single()
         assertEquals(HttpMethod.Get, request.method)
+        assertEquals("http://localhost:8090/file/abc", request.url.toString())
         assertEquals("Bearer tok", request.headers["Authorization"])
     }
 
@@ -113,16 +114,18 @@ class KtorBlobTransportTest {
         assertEquals(404, error.status)
     }
 
-    /** download は config.host と異なるホストの URL を拒否し、Bearer トークンを含むリクエストを送らない。 */
+    /**
+     * download は受け取った URL のパスだけを使い、接続先は自端末の接続設定から組み直す。
+     * URL のホスト・ポート・スキームが何であっても、Bearer トークンは自サーバ以外へ送られない。
+     */
     @Test
-    fun downloadRejectsMismatchedHost() = runTest {
+    fun downloadRebuildsUrlFromOwnConfig() = runTest {
         val captured = mutableListOf<HttpRequestData>()
         val transport = transportFor(captured = captured) {
             respond(content = "", status = HttpStatusCode.OK)
         }
-        assertFailsWith<BlobTransportException> {
-            transport.download("http://evil.example.com:8090/file/abc", "abc")
-        }
-        assertEquals(emptyList(), captured)
+        transport.download("https://evil.example.com:9999/file/abc", "abc")
+
+        assertEquals("http://localhost:8090/file/abc", captured.single().url.toString())
     }
 }
