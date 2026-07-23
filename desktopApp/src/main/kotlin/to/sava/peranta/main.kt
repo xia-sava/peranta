@@ -202,6 +202,9 @@ fun main(args: Array<String>) {
         var configGeneration by remember { mutableStateOf(0) }
         var receiver by remember { mutableStateOf<DesktopReceiver?>(null) }
         var errorMessage by remember { mutableStateOf<String?>(null) }
+        // エラー停止した受信機（run() が例外終了しても receiver 変数には残る）を除外して渡す。
+        // 稼働中でない受信機を渡すと受信テストが必ず Timeout になり誤診断になるため（§10.5）。
+        val selfTestProvider: () -> DesktopSelfTest? = { receiver.takeIf { errorMessage == null } }
 
         // 終了時は受信機の close（JSONL 書き込みの完了）を上限つきで待ってからアプリを閉じる。
         val appScope = rememberCoroutineScope()
@@ -232,7 +235,9 @@ fun main(args: Array<String>) {
             if (!showWizard && destination == ShellDestination.Timeline &&
                 withContext(ioDispatcher) { desktopSettings.reloadConfig() }.hasSharedKey
             ) {
-                bannerTarget = setupBannerTarget(failingHealthCheckIds(DesktopHealthChecker(autoStart).check()))
+                bannerTarget = setupBannerTarget(
+                    failingHealthCheckIds(DesktopHealthChecker(autoStart, selfTestProvider).check()),
+                )
             }
         }
 
@@ -320,7 +325,7 @@ fun main(args: Array<String>) {
                         caps = platformCapabilities(),
                         controller = settingsController,
                         provider = desktopWizardSetupProvider(autoStart),
-                        healthChecker = DesktopHealthChecker(autoStart),
+                        healthChecker = DesktopHealthChecker(autoStart, selfTestProvider),
                         importController = pairingImportController,
                         qrContent = { uri -> DesktopQrCode(uri) },
                         onCopyPairingUri = ::copyToClipboard,
@@ -364,7 +369,7 @@ fun main(args: Array<String>) {
                                 scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
                                 onCopyPairingUri = ::copyToClipboard,
                                 onOpenWizard = { showWizard = true },
-                                loadHealthItems = { DesktopHealthChecker(autoStart).check() },
+                                loadHealthItems = { DesktopHealthChecker(autoStart, selfTestProvider).check() },
                                 onOpenHealthCheck = { onNavigate(ShellDestination.HealthCheck) },
                                 onOpenPairingImport = { onNavigate(ShellDestination.PairingImport) },
                                 updateController = updater.controller,
@@ -386,7 +391,7 @@ fun main(args: Array<String>) {
                             }
 
                             ShellDestination.HealthCheck -> HealthCheckScreen(
-                                checker = DesktopHealthChecker(autoStart),
+                                checker = DesktopHealthChecker(autoStart, selfTestProvider),
                                 showHeader = false,
                                 scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
                             )
