@@ -22,6 +22,51 @@ enum class Priority {
     HIGH,
 }
 
+/** 通知アクションの意味分類（Notification.Action#getSemanticAction の閉集合を写す、§3.4）。 */
+@Serializable
+enum class SemanticActionKind {
+    @SerialName("reply")
+    REPLY,
+
+    @SerialName("markAsRead")
+    MARK_AS_READ,
+
+    @SerialName("markAsUnread")
+    MARK_AS_UNREAD,
+
+    @SerialName("delete")
+    DELETE,
+
+    @SerialName("archive")
+    ARCHIVE,
+
+    @SerialName("mute")
+    MUTE,
+
+    @SerialName("unmute")
+    UNMUTE,
+
+    @SerialName("thumbsUp")
+    THUMBS_UP,
+
+    @SerialName("thumbsDown")
+    THUMBS_DOWN,
+
+    @SerialName("call")
+    CALL,
+}
+
+/** 通知アクション 1 個ぶんの分類シグナル（§3.4）。[NotificationPayload.actions] と index で対応する。 */
+@Serializable
+data class NotificationActionDetail(
+    /** 投稿アプリが設定した意味分類。未設定（NONE）は null。 */
+    val semanticAction: SemanticActionKind? = null,
+    /** インライン返信入力（RemoteInput）を持つか。 */
+    val hasRemoteInput: Boolean = false,
+    /** 発火先が Activity か（true=画面が開く / false=broadcast・service / null=不明）。 */
+    val opensActivity: Boolean? = null,
+)
+
 /** 送信端末へ指示する操作の種類。 */
 @Serializable
 enum class CommandType {
@@ -67,6 +112,8 @@ data class NotificationPayload(
     val text: String,
     val notificationKey: String,
     val actions: List<String> = emptyList(),
+    /** [actions] と同順のアクション分類シグナル（§3.4）。旧バージョン由来では空。 */
+    val actionDetails: List<NotificationActionDetail> = emptyList(),
     val postedAtEpochMillis: Long,
     val expiresAtEpochMillis: Long? = null,
     val priority: Priority = Priority.NORMAL,

@@ -10,6 +10,7 @@ import to.sava.peranta.filter.isOtpNotification
 import to.sava.peranta.filter.payloadForPersistence
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BROADCAST_TARGET
+import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.Priority
@@ -44,6 +45,12 @@ const val MAX_FORWARDED_TEXT_BYTES: Int = 2000
  * これを超える本文は全文を暗号化 blob として別送し、インラインはこの予算で切り詰めたプレビューにする。
  */
 const val FULL_TEXT_PREVIEW_BYTES: Int = 512
+
+/** 転送するアクションの個数上限。通知 UI の実用上限に余裕を持たせた値。 */
+const val MAX_FORWARDED_ACTIONS: Int = 5
+
+/** アクション名 1 個あたりの UTF-8 バイト予算。 */
+const val MAX_ACTION_LABEL_BYTES: Int = 100
 
 /** 切り詰め時に末尾へ付ける省略記号。 */
 private const val TRUNCATION_ELLIPSIS: String = "…"
@@ -97,6 +104,8 @@ data class NotificationInput(
     val text: String,
     val notificationKey: String,
     val actions: List<String> = emptyList(),
+    /** [actions] と同順のアクション分類シグナル（§3.4）。 */
+    val actionDetails: List<NotificationActionDetail> = emptyList(),
     val postedAtEpochMillis: Long,
     val priority: Priority = Priority.NORMAL,
 )
@@ -160,6 +169,8 @@ fun prepareForwardedNotification(
     if (title.length < rawTitle.length || text.length < rawText.length) {
         log.d { "forwarded notification truncated for ${input.packageName}" }
     }
+    val actions = input.actions.take(MAX_FORWARDED_ACTIONS).map { truncateForForwarding(it, MAX_ACTION_LABEL_BYTES) }
+    val actionDetails = input.actionDetails.take(MAX_FORWARDED_ACTIONS)
 
     return PreparedForwardedNotification(
         payload = NotificationPayload(
@@ -172,7 +183,8 @@ fun prepareForwardedNotification(
             title = title,
             text = text,
             notificationKey = input.notificationKey,
-            actions = input.actions,
+            actions = actions,
+            actionDetails = actionDetails,
             postedAtEpochMillis = input.postedAtEpochMillis,
             expiresAtEpochMillis = if (isOtp) now + OTP_TTL_MILLIS else null,
             priority = decision.priority,

@@ -3,7 +3,9 @@ package to.sava.peranta.send
 import to.sava.peranta.filter.FilterMode
 import to.sava.peranta.filter.FilterRule
 import to.sava.peranta.filter.RuleAction
+import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.Priority
+import to.sava.peranta.model.SemanticActionKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -141,5 +143,53 @@ class NotificationForwardingTest {
         assertEquals(3000 + SMS_TTL_MILLIS, payload.expiresAtEpochMillis)
         assertEquals("09011112222", payload.senderNumber)
         assertTrue(payload.text.contains("987654"))
+    }
+
+    /** アクション個数は MAX_FORWARDED_ACTIONS を超えた分を actions・actionDetails 双方同時に切り捨てる（index 対応を崩さない）。 */
+    @Test
+    fun actionsAndActionDetailsAreClippedToMaxCountTogether() {
+        val actions = (1..MAX_FORWARDED_ACTIONS + 3).map { "アクション$it" }
+        val actionDetails = actions.indices.map { NotificationActionDetail(opensActivity = it % 2 == 0) }
+        val payload = buildNotificationPayload(
+            input().copy(actions = actions, actionDetails = actionDetails),
+            mode = FilterMode.DENYLIST,
+            rules = emptyList(),
+            deviceId = "phone",
+            now = 2000,
+        )!!
+        assertEquals(MAX_FORWARDED_ACTIONS, payload.actions.size)
+        assertEquals(MAX_FORWARDED_ACTIONS, payload.actionDetails.size)
+        assertEquals(actions.take(MAX_FORWARDED_ACTIONS), payload.actions)
+        assertEquals(actionDetails.take(MAX_FORWARDED_ACTIONS), payload.actionDetails)
+    }
+
+    /** アクション名は MAX_ACTION_LABEL_BYTES を超えた分を切り詰める。 */
+    @Test
+    fun actionLabelIsTruncatedToMaxBytes() {
+        val longLabel = "あ".repeat(200)
+        val payload = buildNotificationPayload(
+            input().copy(actions = listOf(longLabel)),
+            mode = FilterMode.DENYLIST,
+            rules = emptyList(),
+            deviceId = "phone",
+            now = 2000,
+        )!!
+        val label = payload.actions.single()
+        assertTrue(label.encodeToByteArray().size <= MAX_ACTION_LABEL_BYTES, label)
+        assertTrue(label.length < longLabel.length)
+    }
+
+    /** actionDetails が NotificationInput から NotificationPayload へそのまま（上限内なら）載る。 */
+    @Test
+    fun actionDetailsArePropagatedToPayload() {
+        val detail = NotificationActionDetail(semanticAction = SemanticActionKind.REPLY, hasRemoteInput = true)
+        val payload = buildNotificationPayload(
+            input().copy(actions = listOf("返信"), actionDetails = listOf(detail)),
+            mode = FilterMode.DENYLIST,
+            rules = emptyList(),
+            deviceId = "phone",
+            now = 2000,
+        )!!
+        assertEquals(listOf(detail), payload.actionDetails)
     }
 }

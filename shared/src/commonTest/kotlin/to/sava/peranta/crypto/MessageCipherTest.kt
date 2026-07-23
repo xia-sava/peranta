@@ -4,9 +4,11 @@ import kotlinx.coroutines.test.runTest
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.MessagePayload
+import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.PresencePayload
+import to.sava.peranta.model.SemanticActionKind
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.encodeEnvelope
 import kotlin.io.encoding.Base64
@@ -227,6 +229,20 @@ class MessageCipherTest {
         val envelope = cipher.seal(notification())
         val tampered = envelope.copy(nonce = "not-valid-base64!!!")
         assertFailsWith<DecryptionException> { cipher.open(tampered) }
+    }
+
+    /** actionDetails（§3.4）を持つ NotificationPayload が seal/open のラウンドトリップで一致することを検証する。 */
+    @Test
+    fun sealOpenRoundTripWithActionDetails() = runTest {
+        val payload = notification(id = "n-actions").copy(
+            actions = listOf("返信", "地図"),
+            actionDetails = listOf(
+                NotificationActionDetail(semanticAction = SemanticActionKind.REPLY, hasRemoteInput = true),
+                NotificationActionDetail(opensActivity = true),
+            ),
+        )
+        val envelope = cipher.seal(payload)
+        assertEquals(payload, cipher.open(envelope))
     }
 
     /** ciphertext が不正な base64 の Envelope を開くと DecryptionException になることを検証する。 */

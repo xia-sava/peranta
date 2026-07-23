@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.app.RemoteInput
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.Telephony
@@ -16,6 +17,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import to.sava.peranta.config.PerantaConfig
+import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.receive.CommandExecutionException
@@ -183,6 +185,7 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             text = fields.text.orEmpty(),
             notificationKey = sbn.key,
             actions = fields.actions,
+            actionDetails = fields.actionDetails,
             postedAtEpochMillis = sbn.postTime,
             priority = resolvePriority(sbn.notification),
         )
@@ -266,10 +269,23 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
         val text = (extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
             ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString()
-        val actions = sbn.notification.actions
-            ?.mapNotNull { it.title?.toString() }
+        // title が無いアクションは従来どおり除外し、actionDetails も同じ走査で組んで index を対応させる（§5）。
+        val namedActions = sbn.notification.actions
+            ?.mapNotNull { action -> action.title?.toString()?.let { action to it } }
             .orEmpty()
-        return NotificationFields(title = title, text = text, actions = actions)
+        val actions = namedActions.map { it.second }
+        val actionDetails = namedActions.map { (action, _) ->
+            actionDetailOf(
+                rawSemanticAction = action.semanticAction,
+                hasRemoteInput = !action.remoteInputs.isNullOrEmpty(),
+                isActivity = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    action.actionIntent?.isActivity
+                } else {
+                    null
+                },
+            )
+        }
+        return NotificationFields(title = title, text = text, actions = actions, actionDetails = actionDetails)
     }
 
     /** 元通知の priority（PRIORITY_MIN..PRIORITY_MAX）を転送用の [Priority] に写す。 */
@@ -296,6 +312,7 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         val title: String?,
         val text: String?,
         val actions: List<String>,
+        val actionDetails: List<NotificationActionDetail> = emptyList(),
     )
 
     companion object {

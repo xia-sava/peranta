@@ -125,6 +125,48 @@ class PayloadTest {
         assertEquals("xia-phone", decoded.fromName)
     }
 
+    /** actionDetails（§3.4）込みのアクションが JSON を往復しても元の値と一致する。 */
+    @Test
+    fun actionDetailsRoundTrip() {
+        val details = listOf(
+            NotificationActionDetail(semanticAction = SemanticActionKind.REPLY, hasRemoteInput = true),
+            NotificationActionDetail(opensActivity = true),
+            NotificationActionDetail(),
+        )
+        val payload = notification(Priority.NORMAL).copy(
+            actions = listOf("返信", "地図", "アーカイブ"),
+            actionDetails = details,
+        )
+        val decoded = decodePayload(encodePayload(payload)) as NotificationPayload
+        assertEquals(details, decoded.actionDetails)
+    }
+
+    /** actionDetails を持たない旧バージョン由来の JSON も復号でき、actionDetails は空リストになる。 */
+    @Test
+    fun decodeWithoutActionDetailsFallsBackToEmptyList() {
+        val json = """
+            {"type":"notification","id":"n","from":"phone","to":"*","sentAtEpochMillis":1,
+            "packageName":"p","appName":"a","title":"t","text":"b","notificationKey":"k",
+            "actions":["アーカイブ"],"postedAtEpochMillis":1}
+        """.trimIndent()
+        val decoded = decodePayload(json) as NotificationPayload
+        assertEquals(listOf("アーカイブ"), decoded.actions)
+        assertTrue(decoded.actionDetails.isEmpty())
+    }
+
+    /**
+     * NotificationActionDetail の既定値は JSON に出ないことをピン留めする
+     * （nullable フィールドは explicitNulls=false により省略される。この回帰が起きると
+     * 分類シグナルの無いアクションのペイロードが不必要に膨らむ）。
+     */
+    @Test
+    fun defaultActionDetailOmitsNullFields() {
+        val json = encodePayload(notification(Priority.NORMAL).copy(actionDetails = listOf(NotificationActionDetail())))
+        assertTrue(!json.contains("semanticAction"), json)
+        assertTrue(!json.contains("opensActivity"), json)
+        assertContains(json, "\"hasRemoteInput\":false")
+    }
+
     private fun message(fromName: String? = "xia-phone") = MessagePayload(
         id = "m1",
         from = "phone",
