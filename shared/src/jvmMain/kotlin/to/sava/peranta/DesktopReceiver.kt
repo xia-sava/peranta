@@ -43,6 +43,7 @@ import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
 import to.sava.peranta.send.CommandSender
 import to.sava.peranta.send.SendPipeline
+import to.sava.peranta.roster.RosterStore
 import to.sava.peranta.roster.buildPresencePayload
 import to.sava.peranta.roster.presenceCapabilities
 import to.sava.peranta.roster.publishPresence
@@ -62,6 +63,7 @@ import to.sava.peranta.ui.AttachmentDownloadState
 import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.FullTextUi
 import to.sava.peranta.ui.TimelineActions
+import to.sava.peranta.ui.shell.RosterUi
 import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
@@ -323,6 +325,15 @@ class DesktopReceiver(
             }
         },
     )
+
+    /** 参加端末一覧ドロップダウンの取得口を組む（§3.5）。control topic 未設定なら null。 */
+    fun rosterUi(): RosterUi? {
+        val controlTopic = config.controlTopic ?: return null
+        return RosterUi(
+            selfDeviceId = config.deviceId,
+            fetch = { RosterStore(ntfy, cipher, controlTopic).fetch() },
+        )
+    }
 
     private fun dismissFromTimeline(item: ReceivedNotification) {
         toastScope.launch {

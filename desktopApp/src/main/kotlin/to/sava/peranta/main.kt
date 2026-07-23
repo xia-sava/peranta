@@ -61,6 +61,7 @@ import to.sava.peranta.ui.setup.SetupStatus
 import to.sava.peranta.ui.setup.WizardFlow
 import to.sava.peranta.ui.setup.WizardScreen
 import to.sava.peranta.ui.shell.PerantaShell
+import to.sava.peranta.ui.shell.RosterDropdown
 import to.sava.peranta.ui.shell.SetupWarningBanner
 import to.sava.peranta.ui.shell.ShellDestination
 import to.sava.peranta.ui.shell.setupBannerTarget
@@ -342,6 +343,9 @@ fun main(args: Array<String>) {
                         backDestination = shellReturnDestination(destination, subScreenOrigin),
                         serverLabel = labelConfig.host.takeIf { it.isNotBlank() },
                         deviceLabel = labelConfig.deviceName?.takeIf { it.isNotBlank() },
+                        serverTrailing = currentReceiver?.rosterUi()?.let { rosterUi ->
+                            { RosterDropdown(rosterUi) }
+                        },
                     ) { shellDestination ->
                         when (shellDestination) {
                             ShellDestination.Timeline -> Column(modifier = Modifier.fillMaxSize()) {

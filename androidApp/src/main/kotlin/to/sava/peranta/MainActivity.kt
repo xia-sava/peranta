@@ -70,6 +70,7 @@ import to.sava.peranta.ui.SettingsScreen
 import to.sava.peranta.ui.ShareScreen
 import to.sava.peranta.ui.setup.ReceiveSetupScreen
 import to.sava.peranta.ui.shell.PerantaShell
+import to.sava.peranta.ui.shell.RosterDropdown
 import to.sava.peranta.ui.shell.SetupWarningBanner
 import to.sava.peranta.ui.shell.ShellDestination
 import to.sava.peranta.ui.shell.setupBannerTarget
@@ -185,6 +186,7 @@ class MainActivity : ComponentActivity() {
         val receiveSetupAvailable =
             config.isReadyForUnifiedPushReceive || AndroidSetupProbe(this).unifiedPushRegistered()
         val sharedFiles = extractSharedFiles(intent)
+        val rosterUi = PerantaReceive.rosterUi(this)
 
         setContent {
             // シェル内の現在地。設定を離れる遷移でも再生成後に生存させるため rememberSaveable で保持する。
@@ -324,6 +326,7 @@ class MainActivity : ComponentActivity() {
                             backDestination = shellReturnDestination(destination, subScreenOrigin),
                             serverLabel = config.host.takeIf { it.isNotBlank() },
                             deviceLabel = config.deviceName?.takeIf { it.isNotBlank() },
+                            serverTrailing = rosterUi?.let { { RosterDropdown(it) } },
                         ) { shellDestination ->
                             when (shellDestination) {
                                 ShellDestination.Timeline -> Column(modifier = Modifier.fillMaxSize()) {

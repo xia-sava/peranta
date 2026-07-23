@@ -22,6 +22,8 @@ import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
 import to.sava.peranta.receive.RoutingCommandExecutor
+import to.sava.peranta.roster.RosterFetchResult
+import to.sava.peranta.roster.RosterStore
 import to.sava.peranta.send.CommandSender
 import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.timeline.ErrorItem
@@ -30,6 +32,7 @@ import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.TimelineActions
+import to.sava.peranta.ui.shell.RosterUi
 
 /** イベントに詰める固定 topic ラベル。エンドポイント URL は秘匿するため運搬に含めない（§16）。 */
 private const val EVENT_TOPIC_LABEL = "unifiedpush"
@@ -241,6 +244,26 @@ object PerantaReceive {
                     throw cancellation
                 } catch (error: Exception) {
                     log.w(error) { "failed to send mute command for $packageName" }
+                }
+            },
+        )
+    }
+
+    /** 参加端末一覧ドロップダウンの取得口を組む（§3.5）。control topic か共有鍵が無ければ null。 */
+    fun rosterUi(context: Context): RosterUi? {
+        val appContext = context.applicationContext
+        val repo = androidConfigRepository(appContext)
+        val config = repo.load()
+        if (config.controlTopic == null || !config.hasSharedKey) return null
+        return RosterUi(
+            selfDeviceId = repo.ensureDeviceId(),
+            fetch = {
+                val fresh = androidConfigRepository(appContext).load()
+                val controlTopic = fresh.controlTopic
+                if (controlTopic == null || !fresh.hasSharedKey) {
+                    RosterFetchResult.FetchFailed
+                } else {
+                    RosterStore(KtorNtfyClient(fresh, httpClient), perantaCipher(fresh), controlTopic).fetch()
                 }
             },
         )
