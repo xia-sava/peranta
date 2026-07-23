@@ -35,9 +35,14 @@ class SnoreToastToaster(
             return ToastResult.Failed
         }
         return try {
-            val code = runProcess(SnoreToastCommand.showArgs(exe, item))
-            SnoreToastCommand.resultFromExitCode(code).also {
-                log.i { "toast shown id=${item.id} exit=$code result=$it" }
+            val outcome = runProcess(SnoreToastCommand.showArgs(exe, item))
+            val result = if (item.openUrl != null) {
+                SnoreToastCommand.resultFrom(outcome.exitCode, outcome.stdout)
+            } else {
+                SnoreToastCommand.resultFromExitCode(outcome.exitCode)
+            }
+            result.also {
+                log.i { "toast shown id=${item.id} exit=${outcome.exitCode} result=$it" }
             }
         } finally {
             displaySlots.release()
@@ -45,26 +50,31 @@ class SnoreToastToaster(
     }
 
     override suspend fun close(id: String) {
-        val code = runProcess(SnoreToastCommand.closeArgs(exe, id))
-        log.i { "toast close id=$id exit=$code" }
+        val outcome = runProcess(SnoreToastCommand.closeArgs(exe, id))
+        log.i { "toast close id=$id exit=${outcome.exitCode}" }
     }
 
-    private suspend fun runProcess(args: List<String>): Int =
+    private suspend fun runProcess(args: List<String>): ProcessOutcome =
         withContext(dispatcher) {
             val process = try {
                 ProcessBuilder(args).redirectErrorStream(true).start()
             } catch (e: IOException) {
                 log.e(e) { "failed to launch snoretoast: ${args.firstOrNull()}" }
-                return@withContext FAILED_EXIT
+                return@withContext ProcessOutcome(FAILED_EXIT, "")
             }
             try {
-                process.onExit().await().exitValue()
+                val exitCode = process.onExit().await().exitValue()
+                val stdout = process.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                ProcessOutcome(exitCode, stdout)
             } finally {
                 if (process.isAlive) {
                     process.destroy()
                 }
             }
         }
+
+    /** [runProcess] の結果。ボタン名判別（§3.3）に使う [stdout] は exit code 4 のときだけ意味を持つ。 */
+    private data class ProcessOutcome(val exitCode: Int, val stdout: String)
 
     private companion object {
         /** [SnoreToastCommand.resultFromExitCode] が [ToastResult.Failed] に落とす番兵値。 */

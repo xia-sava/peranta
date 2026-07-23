@@ -69,6 +69,56 @@ class ToastContentTest {
         assertEquals("（本文なし）", content?.body)
     }
 
+    /** 本文に URL があれば openUrl に写す。 */
+    @Test
+    fun notificationExtractsOpenUrlFromText() {
+        val content = toastContentFor(notification(text = "詳細は https://example.com/info を見て"))
+        assertEquals("https://example.com/info", content?.openUrl)
+    }
+
+    /** タイトル中の URL も抽出対象になる。 */
+    @Test
+    fun notificationExtractsOpenUrlFromTitle() {
+        val content = toastContentFor(notification(title = "https://example.com/title", text = "本文"))
+        assertEquals("https://example.com/title", content?.openUrl)
+    }
+
+    /** 複数 URL があれば先頭のみを openUrl に採る。 */
+    @Test
+    fun notificationExtractsFirstOpenUrlWhenMultiple() {
+        val content = toastContentFor(
+            notification(text = "https://a.example/ と https://b.example/ を見て"),
+        )
+        assertEquals("https://a.example/", content?.openUrl)
+    }
+
+    /** URL が無ければ openUrl は null のまま。 */
+    @Test
+    fun notificationOpenUrlNullWhenNoUrl() {
+        val content = toastContentFor(notification(text = "ただのテキスト"))
+        assertNull(content?.openUrl)
+    }
+
+    /** SMS は本文の URL を openUrl に写す。 */
+    @Test
+    fun smsExtractsOpenUrlFromText() {
+        val item = ReceivedNotification(
+            id = "s3",
+            timestampEpochMillis = 1_000,
+            payload = SmsPayload(
+                id = "s3",
+                from = "phone",
+                to = "*",
+                sentAtEpochMillis = 900,
+                senderNumber = "+81900000000",
+                senderName = "銀行",
+                text = "確認は https://example.com/verify から",
+                postedAtEpochMillis = 900,
+            ),
+        )
+        assertEquals("https://example.com/verify", toastContentFor(item)?.openUrl)
+    }
+
     /** SMS は送信者表示名をタイトルに、本文を body に写す。 */
     @Test
     fun smsUsesSenderNameAsTitle() {

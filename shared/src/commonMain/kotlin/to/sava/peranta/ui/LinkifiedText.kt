@@ -32,6 +32,13 @@ internal fun findUrlRanges(text: String): List<IntRange> =
     }.toList()
 
 /**
+ * [text] 中の最初の URL を返す（無ければ null）。トースト・ミラー通知の「開く」導線（§3.3）で、
+ * 本文から開ける先を 1 個だけ選ぶために使う。
+ */
+internal fun firstUrl(text: String): String? =
+    findUrlRanges(text).firstOrNull()?.let { text.substring(it.first, it.last + 1) }
+
+/**
  * 本文中の URL をリンク化して表示する（タイムラインの通常テキスト・通知/SMS 本文・ファイルの
  * キャプションで共通に使う）。[findUrlRanges] で見つけた URL 部分に下線付きの
  * [MaterialTheme.colorScheme.primary] を当て、[LinkAnnotation.Url]（Compose 標準機構）が

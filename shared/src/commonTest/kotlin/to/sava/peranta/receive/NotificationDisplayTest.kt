@@ -66,6 +66,29 @@ class NotificationDisplayTest {
         assertEquals("（本文なし）", displayFor(received(notification(text = "")))!!.body)
     }
 
+    /** 本文に URL があれば openUrl に写す。 */
+    @Test
+    fun notificationExtractsOpenUrlFromText() {
+        val display = displayFor(received(notification(text = "詳細は https://example.com/info を見て")))!!
+        assertEquals("https://example.com/info", display.openUrl)
+    }
+
+    /** 複数 URL があれば先頭のみを openUrl に採る。 */
+    @Test
+    fun notificationExtractsFirstOpenUrlWhenMultiple() {
+        val display = displayFor(
+            received(notification(text = "https://a.example/ と https://b.example/ を見て")),
+        )!!
+        assertEquals("https://a.example/", display.openUrl)
+    }
+
+    /** URL が無ければ openUrl は null のまま。 */
+    @Test
+    fun notificationOpenUrlNullWhenNoUrl() {
+        val display = displayFor(received(notification(text = "ただのテキスト")))!!
+        assertNull(display.openUrl)
+    }
+
     /** SMS payload は送信者名（無ければ番号）をタイトルにする。 */
     @Test
     fun smsMapsSenderToTitle() {
@@ -85,6 +108,22 @@ class NotificationDisplayTest {
         assertEquals("銀行", display.title)
         assertEquals("コードは 999999 です", display.body)
         assertEquals(Priority.HIGH, display.priority)
+    }
+
+    /** SMS は本文の URL を openUrl に写す。 */
+    @Test
+    fun smsExtractsOpenUrlFromText() {
+        val sms = SmsPayload(
+            id = "s3",
+            from = "phone",
+            to = "*",
+            sentAtEpochMillis = 900L,
+            senderNumber = "+81900000000",
+            senderName = "銀行",
+            text = "確認は https://example.com/verify から",
+            postedAtEpochMillis = 900L,
+        )
+        assertEquals("https://example.com/verify", displayFor(received(sms))!!.openUrl)
     }
 
     /** 送信者名が無い SMS は番号をタイトルにする。 */

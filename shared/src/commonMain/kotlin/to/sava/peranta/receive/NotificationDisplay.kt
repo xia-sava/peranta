@@ -5,6 +5,7 @@ import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.ui.firstUrl
 
 /** タイトルが空のときの代替表示。 */
 private const val TITLE_FALLBACK = "Peranta"
@@ -24,6 +25,8 @@ data class NotificationDisplay(
     val priority: Priority,
     /** 失効時刻。設定時は表示後にこの時刻で自動的に消せる（OTP の短寿命）。 */
     val expiresAtEpochMillis: Long?,
+    /** 本文から抽出した先頭 URL。あれば「開く」アクションを追加する（§3.2）。 */
+    val openUrl: String? = null,
 )
 
 /**
@@ -38,6 +41,7 @@ fun displayFor(item: ReceivedNotification): NotificationDisplay? =
             body = payload.text.ifBlank { BODY_FALLBACK },
             priority = payload.priority,
             expiresAtEpochMillis = payload.expiresAtEpochMillis,
+            openUrl = firstUrl("${payload.title} ${payload.text}"),
         )
 
         is SmsPayload -> NotificationDisplay(
@@ -46,6 +50,7 @@ fun displayFor(item: ReceivedNotification): NotificationDisplay? =
             body = payload.text.ifBlank { BODY_FALLBACK },
             priority = payload.priority,
             expiresAtEpochMillis = payload.expiresAtEpochMillis,
+            openUrl = firstUrl(payload.text),
         )
 
         else -> null

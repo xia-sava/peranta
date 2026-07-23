@@ -5,10 +5,14 @@ data class ReceivedNotificationToast(
     val id: String,
     val title: String,
     val body: String,
+    /** 本文から抽出した先頭 URL。あれば「開く」ボタンを追加する（§3.3）。 */
+    val openUrl: String? = null,
 )
 
 /**
- * トースト表示の結果。押下判別は「消す」ボタン 1 個前提で SnoreToast の exit code のみを用いる（§3.3）。
+ * トースト表示の結果。「消す」ボタンのみの構成では SnoreToast の exit code だけで判別できるが、
+ * 「開く」ボタンを追加した構成では exit code が両ボタンで共通（ButtonPressed）になるため、
+ * stdout に出るボタン名も合わせて判別する（§3.3）。
  */
 enum class ToastResult {
     /** 本体クリック（exit 0）。 */
@@ -20,10 +24,13 @@ enum class ToastResult {
     /** 表示時間切れ（exit 3）。 */
     TimedOut,
 
-    /** 「消す」ボタン押下（exit 4）。 */
+    /** 「開く」ボタン押下（exit 4 + stdout「開く」）。 */
+    ButtonOpen,
+
+    /** 「消す」ボタン押下（exit 4。1 ボタン構成では exit code のみで判別）。 */
     ButtonDismiss,
 
-    /** プロセス起動失敗・未知の exit code。 */
+    /** プロセス起動失敗・未知の exit code・stdout からボタンを特定できない場合。 */
     Failed,
 }
 

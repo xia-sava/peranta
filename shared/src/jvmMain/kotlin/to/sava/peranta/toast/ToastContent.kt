@@ -6,6 +6,7 @@ import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.ui.firstUrl
 
 /** タイトルが空のときの代替（SnoreToast はタイトル・本文が空だと表示しない）。 */
 private const val TITLE_FALLBACK = "Peranta"
@@ -22,19 +23,24 @@ private const val FILE_RECEIVED_TITLE = "ファイルを受信しました"
 /** ファイル名が空のときの代替。 */
 private const val FILE_NAME_FALLBACK = "ファイル"
 
-/** 受信通知アイテムをトースト表示内容へ変換する。表示対象外の payload は null を返す。 */
+/**
+ * 受信通知アイテムをトースト表示内容へ変換する。表示対象外の payload は null を返す。
+ * 本文から URL が抽出できれば [ReceivedNotificationToast.openUrl] に詰め、「開く」ボタンの表示に使う（§3.3）。
+ */
 fun toastContentFor(item: ReceivedNotification): ReceivedNotificationToast? =
     when (val payload = item.payload) {
         is NotificationPayload -> ReceivedNotificationToast(
             id = item.id,
             title = payload.title.ifBlank { payload.appName.ifBlank { TITLE_FALLBACK } },
             body = payload.text.ifBlank { BODY_FALLBACK },
+            openUrl = firstUrl("${payload.title} ${payload.text}"),
         )
 
         is SmsPayload -> ReceivedNotificationToast(
             id = item.id,
             title = (payload.senderName ?: payload.senderNumber).ifBlank { TITLE_FALLBACK },
             body = payload.text.ifBlank { BODY_FALLBACK },
+            openUrl = firstUrl(payload.text),
         )
 
         else -> null

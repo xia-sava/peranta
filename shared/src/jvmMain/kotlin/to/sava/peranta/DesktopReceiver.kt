@@ -70,6 +70,7 @@ import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
@@ -266,6 +267,7 @@ class DesktopReceiver(
         val content = toastContentFor(item) ?: return
         when (toaster.show(content)) {
             ToastResult.ButtonDismiss -> requestDismiss(item.payload)
+            ToastResult.ButtonOpen -> content.openUrl?.let { openUrlInBrowser(it) }
             ToastResult.Clicked -> {
                 log.i { "toast clicked id=${item.id}" }
                 onToastClicked()
@@ -277,6 +279,19 @@ class DesktopReceiver(
 
     private suspend fun showErrorToast(item: ErrorItem) {
         toaster.show(toastContentFor(item))
+    }
+
+    /** トーストの「開く」ボタン押下で本文中の URL を既定ブラウザで開く（受信端末ローカル、§3.3）。 */
+    private fun openUrlInBrowser(url: String) {
+        if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+            log.w { "Desktop browse not supported" }
+            return
+        }
+        try {
+            Desktop.getDesktop().browse(URI(url))
+        } catch (error: Exception) {
+            log.w(error) { "failed to open url from toast" }
+        }
     }
 
     /**

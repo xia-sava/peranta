@@ -6,7 +6,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
+import android.net.Uri
 import android.os.Build
 import co.touchlab.kermit.Logger
 import to.sava.peranta.model.nowEpochMillis
@@ -82,6 +85,7 @@ class AndroidNotificationPresenter(
             .setAutoCancel(true)
             .applyContentIntent()
             .applyExpiry(display)
+            .applyOpenUrlAction(display)
             .build()
         notify(notificationId, notification)
     }
@@ -135,6 +139,20 @@ class AndroidNotificationPresenter(
         return this
     }
 
+    /** 本文から URL が抽出できたとき、ACTION_VIEW で開く「開く」アクションを 1 個付ける（§3.2）。 */
+    private fun Notification.Builder.applyOpenUrlAction(display: NotificationDisplay): Notification.Builder {
+        val url = display.openUrl ?: return this
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val icon = Icon.createWithResource(context, R.drawable.ic_notification)
+        return addAction(Notification.Action.Builder(icon, OPEN_ACTION_LABEL, pendingIntent).build())
+    }
+
     private fun notify(notificationId: Int, notification: Notification) {
         if (!isPostNotificationsGranted()) {
             log.w { "POST_NOTIFICATIONS not granted; notification id=$notificationId not shown" }
@@ -171,6 +189,9 @@ class AndroidNotificationPresenter(
         private const val CHANNEL_LOW = "peranta-low"
         private const val CHANNEL_ERROR = "peranta-error"
         private const val ERROR_TITLE = "Peranta 受信エラー"
+
+        /** 「開く」アクションのラベル（§3.2）。 */
+        private const val OPEN_ACTION_LABEL = "開く"
 
         /** 通知 ID 対応表を保持する SharedPreferences 名。 */
         const val PREFS_NOTIFICATION_IDS = "peranta-notification-ids"
