@@ -205,7 +205,7 @@ object PerantaReceive {
     )
 
     /**
-     * タイムライン UI 用の操作束を作る（§10.1）。アクション発火・非表示は送信元へ一点指定、
+     * タイムライン UI 用の操作束を作る（§10.1）。アクション発火・返信・非表示は送信元へ一点指定、
      * 「消す」は既読同期のため全端末へブロードキャストしつつ、表示済みローカル通知も取り下げる。
      * mute はアプリフィルタ画面（§10.4-1）と同じ経路（[appFilterController]）でローカルミラーへも反映する。
      */
@@ -219,6 +219,9 @@ object PerantaReceive {
             dismiss = { item -> dismissFromTimeline(appContext, item) },
             muteApp = { payload ->
                 filterController.setMirroredMute(payload.packageName, payload.from, mute = true)
+            },
+            reply = { payload, index, text ->
+                launchCommand(appContext) { it.reply(payload.from, payload.notificationKey, index, text) }
             },
         )
     }

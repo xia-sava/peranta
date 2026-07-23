@@ -13,11 +13,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runComposeUiTest
@@ -31,6 +33,8 @@ import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.NotificationPayload
+import to.sava.peranta.model.SemanticActionKind
+import to.sava.peranta.send.MAX_REPLY_TEXT_BYTES
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.ReceivedMessage
@@ -203,6 +207,126 @@ class TimelineScreenTest {
         }
         onNodeWithTag("${TAG_TIMELINE_ACTION_PREFIX}0").performClick()
         assertEquals(0, invokedIndex)
+    }
+
+    /** REPLY 分類のアクションボタンを押すと、invokeAction を送らずインライン返信入力欄が開く。 */
+    @Test
+    fun replyActionButtonOpensInlineInputWithoutInvokingAction() = runComposeUiTest {
+        var invoked = false
+        val payload = notification(
+            actions = listOf("返信"),
+            actionDetails = listOf(NotificationActionDetail(hasRemoteInput = true)),
+        )
+        setContent {
+            TimelineScreen(items(payload), actions = TimelineActions(invokeAction = { _, _ -> invoked = true }))
+        }
+        onNodeWithTag("${TAG_TIMELINE_ACTION_PREFIX}0").performClick()
+        onNodeWithTag(TAG_TIMELINE_REPLY_INPUT).assertExists()
+        assertTrue(!invoked)
+    }
+
+    /** 返信入力欄に本文を入れて送信すると reply(payload, index, text) が呼ばれ入力欄が閉じる。 */
+    @Test
+    fun replySendCallsReplyAndClosesInput() = runComposeUiTest {
+        var replied: Triple<String, Int, String>? = null
+        val payload = notification(
+            actions = listOf("返信"),
+            actionDetails = listOf(NotificationActionDetail(semanticAction = SemanticActionKind.REPLY)),
+        )
+        setContent {
+            TimelineScreen(
+                items(payload),
+                actions = TimelineActions(reply = { p, i, text -> replied = Triple(p.notificationKey, i, text) }),
+            )
+        }
+        onNodeWithTag("${TAG_TIMELINE_ACTION_PREFIX}0").performClick()
+        onNodeWithTag(TAG_TIMELINE_REPLY_INPUT).performTextInput("了解しました")
+        onNodeWithTag(TAG_TIMELINE_REPLY_SEND).performClick()
+        assertEquals(Triple("0|com.example|1|null|10", 0, "了解しました"), replied)
+        onAllNodesWithTag(TAG_TIMELINE_REPLY_INPUT).assertCountEquals(0)
+    }
+
+    /** 返信入力欄が空白のみのときは送信ボタンが無効で、押しても reply は呼ばれない。 */
+    @Test
+    fun replyWithBlankTextDisablesSendButton() = runComposeUiTest {
+        var replied = false
+        val payload = notification(
+            actions = listOf("返信"),
+            actionDetails = listOf(NotificationActionDetail(hasRemoteInput = true)),
+        )
+        setContent {
+            TimelineScreen(items(payload), actions = TimelineActions(reply = { _, _, _ -> replied = true }))
+        }
+        onNodeWithTag("${TAG_TIMELINE_ACTION_PREFIX}0").performClick()
+        onNodeWithTag(TAG_TIMELINE_REPLY_INPUT).performTextInput("   ")
+        onNodeWithTag(TAG_TIMELINE_REPLY_SEND).assertIsNotEnabled()
+        assertTrue(!replied)
+    }
+
+    /** 返信入力欄の「キャンセル」を押すと reply を送らず入力欄が閉じる。 */
+    @Test
+    fun replyCancelClosesInputWithoutSending() = runComposeUiTest {
+        var replied = false
+        val payload = notification(
+            actions = listOf("返信"),
+            actionDetails = listOf(NotificationActionDetail(hasRemoteInput = true)),
+        )
+        setContent {
+            TimelineScreen(items(payload), actions = TimelineActions(reply = { _, _, _ -> replied = true }))
+        }
+        onNodeWithTag("${TAG_TIMELINE_ACTION_PREFIX}0").performClick()
+        onNodeWithTag(TAG_TIMELINE_REPLY_INPUT).performTextInput("下書き")
+        onNodeWithText("キャンセル").performClick()
+        onAllNodesWithTag(TAG_TIMELINE_REPLY_INPUT).assertCountEquals(0)
+        assertTrue(!replied)
+    }
+
+    /** REPLY ボタンを再度押すと入力欄が閉じる（開閉のトグル）。 */
+    @Test
+    fun replyActionButtonPressedAgainClosesInput() = runComposeUiTest {
+        val payload = notification(
+            actions = listOf("返信"),
+            actionDetails = listOf(NotificationActionDetail(hasRemoteInput = true)),
+        )
+        setContent {
+            TimelineScreen(items(payload), actions = TimelineActions())
+        }
+        onNodeWithTag("${TAG_TIMELINE_ACTION_PREFIX}0").performClick()
+        onNodeWithTag(TAG_TIMELINE_REPLY_INPUT).assertExists()
+        onNodeWithTag("${TAG_TIMELINE_ACTION_PREFIX}0").performClick()
+        onAllNodesWithTag(TAG_TIMELINE_REPLY_INPUT).assertCountEquals(0)
+    }
+
+    /** 返信本文が上限バイト数を超えると、送信は無効化されず切り詰め警告のみ表示される。 */
+    @Test
+    fun replyOverLimitShowsTruncationWarning() = runComposeUiTest {
+        val payload = notification(
+            actions = listOf("返信"),
+            actionDetails = listOf(NotificationActionDetail(hasRemoteInput = true)),
+        )
+        setContent {
+            TimelineScreen(items(payload), actions = TimelineActions())
+        }
+        onNodeWithTag("${TAG_TIMELINE_ACTION_PREFIX}0").performClick()
+        onNodeWithTag(TAG_TIMELINE_REPLY_INPUT).performTextInput("a".repeat(MAX_REPLY_TEXT_BYTES + 1))
+        onNodeWithTag(TAG_TIMELINE_REPLY_LIMIT_WARNING, useUnmergedTree = true).assertExists()
+    }
+
+    /** コンテキストメニューの REPLY 分類の項目を押しても、invokeAction を送らず入力欄が開く。 */
+    @Test
+    fun contextMenuReplyActionOpensInlineInputWithoutInvokingAction() = runComposeUiTest {
+        var invoked = false
+        val payload = notification(
+            actions = listOf("返信"),
+            actionDetails = listOf(NotificationActionDetail(hasRemoteInput = true)),
+        )
+        setContent {
+            TimelineScreen(items(payload), actions = TimelineActions(invokeAction = { _, _ -> invoked = true }))
+        }
+        onNodeWithTag(TAG_TIMELINE_RECEIVED).performMouseInput { rightClick() }
+        onNodeWithTag("${TAG_TIMELINE_MENU_ACTION_PREFIX}0").performClick()
+        onNodeWithTag(TAG_TIMELINE_REPLY_INPUT).assertExists()
+        assertTrue(!invoked)
     }
 
     /** actionDetails を持たない payload（旧送信元由来）は全ボタンが従来どおりのラベルで表示される。 */

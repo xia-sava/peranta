@@ -148,6 +148,19 @@ class CommandSenderTest {
         assertEquals("com.spam", command.packageName)
     }
 
+    /** reply は本文が上限バイト数を超えると [MAX_REPLY_TEXT_BYTES] へ切り詰めて送る（§4.2）。 */
+    @Test
+    fun replyTruncatesOverLongText() = runTest {
+        val ntfy = RecordingControlNtfy(history = listOf(event(presence("phone", "https://h/phone-topic"))))
+        val overLong = "あ".repeat(MAX_REPLY_TEXT_BYTES)
+        val ok = sender(ntfy).reply(targetDeviceId = "phone", targetNotificationKey = "0|k", actionIndex = 0, text = overLong)
+        assertTrue(ok)
+        val command = openCommand(ntfy.published.single().body)
+        val replyText = requireNotNull(command.replyText)
+        assertTrue(replyText.encodeToByteArray().size <= MAX_REPLY_TEXT_BYTES)
+        assertTrue(replyText.length < overLong.length)
+    }
+
     /** unmuteApp は送信元 deviceId へパッケージ名つきで一点指定する。 */
     @Test
     fun unmuteAppTargetsSourceDevice() = runTest {

@@ -12,6 +12,9 @@ import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.roster.RosterStore
 import to.sava.peranta.roster.resolveTargetTopic
 
+/** 返信本文の UTF-8 バイト予算。通知本文と同じ配分で Envelope 4096B に収める。 */
+const val MAX_REPLY_TEXT_BYTES: Int = MAX_FORWARDED_TEXT_BYTES
+
 /**
  * 受信端末・送信端末の双方から、通知への操作コマンドを配送する（§3.4）。
  * 宛先は command 種別で分類する:
@@ -57,7 +60,7 @@ class CommandSender(
             actionIndex = actionIndex,
         )
 
-    /** [targetDeviceId] へインライン返信コマンドを送る（§3.4）。 */
+    /** [targetDeviceId] へインライン返信コマンドを送る（§3.4）。本文は [MAX_REPLY_TEXT_BYTES] へ切り詰める。 */
     suspend fun reply(
         targetDeviceId: String,
         targetNotificationKey: String,
@@ -70,7 +73,7 @@ class CommandSender(
             topics = singleTargetTopics(targetDeviceId),
             targetNotificationKey = targetNotificationKey,
             actionIndex = actionIndex,
-            replyText = text,
+            replyText = truncateForForwarding(text, MAX_REPLY_TEXT_BYTES),
         )
 
     /** [targetDeviceId] のスマホへアプリ非表示（denylist 追加）コマンドを送る（§3.4 / §7）。 */

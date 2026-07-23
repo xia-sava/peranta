@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Surface
@@ -46,6 +47,7 @@ import to.sava.peranta.model.Payload
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.actionKindAt
+import to.sava.peranta.send.MAX_REPLY_TEXT_BYTES
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
@@ -74,6 +76,23 @@ const val DEFAULT_EMPTY_TIMELINE_MESSAGE: String = "まだ通知はありませ�
 /** 発出元で画面が開くアクションのボタンラベルに付ける注記（§10.1）。 */
 const val ACTION_OPENS_ON_SENDER_SUFFIX: String = "（スマホで）"
 
+/** 返信入力欄のタグ。 */
+const val TAG_TIMELINE_REPLY_INPUT: String = "timeline-reply-input"
+
+/** 返信送信ボタンのタグ。 */
+const val TAG_TIMELINE_REPLY_SEND: String = "timeline-reply-send"
+
+/** 返信本文が上限バイト数を超えているときの警告表示のタグ。 */
+const val TAG_TIMELINE_REPLY_LIMIT_WARNING: String = "timeline-reply-limit-warning"
+
+/** 返信本文が上限バイト数を超えているときに出す警告文言。 */
+private val REPLY_LIMIT_WARNING: String =
+    "返信本文が上限 $MAX_REPLY_TEXT_BYTES バイトを超えています。超過分は切り詰めて送信されます"
+
+/** 返信本文 [text] の UTF-8 バイト長が送信上限を超えているか。 */
+private fun exceedsReplyLimit(text: String): Boolean =
+    text.encodeToByteArray().size > MAX_REPLY_TEXT_BYTES
+
 /** [payload] の [index] 番アクションの表示ラベル。発出元で開くアクションには注記を付ける。 */
 private fun actionLabel(payload: NotificationPayload, index: Int, name: String): String =
     if (payload.actionKindAt(index) == ActionExecutionKind.OPENS_ON_SENDER) {
@@ -91,6 +110,7 @@ class TimelineActions(
     val invokeAction: (payload: NotificationPayload, actionIndex: Int) -> Unit = { _, _ -> },
     val dismiss: (item: ReceivedNotification) -> Unit = {},
     val muteApp: (payload: NotificationPayload) -> Unit = {},
+    val reply: (payload: NotificationPayload, actionIndex: Int, text: String) -> Unit = { _, _, _ -> },
 )
 
 /**
@@ -257,7 +277,8 @@ private fun ReceivedBubble(item: ReceivedNotification, fullText: FullTextUi?) {
 
 /**
  * 操作可能な受信通知バブル。左右スワイプで消し、長押し/右クリックでコンテキストメニューを開く。
- * 通知に元アクションがあればボタンとして並べ、押すと送信元へ invokeAction を返送する。
+ * 通知に元アクションがあればボタンとして並べる。REPLY 分類のアクションは押すとインライン返信入力を
+ * 開き、それ以外は押すと送信元へ invokeAction を返送する（§10.1）。
  */
 @Composable
 private fun InteractiveReceivedBubble(
@@ -266,6 +287,17 @@ private fun InteractiveReceivedBubble(
     fullText: FullTextUi?,
     onLocalDismiss: () -> Unit,
 ) {
+    val payload = item.payload
+    var replyingIndex by remember { mutableStateOf<Int?>(null) }
+    val onActionClick: (Int) -> Unit = { index ->
+        val notificationPayload = payload as? NotificationPayload
+        when {
+            notificationPayload == null -> Unit
+            notificationPayload.actionKindAt(index) == ActionExecutionKind.REPLY ->
+                replyingIndex = if (replyingIndex == index) null else index
+            else -> actions.invokeAction(notificationPayload, index)
+        }
+    }
     val dismiss: () -> Unit = {
         actions.dismiss(item)
         onLocalDismiss()
@@ -304,16 +336,28 @@ private fun InteractiveReceivedBubble(
                     .timelineContextGesture(enabled = true) { menuOpen = true },
             ) {
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    ReceivedContent(item.payload, fullText)
-                    ActionButtons(item.payload, actions)
-                    SpeakerTimeRow(speaker = item.payload.speakerName(), time = item.timestampEpochMillis)
+                    ReceivedContent(payload, fullText)
+                    ActionButtons(payload, onActionClick)
+                    replyingIndex?.let { index ->
+                        (payload as? NotificationPayload)?.let { notificationPayload ->
+                            ReplyInput(
+                                onSend = { text ->
+                                    actions.reply(notificationPayload, index, text)
+                                    replyingIndex = null
+                                },
+                                onCancel = { replyingIndex = null },
+                            )
+                        }
+                    }
+                    SpeakerTimeRow(speaker = payload.speakerName(), time = item.timestampEpochMillis)
                 }
             }
             ContextMenu(
                 expanded = menuOpen,
                 onDismissRequest = { menuOpen = false },
-                payload = item.payload,
+                payload = payload,
                 actions = actions,
+                onActionClick = onActionClick,
                 onDismissNotification = dismiss,
             )
         }
@@ -321,16 +365,56 @@ private fun InteractiveReceivedBubble(
 }
 
 @Composable
-private fun ActionButtons(payload: Payload, actions: TimelineActions) {
+private fun ActionButtons(payload: Payload, onActionClick: (index: Int) -> Unit) {
     if (payload !is NotificationPayload || payload.actions.isEmpty()) return
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         payload.actions.forEachIndexed { index, name ->
             TextButton(
-                onClick = { actions.invokeAction(payload, index) },
+                onClick = { onActionClick(index) },
                 modifier = Modifier.testTag("$TAG_TIMELINE_ACTION_PREFIX$index"),
             ) {
                 Text(text = actionLabel(payload, index, name))
             }
+        }
+    }
+}
+
+/**
+ * REPLY 分類のアクション用インライン返信入力（§10.1）。上限バイト数超過時は切り詰め警告のみ出し、
+ * 実際の切り詰めは送信経路（[to.sava.peranta.send.CommandSender.reply]）側で行う。
+ * 空白のみの入力では送信を無効化する。
+ */
+@Composable
+private fun ReplyInput(onSend: (text: String) -> Unit, onCancel: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+    val overLimit = exceedsReplyLimit(text)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it },
+            modifier = Modifier.fillMaxWidth().testTag(TAG_TIMELINE_REPLY_INPUT),
+            minLines = 1,
+            maxLines = 3,
+            isError = overLimit,
+            supportingText = if (overLimit) {
+                {
+                    Text(
+                        text = REPLY_LIMIT_WARNING,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.testTag(TAG_TIMELINE_REPLY_LIMIT_WARNING),
+                    )
+                }
+            } else {
+                null
+            },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = onCancel) { Text("キャンセル") }
+            TextButton(
+                onClick = { onSend(text) },
+                enabled = text.isNotBlank(),
+                modifier = Modifier.testTag(TAG_TIMELINE_REPLY_SEND),
+            ) { Text("送信") }
         }
     }
 }
@@ -341,6 +425,7 @@ private fun ContextMenu(
     onDismissRequest: () -> Unit,
     payload: Payload,
     actions: TimelineActions,
+    onActionClick: (index: Int) -> Unit,
     onDismissNotification: () -> Unit,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismissRequest) {
@@ -368,7 +453,7 @@ private fun ContextMenu(
                     text = { Text(actionLabel(payload, index, name)) },
                     onClick = {
                         onDismissRequest()
-                        actions.invokeAction(payload, index)
+                        onActionClick(index)
                     },
                     modifier = Modifier.testTag("$TAG_TIMELINE_MENU_ACTION_PREFIX$index"),
                 )
