@@ -56,6 +56,7 @@ import to.sava.peranta.platform.platformCapabilities
 import to.sava.peranta.pairing.PairingImportController
 import to.sava.peranta.pairing.SettingsController
 import to.sava.peranta.pairing.pairingQrMatrix
+import to.sava.peranta.send.MESSAGE_SEND_FAILED_MESSAGE
 import to.sava.peranta.send.sharedStreamItems
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.ui.AppFilterController
@@ -105,7 +106,7 @@ private const val KEY_PENDING_SAVE_BLOB_ID = "pendingSaveBlobId"
 private sealed interface Overlay {
     data object Wizard : Overlay
     data object PairingLanding : Overlay
-    data class Share(val files: List<Uri>) : Overlay
+    data class Share(val files: List<Uri>, val text: String?) : Overlay
 }
 
 class MainActivity : ComponentActivity() {
@@ -189,6 +190,7 @@ class MainActivity : ComponentActivity() {
         val receiveSetupAvailable =
             config.isReadyForUnifiedPushReceive || AndroidSetupProbe(this).unifiedPushRegistered()
         val sharedFiles = extractSharedFiles(intent)
+        val sharedText = extractSharedText(intent)
         val rosterUi = PerantaReceive.rosterUi(this)
         // composer は送信設定が揃っていれば端末の役割を問わず出す（deviceId は PerantaSend.sendMessage が
         // 確定するため不問、§4.4）。満たさなければ null（非表示。設定導線は既存の警告バナー等が担う）。
@@ -210,7 +212,8 @@ class MainActivity : ComponentActivity() {
             var overlay: Overlay? by remember {
                 mutableStateOf(
                     when {
-                        sharedFiles.isNotEmpty() && config.hasSharedKey -> Overlay.Share(sharedFiles)
+                        (sharedFiles.isNotEmpty() || sharedText != null) && config.hasSharedKey ->
+                            Overlay.Share(sharedFiles, sharedText)
                         config.hasSharedKey -> null
                         destination == ShellDestination.PairingImport -> null
                         else -> Overlay.Wizard
@@ -320,11 +323,31 @@ class MainActivity : ComponentActivity() {
 
                         is Overlay.Share -> {
                             val files = current.files
+                            var sending by remember { mutableStateOf(false) }
                             ShareScreen(
                                 itemCount = files.size,
+                                initialText = current.text,
+                                sending = sending,
                                 onSend = { caption ->
-                                    AttachmentTransferService.enqueueUpload(this@MainActivity, files, caption)
-                                    finish()
+                                    if (files.isNotEmpty()) {
+                                        AttachmentTransferService.enqueueUpload(this@MainActivity, files, caption)
+                                        finish()
+                                    } else {
+                                        lifecycleScope.launch {
+                                            sending = true
+                                            val ok = PerantaSend.sendMessage(this@MainActivity, caption.orEmpty())
+                                            sending = false
+                                            if (ok) {
+                                                finish()
+                                            } else {
+                                                Toast.makeText(
+                                                    this@MainActivity,
+                                                    MESSAGE_SEND_FAILED_MESSAGE,
+                                                    Toast.LENGTH_LONG,
+                                                ).show()
+                                            }
+                                        }
+                                    }
                                 },
                                 onCancel = onShareCancel,
                             )
@@ -458,6 +481,14 @@ class MainActivity : ComponentActivity() {
         }
         return sharedStreamItems(single, multiple)
     }
+
+    /** 共有シート（ACTION_SEND / ACTION_SEND_MULTIPLE）で渡されたテキスト（EXTRA_TEXT）を取り出す。 */
+    private fun extractSharedText(intent: Intent?): String? =
+        if (intent?.action == Intent.ACTION_SEND || intent?.action == Intent.ACTION_SEND_MULTIPLE) {
+            intent.getStringExtra(Intent.EXTRA_TEXT)
+        } else {
+            null
+        }
 
     /**
      * 受信添付の操作束を組む（§4.3）。blobId からタイムライン履歴の [AttachmentRef] を引き、

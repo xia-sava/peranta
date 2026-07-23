@@ -1,7 +1,10 @@
 package to.sava.peranta.ui
 
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
@@ -32,5 +35,43 @@ class ShareScreenTest {
         }
         onNodeWithTag(TAG_SHARE_SEND).performClick()
         assertEquals(null, sent)
+    }
+
+    /** itemCount=0（テキストのみ共有）のときメッセージ送信の文言に切り替わる。 */
+    @Test
+    fun messageModeShowsMessageWording() = runComposeUiTest {
+        setContent {
+            ShareScreen(itemCount = 0, onSend = {}, onCancel = {})
+        }
+        onNodeWithText("メッセージを送信").assertExists()
+        onNodeWithText("ペアリング済みの端末へメッセージを送ります。").assertExists()
+        onNodeWithText("メッセージ").assertExists()
+    }
+
+    /** itemCount=0 で本文が空白のとき送信ボタンは無効。 */
+    @Test
+    fun messageModeDisablesSendWhenBlank() = runComposeUiTest {
+        setContent {
+            ShareScreen(itemCount = 0, onSend = {}, onCancel = {})
+        }
+        onNodeWithTag(TAG_SHARE_SEND).assertIsNotEnabled()
+    }
+
+    /** initialText がキャプション/メッセージ入力欄へプレフィルされる。 */
+    @Test
+    fun initialTextPrefillsInput() = runComposeUiTest {
+        setContent {
+            ShareScreen(itemCount = 0, onSend = {}, onCancel = {}, initialText = "こんにちは")
+        }
+        onNodeWithTag(TAG_SHARE_CAPTION).assertTextContains("こんにちは")
+    }
+
+    /** sending=true の間は送信ボタンが無効。 */
+    @Test
+    fun sendingDisablesSendButton() = runComposeUiTest {
+        setContent {
+            ShareScreen(itemCount = 2, onSend = {}, onCancel = {}, sending = true)
+        }
+        onNodeWithTag(TAG_SHARE_SEND).assertIsNotEnabled()
     }
 }

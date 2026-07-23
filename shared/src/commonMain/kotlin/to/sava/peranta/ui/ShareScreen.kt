@@ -31,6 +31,9 @@ const val TAG_SHARE_CAPTION: String = "share-caption"
 /**
  * 共有シートから渡されたファイル（画像を含む）を転送する前に、キャプションを入力して送信する小さな画面（§4.3）。
  * 宛先はペアリング済みの全端末（`to: "*"`）で、[itemCount] 件のファイルをまとめて送る。
+ * [itemCount] が 0 のとき（テキストのみの共有）はメッセージ送信の文言・挙動に切り替わる（§7.2）。
+ * [initialText] は入力欄の初期値（ファイル共有に添えられた説明文、またはメッセージ本文）、
+ * [sending] が真の間は送信ボタンを無効化する。
  */
 @Composable
 fun ShareScreen(
@@ -38,23 +41,33 @@ fun ShareScreen(
     onSend: (caption: String?) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    initialText: String? = null,
+    sending: Boolean = false,
 ) {
-    var caption by remember { mutableStateOf("") }
+    var caption by remember { mutableStateOf(initialText.orEmpty()) }
+    val isMessageMode = itemCount == 0
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(text = "ファイルを送信", style = MaterialTheme.typography.titleLarge)
             Text(
-                text = "$itemCount 件のファイルをペアリング済みの端末へ送ります。",
+                text = if (isMessageMode) "メッセージを送信" else "ファイルを送信",
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                text = if (isMessageMode) {
+                    "ペアリング済みの端末へメッセージを送ります。"
+                } else {
+                    "$itemCount 件のファイルをペアリング済みの端末へ送ります。"
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             OutlinedTextField(
                 value = caption,
                 onValueChange = { caption = it },
-                label = { Text("キャプション（任意）") },
+                label = { Text(if (isMessageMode) "メッセージ" else "キャプション（任意）") },
                 modifier = Modifier.fillMaxWidth().testTag(TAG_SHARE_CAPTION),
             )
             Row(
@@ -64,6 +77,7 @@ fun ShareScreen(
                 TextButton(onClick = onCancel) { Text("キャンセル") }
                 Button(
                     onClick = { onSend(caption.ifBlank { null }) },
+                    enabled = !sending && !(isMessageMode && caption.isBlank()),
                     modifier = Modifier.testTag(TAG_SHARE_SEND),
                 ) { Text("送信") }
             }
