@@ -173,7 +173,7 @@ class MainActivity : ComponentActivity() {
             attachmentActions = buildAttachmentActions(config).also {
                 it.restorePendingSaveState(savedInstanceState?.getString(KEY_PENDING_SAVE_BLOB_ID))
             }
-            AndroidAttachmentReceive.attachmentUi(this, attachmentActions!!)
+            AndroidAttachmentReceive.attachmentUi(this, attachmentActions!!, autoDisplayImages = config.autoDisplayImages)
         } else {
             null
         }

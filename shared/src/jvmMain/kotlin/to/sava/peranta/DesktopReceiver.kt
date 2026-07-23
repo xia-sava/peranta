@@ -359,8 +359,9 @@ class DesktopReceiver(
     }
 
     /**
-     * タイムラインの添付カード用の操作束を作る（§4.3）。手動ダウンロード・キャンセル・開く・保存を配線し、
-     * 進捗は [attachmentStates] を通じて画面へ公開する。
+     * タイムラインの添付カード用の操作束を作る（§4.3）。ダウンロード・キャンセル・開く・保存を配線し、
+     * 進捗は [attachmentStates] を通じて画面へ公開する。画像の自動表示可否は設定の
+     * [to.sava.peranta.config.PerantaConfig.autoDisplayImages] をそのまま渡す。
      */
     fun attachmentUi(): AttachmentUi = AttachmentUi(
         states = attachmentStates.asStateFlow(),
@@ -368,6 +369,7 @@ class DesktopReceiver(
         onCancel = { blobId -> cancelDownload(blobId) },
         onOpen = { blobId -> openAttachment(blobId) },
         onSave = { blobId -> saveAttachment(blobId) },
+        autoDisplayImages = config.autoDisplayImages,
     )
 
     /**

@@ -231,6 +231,18 @@ class ConfigRepositoryTest {
         assertTrue(repo.load().attachFullTextWhenTruncated)
     }
 
+    /** 画像の自動表示トグルは既定 true で、false に設定しても save/load で往復する（§4.3）。 */
+    @Test
+    fun autoDisplayImagesToggleRoundTrips() {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        assertTrue(repo.load().autoDisplayImages)
+        repo.save(PerantaConfig(autoDisplayImages = false))
+        assertFalse(repo.load().autoDisplayImages)
+        repo.save(PerantaConfig(autoDisplayImages = true))
+        assertTrue(repo.load().autoDisplayImages)
+    }
+
     /** 共有鍵未設定の config を保存すると鍵はクリアされ、load で null になる。 */
     @Test
     fun savingWithoutKeyClearsStoredKey() {

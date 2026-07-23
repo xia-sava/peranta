@@ -76,6 +76,10 @@ private const val AUTOSAVE_NOTE: String = "変更は自動的に保存され、�
 private const val PERSIST_SENSITIVE_HISTORY_DESCRIPTION: String =
     "OFF のままだと OTP 等の本文はタイムラインに残しません。"
 
+/** 画像の自動表示トグルの説明文（§4.3）。 */
+private const val AUTO_DISPLAY_IMAGES_DESCRIPTION: String =
+    "受信した画像を自動でダウンロードして表示します。通信量が気になる場合は OFF にしてください。"
+
 /** 共有鍵・トークン未設定で QR を作れないときの案内文。 */
 private const val PAIRING_PREREQUISITE_NOTICE: String = "先にトークンと共有鍵を設定してください。"
 
@@ -142,6 +146,7 @@ fun SettingsScreen(
     var persistSensitiveHistory by remember { mutableStateOf(initial.persistSensitiveHistory) }
     var attachFullTextWhenTruncated by remember { mutableStateOf(initial.attachFullTextWhenTruncated) }
     var timelineRetentionDays by remember { mutableStateOf(initial.timelineRetentionDays?.toString().orEmpty()) }
+    var autoDisplayImages by remember { mutableStateOf(initial.autoDisplayImages) }
     var sendEnabled by remember { mutableStateOf(initial.sendEnabled) }
     var smsDirectReceive by remember { mutableStateOf(initial.smsDirectReceive) }
 
@@ -171,6 +176,7 @@ fun SettingsScreen(
             persistSensitiveHistory = persistSensitiveHistory,
             attachFullTextWhenTruncated = attachFullTextWhenTruncated,
             timelineRetentionDays = timelineRetentionDays.toIntOrNull(),
+            autoDisplayImages = autoDisplayImages,
         )
         dirty = true
     }
@@ -319,6 +325,17 @@ fun SettingsScreen(
                 )
                 Text(
                     text = TIMELINE_RETENTION_DAYS_DESCRIPTION,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                LabeledCheckbox(
+                    checked = autoDisplayImages,
+                    onCheckedChange = { autoDisplayImages = it; persistConnection() },
+                    label = "画像を自動表示",
+                    tag = TAG_AUTO_DISPLAY_IMAGES,
+                )
+                Text(
+                    text = AUTO_DISPLAY_IMAGES_DESCRIPTION,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -576,6 +593,7 @@ const val TAG_PORT: String = "settings-port"
 const val TAG_PERSIST_SENSITIVE: String = "settings-persist-sensitive"
 const val TAG_ATTACH_FULL_TEXT: String = "settings-attach-full-text"
 const val TAG_TIMELINE_RETENTION_DAYS: String = "settings-timeline-retention-days"
+const val TAG_AUTO_DISPLAY_IMAGES: String = "settings-auto-display-images"
 const val TAG_SEND_ENABLED: String = "settings-send-enabled"
 const val TAG_SMS_DIRECT_RECEIVE: String = "settings-sms-direct-receive"
 const val TAG_UPDATE_CHECK: String = "settings-update-check"

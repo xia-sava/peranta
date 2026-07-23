@@ -12,6 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -68,6 +69,7 @@ data class AttachmentDownloadState(
  * [states] は blobId 毎のダウンロード状態で、カードはこれを購読して状態別 UI を出す。
  * 各操作は fire-and-forget で、プラットフォーム配線が実際のダウンロード・保存を行う。
  * 既定は no-op / 空状態で、添付操作を持たない画面ではダウンロード導線を出さない。
+ * [autoDisplayImages] が true のとき、画像添付はカードが画面に出た時点で自動ダウンロードする（§4.3）。
  */
 class AttachmentUi(
     val states: StateFlow<Map<String, AttachmentDownloadState>>,
@@ -78,6 +80,7 @@ class AttachmentUi(
     val onShare: (blobId: String) -> Unit = {},
     val canShare: Boolean = false,
     val now: () -> Long = ::nowEpochMillis,
+    val autoDisplayImages: Boolean = false,
 )
 
 /** バイト数を人間向けの短い表現にする（KB/MB 単位、1 桁小数）。 */
@@ -103,13 +106,26 @@ private fun categoryGlyph(ref: AttachmentRef): String =
 
 /**
  * 1 件の添付を表すカード（§4.3）。状態別にボタンを出し分ける:
- * 未取得=ダウンロード / 進行中=進捗バー+キャンセル / 完了=開く+保存 / 失敗=再試行 / 期限切れ=無効表示。
+ * 未取得=ダウンロード（画像は「表示」） / 進行中=進捗バー+キャンセル / 完了=開く+保存 / 失敗=再試行 /
+ * 期限切れ=無効表示。
+ * 画像添付は、カードが画面に出た時点（[ref.blobId] のコンポーズ時点）で未キャッシュ・進捗なし・期限内・
+ * [AttachmentUi.autoDisplayImages] が true なら自動で 1 回だけダウンロードを発火する（§4.3）。
+ * 失敗後の自動リトライは行わない（進捗なしの条件により、失敗状態は対象から外れる）。
  */
 @Composable
 internal fun AttachmentCard(ref: AttachmentRef, ui: AttachmentUi) {
     val states by ui.states.collectAsState()
     val state = states[ref.blobId] ?: AttachmentDownloadState()
     val expired = !state.cached && isBlobExpired(ref, ui.now())
+
+    LaunchedEffect(ref.blobId) {
+        val shouldAutoDisplay = ui.autoDisplayImages &&
+            attachmentCategoryFor(ref.mimeType, ref.fileName) == AttachmentCategory.IMAGE &&
+            !state.cached &&
+            state.progress == null &&
+            !expired
+        if (shouldAutoDisplay) ui.onDownload(ref)
+    }
 
     Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
         state.thumbnail?.let { thumbnail ->
@@ -194,7 +210,10 @@ private fun AttachmentControls(
         else -> TextButton(
             onClick = { ui.onDownload(ref) },
             modifier = Modifier.testTag("$TAG_ATTACHMENT_DOWNLOAD_PREFIX${ref.blobId}"),
-        ) { Text("ダウンロード") }
+        ) {
+            val isImage = attachmentCategoryFor(ref.mimeType, ref.fileName) == AttachmentCategory.IMAGE
+            Text(if (isImage) "表示" else "ダウンロード")
+        }
     }
 }
 

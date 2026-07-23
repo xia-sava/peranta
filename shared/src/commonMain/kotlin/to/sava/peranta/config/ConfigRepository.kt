@@ -56,6 +56,7 @@ class ConfigRepository(
             } else {
                 null
             },
+            autoDisplayImages = settings.getBoolean(KEY_AUTO_DISPLAY_IMAGES, true),
         )
     }
 
@@ -92,6 +93,7 @@ class ConfigRepository(
         config.timelineRetentionDays
             ?.let { settings.putInt(KEY_TIMELINE_RETENTION_DAYS, it) }
             ?: settings.remove(KEY_TIMELINE_RETENTION_DAYS)
+        settings.putBoolean(KEY_AUTO_DISPLAY_IMAGES, config.autoDisplayImages)
         config.sharedKeyBase64
             ?.let { keyStore.storeKey(Base64.decode(it)) }
             ?: keyStore.clearKey()
@@ -191,6 +193,7 @@ class ConfigRepository(
         const val KEY_REVOKED_DEVICE_IDS = "revokedDeviceIds"
         const val KEY_ATTACH_FULL_TEXT = "attachFullTextWhenTruncated"
         const val KEY_TIMELINE_RETENTION_DAYS = "timelineRetentionDays"
+        const val KEY_AUTO_DISPLAY_IMAGES = "autoDisplayImages"
 
         /** 配送先 topic を settings に 1 文字列で保持する際の区切り。 */
         private const val TOPIC_SEPARATOR = "\n"

@@ -47,6 +47,7 @@ class SettingsControllerTest {
             persistSensitiveHistory = false,
             attachFullTextWhenTruncated = true,
             timelineRetentionDays = null,
+            autoDisplayImages = true,
         )
 
         val loaded = repo.load()
@@ -70,6 +71,7 @@ class SettingsControllerTest {
             persistSensitiveHistory = false,
             attachFullTextWhenTruncated = true,
             timelineRetentionDays = null,
+            autoDisplayImages = true,
         )
 
         assertTrue(repo.load().useTls)
@@ -88,6 +90,7 @@ class SettingsControllerTest {
             persistSensitiveHistory = false,
             attachFullTextWhenTruncated = true,
             timelineRetentionDays = null,
+            autoDisplayImages = true,
         )
 
         val loaded = repo.load()
@@ -111,6 +114,7 @@ class SettingsControllerTest {
             persistSensitiveHistory = true,
             attachFullTextWhenTruncated = false,
             timelineRetentionDays = null,
+            autoDisplayImages = true,
         )
 
         val loaded = repo.load()
@@ -125,6 +129,7 @@ class SettingsControllerTest {
             persistSensitiveHistory = false,
             attachFullTextWhenTruncated = true,
             timelineRetentionDays = null,
+            autoDisplayImages = true,
         )
 
         val revertedLoaded = repo.load()
@@ -145,6 +150,7 @@ class SettingsControllerTest {
             persistSensitiveHistory = false,
             attachFullTextWhenTruncated = true,
             timelineRetentionDays = 30,
+            autoDisplayImages = true,
         )
 
         assertEquals(30, repo.load().timelineRetentionDays)
@@ -157,9 +163,42 @@ class SettingsControllerTest {
             persistSensitiveHistory = false,
             attachFullTextWhenTruncated = true,
             timelineRetentionDays = null,
+            autoDisplayImages = true,
         )
 
         assertNull(repo.load().timelineRetentionDays)
+    }
+
+    /** 画像の自動表示トグル（§4.3）の保存/読み込みラウンドトリップ。 */
+    @Test
+    fun saveConnectionSettingsPersistsAutoDisplayImages() {
+        val (controller, repo) = controllerWith(PerantaConfig(autoDisplayImages = true))
+
+        controller.saveConnectionSettings(
+            host = "example.test",
+            accessToken = "tk",
+            deviceName = "desktop-1",
+            port = null,
+            persistSensitiveHistory = false,
+            attachFullTextWhenTruncated = true,
+            timelineRetentionDays = null,
+            autoDisplayImages = false,
+        )
+
+        assertFalse(repo.load().autoDisplayImages)
+
+        controller.saveConnectionSettings(
+            host = "example.test",
+            accessToken = "tk",
+            deviceName = "desktop-1",
+            port = null,
+            persistSensitiveHistory = false,
+            attachFullTextWhenTruncated = true,
+            timelineRetentionDays = null,
+            autoDisplayImages = true,
+        )
+
+        assertTrue(repo.load().autoDisplayImages)
     }
 
     /** 鍵未設定からの作成: 32 バイト鍵が入り keyId は "1" になる。 */

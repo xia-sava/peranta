@@ -181,8 +181,9 @@ object AndroidAttachmentReceive {
      * タイムラインの添付カード用の操作束を作る（§4.3、§10.1）。ダウンロード・キャンセルはフォアグラウンド
      * サービスへ委ね、開く・保存・共有は [actions]（Activity 起点の FileProvider / SAF 連携）へ委ねる。
      * 保存は SAF がランチャーを要するため Activity 側で実装し、開く・共有は app context からも起動できる。
+     * [autoDisplayImages] は設定の「画像を自動表示」トグル（§4.3）をそのまま渡す。
      */
-    fun attachmentUi(context: Context, actions: AndroidAttachmentActions): AttachmentUi {
+    fun attachmentUi(context: Context, actions: AndroidAttachmentActions, autoDisplayImages: Boolean): AttachmentUi {
         val appContext = context.applicationContext
         return AttachmentUi(
             states = states,
@@ -192,6 +193,7 @@ object AndroidAttachmentReceive {
             onSave = { blobId -> actions.save(blobId) },
             onShare = { blobId -> actions.share(blobId) },
             canShare = true,
+            autoDisplayImages = autoDisplayImages,
         )
     }
 

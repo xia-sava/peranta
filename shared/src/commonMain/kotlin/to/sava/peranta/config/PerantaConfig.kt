@@ -20,6 +20,9 @@ const val DEFAULT_HOST: String = "peranta.example.com"
  * 添付し、受信側で自動展開させる（§4.3）。false なら従来どおり単純にバイト切り詰めする。
  * [timelineRetentionDays] はタイムライン履歴の保持日数（§11）。null は日数による剪定を行わない
  * （既定。既存ユーザーの履歴を黙って消さないため）。端末ローカルの表示設定でありペアリング QR には含めない。
+ * [autoDisplayImages] が true のとき、タイムラインに現れた画像添付を自動でダウンロードして表示する（§4.3）。
+ * false なら従来どおり手動でダウンロードボタンを押すまで取得しない。端末ローカルの表示設定であり
+ * ペアリング QR には含めない。
  */
 data class PerantaConfig(
     val host: String = DEFAULT_HOST,
@@ -44,6 +47,7 @@ data class PerantaConfig(
     val revokedDeviceIds: Set<String> = emptySet(),
     val attachFullTextWhenTruncated: Boolean = true,
     val timelineRetentionDays: Int? = null,
+    val autoDisplayImages: Boolean = true,
 ) {
     /**
      * ペアリング済みか（共有鍵と keyId が揃っているか）。

@@ -3,6 +3,7 @@ package to.sava.peranta.ui
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -68,7 +69,8 @@ class AttachmentCardTest {
         onShare: (String) -> Unit = {},
         canShare: Boolean = false,
         now: Long = 0L,
-    ) = AttachmentUi(states, onDownload, onCancel, onOpen, onSave, onShare, canShare, now = { now })
+        autoDisplayImages: Boolean = false,
+    ) = AttachmentUi(states, onDownload, onCancel, onOpen, onSave, onShare, canShare, now = { now }, autoDisplayImages = autoDisplayImages)
 
     /** 未取得の添付はダウンロードボタンを出し、押すと onDownload が呼ばれる。 */
     @Test
@@ -188,5 +190,109 @@ class AttachmentCardTest {
         }
         onAllNodesWithTag("$TAG_ATTACHMENT_EXPIRED_PREFIX$blobId").assertCountEquals(1)
         onAllNodesWithTag("$TAG_ATTACHMENT_DOWNLOAD_PREFIX$blobId").assertCountEquals(0)
+    }
+
+    /** 未取得の画像は「表示」、非画像は「ダウンロード」とボタン表記を出し分ける（動作は同一）。 */
+    @Test
+    fun buttonLabelDiffersByCategoryForNotDownloaded() = runComposeUiTest {
+        val states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+        setContent {
+            TimelineScreen(items(), attachments = ui(states))
+        }
+        onNodeWithText("表示").assertExists()
+        onAllNodesWithText("ダウンロード").assertCountEquals(0)
+    }
+
+    /** 非画像は未取得時に「ダウンロード」と表記する。 */
+    @Test
+    fun nonImageButtonLabelIsDownload() = runComposeUiTest {
+        val states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+        val fileRef = ref(fileName = "report.pdf", mimeType = "application/pdf", kind = AttachmentKind.FILE)
+        setContent {
+            TimelineScreen(items(ref = fileRef), attachments = ui(states))
+        }
+        onNodeWithText("ダウンロード").assertExists()
+        onAllNodesWithText("表示").assertCountEquals(0)
+    }
+
+    /** 画像・未キャッシュ・進捗なし・期限内でトグル ON なら、カードの表示だけで自動的に onDownload が呼ばれる。 */
+    @Test
+    fun autoDisplayTriggersDownloadForUncachedImageWhenToggleOn() = runComposeUiTest {
+        val states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+        var requested: String? = null
+        setContent {
+            TimelineScreen(items(), attachments = ui(states, onDownload = { requested = it.blobId }, autoDisplayImages = true))
+        }
+        waitForIdle()
+        assertEquals(blobId, requested)
+    }
+
+    /** トグル OFF では画像であっても自動発火しない（既存の手動ボタンのみ残る）。 */
+    @Test
+    fun autoDisplayDoesNotTriggerWhenToggleOff() = runComposeUiTest {
+        val states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+        var requested: String? = null
+        setContent {
+            TimelineScreen(items(), attachments = ui(states, onDownload = { requested = it.blobId }, autoDisplayImages = false))
+        }
+        waitForIdle()
+        assertEquals(null, requested)
+    }
+
+    /** 画像以外（非 IMAGE カテゴリ）はトグル ON でも自動発火しない。 */
+    @Test
+    fun autoDisplayDoesNotTriggerForNonImage() = runComposeUiTest {
+        val states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+        val fileRef = ref(fileName = "report.pdf", mimeType = "application/pdf", kind = AttachmentKind.FILE)
+        var requested: String? = null
+        setContent {
+            TimelineScreen(
+                items(ref = fileRef),
+                attachments = ui(states, onDownload = { requested = it.blobId }, autoDisplayImages = true),
+            )
+        }
+        waitForIdle()
+        assertEquals(null, requested)
+    }
+
+    /** 失敗状態（再試行待ち）では自動発火しない（自動リトライしない、再試行ボタンのまま）。 */
+    @Test
+    fun autoDisplayDoesNotTriggerWhenFailed() = runComposeUiTest {
+        val states = MutableStateFlow(
+            mapOf(blobId to AttachmentDownloadState(progress = TransferProgress(0, 2048, TransferState.FAILED))),
+        )
+        var requested: String? = null
+        setContent {
+            TimelineScreen(items(), attachments = ui(states, onDownload = { requested = it.blobId }, autoDisplayImages = true))
+        }
+        waitForIdle()
+        assertEquals(null, requested)
+    }
+
+    /** 既にキャッシュ済みでは自動発火しない（再ダウンロード不要）。 */
+    @Test
+    fun autoDisplayDoesNotTriggerWhenCached() = runComposeUiTest {
+        val states = MutableStateFlow(mapOf(blobId to AttachmentDownloadState(cached = true)))
+        var requested: String? = null
+        setContent {
+            TimelineScreen(items(), attachments = ui(states, onDownload = { requested = it.blobId }, autoDisplayImages = true))
+        }
+        waitForIdle()
+        assertEquals(null, requested)
+    }
+
+    /** サーバ側の期限を過ぎている添付では自動発火しない。 */
+    @Test
+    fun autoDisplayDoesNotTriggerWhenExpired() = runComposeUiTest {
+        val states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+        var requested: String? = null
+        setContent {
+            TimelineScreen(
+                items(expiresAt = 500L),
+                attachments = ui(states, onDownload = { requested = it.blobId }, now = 1000L, autoDisplayImages = true),
+            )
+        }
+        waitForIdle()
+        assertEquals(null, requested)
     }
 }

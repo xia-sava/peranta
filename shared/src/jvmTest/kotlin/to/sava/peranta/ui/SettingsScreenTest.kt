@@ -142,6 +142,44 @@ class SettingsScreenTest {
         onNodeWithTag(TAG_ATTACH_FULL_TEXT).assertIsOff()
     }
 
+    /** 画像の自動表示チェックボックスは既定 ON で初期表示される（§4.3）。 */
+    @Test
+    fun autoDisplayImagesCheckboxShowsDefaultOn() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_AUTO_DISPLAY_IMAGES).performScrollTo().assertIsOn()
+    }
+
+    /** 保存済みの画像自動表示設定（OFF）がチェックボックスの初期状態に反映される。 */
+    @Test
+    fun autoDisplayImagesCheckboxReflectsSavedConfig() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig().copy(autoDisplayImages = false))
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_AUTO_DISPLAY_IMAGES).performScrollTo().assertIsOff()
+    }
+
+    /** 画像の自動表示チェックボックスをトグルすると、即座に値が ConfigRepository に反映される。 */
+    @Test
+    fun togglingAutoDisplayImagesCheckboxPersistsImmediately() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_AUTO_DISPLAY_IMAGES).performScrollTo().performClick()
+
+        assertEquals(false, repo.load().autoDisplayImages)
+    }
+
     /** 履歴の保持日数欄は既定（未設定）では空欄で表示される（§11: 既定は無制限）。 */
     @Test
     fun timelineRetentionDaysFieldShowsEmptyByDefault() = runComposeUiTest {
