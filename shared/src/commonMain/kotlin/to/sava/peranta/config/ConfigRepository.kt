@@ -51,6 +51,11 @@ class ConfigRepository(
             otpSenderPackages = loadCsvList(KEY_OTP_SENDERS),
             revokedDeviceIds = loadCsvList(KEY_REVOKED_DEVICE_IDS).toSet(),
             attachFullTextWhenTruncated = settings.getBoolean(KEY_ATTACH_FULL_TEXT, true),
+            timelineRetentionDays = if (settings.hasKey(KEY_TIMELINE_RETENTION_DAYS)) {
+                settings.getInt(KEY_TIMELINE_RETENTION_DAYS, 0)
+            } else {
+                null
+            },
         )
     }
 
@@ -84,6 +89,9 @@ class ConfigRepository(
         settings.putString(KEY_OTP_SENDERS, config.otpSenderPackages.joinToString(TOPIC_SEPARATOR))
         settings.putString(KEY_REVOKED_DEVICE_IDS, config.revokedDeviceIds.joinToString(TOPIC_SEPARATOR))
         settings.putBoolean(KEY_ATTACH_FULL_TEXT, config.attachFullTextWhenTruncated)
+        config.timelineRetentionDays
+            ?.let { settings.putInt(KEY_TIMELINE_RETENTION_DAYS, it) }
+            ?: settings.remove(KEY_TIMELINE_RETENTION_DAYS)
         config.sharedKeyBase64
             ?.let { keyStore.storeKey(Base64.decode(it)) }
             ?: keyStore.clearKey()
@@ -182,6 +190,7 @@ class ConfigRepository(
         const val KEY_OTP_SENDERS = "otpSenderPackages"
         const val KEY_REVOKED_DEVICE_IDS = "revokedDeviceIds"
         const val KEY_ATTACH_FULL_TEXT = "attachFullTextWhenTruncated"
+        const val KEY_TIMELINE_RETENTION_DAYS = "timelineRetentionDays"
 
         /** 配送先 topic を settings に 1 文字列で保持する際の区切り。 */
         private const val TOPIC_SEPARATOR = "\n"

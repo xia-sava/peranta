@@ -46,6 +46,7 @@ class SettingsControllerTest {
             port = 8090,
             persistSensitiveHistory = false,
             attachFullTextWhenTruncated = true,
+            timelineRetentionDays = null,
         )
 
         val loaded = repo.load()
@@ -68,6 +69,7 @@ class SettingsControllerTest {
             port = null,
             persistSensitiveHistory = false,
             attachFullTextWhenTruncated = true,
+            timelineRetentionDays = null,
         )
 
         assertTrue(repo.load().useTls)
@@ -85,6 +87,7 @@ class SettingsControllerTest {
             port = null,
             persistSensitiveHistory = false,
             attachFullTextWhenTruncated = true,
+            timelineRetentionDays = null,
         )
 
         val loaded = repo.load()
@@ -107,6 +110,7 @@ class SettingsControllerTest {
             port = null,
             persistSensitiveHistory = true,
             attachFullTextWhenTruncated = false,
+            timelineRetentionDays = null,
         )
 
         val loaded = repo.load()
@@ -120,11 +124,42 @@ class SettingsControllerTest {
             port = null,
             persistSensitiveHistory = false,
             attachFullTextWhenTruncated = true,
+            timelineRetentionDays = null,
         )
 
         val revertedLoaded = repo.load()
         assertFalse(revertedLoaded.persistSensitiveHistory)
         assertTrue(revertedLoaded.attachFullTextWhenTruncated)
+    }
+
+    /** タイムライン保持日数（§11）の保存/読み込みラウンドトリップ。空欄相当の null は日数で剪定しない設定に戻る。 */
+    @Test
+    fun saveConnectionSettingsPersistsTimelineRetentionDays() {
+        val (controller, repo) = controllerWith(PerantaConfig(timelineRetentionDays = null))
+
+        controller.saveConnectionSettings(
+            host = "example.test",
+            accessToken = "tk",
+            deviceName = "desktop-1",
+            port = null,
+            persistSensitiveHistory = false,
+            attachFullTextWhenTruncated = true,
+            timelineRetentionDays = 30,
+        )
+
+        assertEquals(30, repo.load().timelineRetentionDays)
+
+        controller.saveConnectionSettings(
+            host = "example.test",
+            accessToken = "tk",
+            deviceName = "desktop-1",
+            port = null,
+            persistSensitiveHistory = false,
+            attachFullTextWhenTruncated = true,
+            timelineRetentionDays = null,
+        )
+
+        assertNull(repo.load().timelineRetentionDays)
     }
 
     /** 鍵未設定からの作成: 32 バイト鍵が入り keyId は "1" になる。 */

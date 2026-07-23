@@ -36,11 +36,13 @@ class JsonlTimelineStore(
             mutex.withLock { readAllLocked() }
         }
 
-    override suspend fun prune(maxItems: Int, now: Long) {
+    override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) {
         withContext(dispatcher) {
             mutex.withLock {
+                val cutoff = maxAgeMillis?.let { now - it }
                 val kept = readAllLocked()
                     .filter { it.expiresAtEpochMillis == null || it.expiresAtEpochMillis!! >= now }
+                    .filter { cutoff == null || it.timestampEpochMillis >= cutoff }
                     .takeLast(maxItems)
                 file.overwrite(kept.map { json.encodeToString<TimelineItem>(it) })
             }

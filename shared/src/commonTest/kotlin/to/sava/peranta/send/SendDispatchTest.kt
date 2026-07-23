@@ -226,12 +226,12 @@ class SendDispatchTest {
         }
 
         override suspend fun loadAll(): List<TimelineItem> = appended.toList()
-        override suspend fun prune(maxItems: Int, now: Long) {}
+        override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) {}
     }
 
     private class FailingStore : TimelineStore {
         override suspend fun append(item: TimelineItem) = throw RuntimeException("disk full")
         override suspend fun loadAll(): List<TimelineItem> = emptyList()
-        override suspend fun prune(maxItems: Int, now: Long) {}
+        override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) {}
     }
 }

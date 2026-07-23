@@ -56,7 +56,7 @@ class RosterFanoutTest {
         val appended = mutableListOf<TimelineItem>()
         override suspend fun append(item: TimelineItem) { appended.add(item) }
         override suspend fun loadAll(): List<TimelineItem> = appended.toList()
-        override suspend fun prune(maxItems: Int, now: Long) {}
+        override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) {}
     }
 
     /** fan-out はロスター由来のエンドポイント topic（自分を除く）へ配送する。 */

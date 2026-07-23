@@ -37,6 +37,7 @@ class SettingsController(private val repository: ConfigRepository) {
         port: Int?,
         persistSensitiveHistory: Boolean,
         attachFullTextWhenTruncated: Boolean,
+        timelineRetentionDays: Int?,
     ): PerantaConfig {
         val updated = repository.load().copy(
             host = host,
@@ -45,6 +46,7 @@ class SettingsController(private val repository: ConfigRepository) {
             port = port,
             persistSensitiveHistory = persistSensitiveHistory,
             attachFullTextWhenTruncated = attachFullTextWhenTruncated,
+            timelineRetentionDays = timelineRetentionDays,
         )
         repository.save(updated)
         return updated

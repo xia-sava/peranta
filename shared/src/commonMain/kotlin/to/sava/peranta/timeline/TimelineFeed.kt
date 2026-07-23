@@ -66,7 +66,7 @@ class TimelineFeed(
      * [store] の剪定を行う。稼働中の呼び出しでは [items] を自動で追い直さないため、
      * 起動時の一度きりの呼び出し（直後に [load] する運用）を前提とする。
      */
-    override suspend fun prune(maxItems: Int, now: Long) = store.prune(maxItems, now)
+    override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) = store.prune(maxItems, now, maxAgeMillis)
 
     /** 同一 id は置換、初出は末尾追記。[MutableStateFlow.update] の CAS で並行追記に対して安全。 */
     private fun upsert(item: TimelineItem) {

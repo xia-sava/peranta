@@ -4,9 +4,11 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -138,6 +140,72 @@ class SettingsScreenTest {
         onNodeWithTag(TAG_ATTACH_FULL_TEXT).assertIsOn()
         onNodeWithText("長文本文の全文をシームレスに添付・展開する").performClick()
         onNodeWithTag(TAG_ATTACH_FULL_TEXT).assertIsOff()
+    }
+
+    /** 履歴の保持日数欄は既定（未設定）では空欄で表示される（§11: 既定は無制限）。 */
+    @Test
+    fun timelineRetentionDaysFieldShowsEmptyByDefault() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_TIMELINE_RETENTION_DAYS).performScrollTo().assertIsDisplayed()
+    }
+
+    /** 保存済みの保持日数が欄の初期表示に反映される。 */
+    @Test
+    fun timelineRetentionDaysFieldReflectsSavedConfig() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig().copy(timelineRetentionDays = 30))
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_TIMELINE_RETENTION_DAYS).performScrollTo().assert(hasText("30"))
+    }
+
+    /** 保持日数欄への入力は即座に ConfigRepository に反映される。 */
+    @Test
+    fun editingTimelineRetentionDaysFieldPersistsImmediately() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_TIMELINE_RETENTION_DAYS).performScrollTo().performTextReplacement("14")
+
+        assertEquals(14, repo.load().timelineRetentionDays)
+    }
+
+    /** 保持日数欄は数字以外の入力を無視する（ポート欄と同じ数値専用フィールドの実装パターン）。 */
+    @Test
+    fun editingTimelineRetentionDaysFieldFiltersNonDigits() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_TIMELINE_RETENTION_DAYS).performScrollTo().performTextReplacement("3a0")
+
+        assertEquals(30, repo.load().timelineRetentionDays)
+    }
+
+    /** 保持日数欄を空欄に戻すと、日数による削除を行わない設定（null）に戻る。 */
+    @Test
+    fun clearingTimelineRetentionDaysFieldPersistsNull() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig().copy(timelineRetentionDays = 30))
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_TIMELINE_RETENTION_DAYS).performScrollTo().performTextReplacement("")
+
+        assertEquals(null, repo.load().timelineRetentionDays)
     }
 
     /** scrollbarContent スロットに現在のスクロール状態が渡され、描画される（Desktop 用スクロールバーの注入経路）。 */

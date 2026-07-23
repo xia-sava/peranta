@@ -13,5 +13,5 @@ class FakeTimelineStore : TimelineStore {
 
     override suspend fun loadAll(): List<TimelineItem> = appended.toList()
 
-    override suspend fun prune(maxItems: Int, now: Long) {}
+    override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) {}
 }

@@ -24,6 +24,7 @@ import to.sava.peranta.blob.exceedsFullTextAutoFetchLimit
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.isDevMode
+import to.sava.peranta.config.timelineRetentionMaxAgeMillis
 import to.sava.peranta.config.withDevOverrides
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.model.AttachmentKind
@@ -191,7 +192,7 @@ class DesktopReceiver(
 
     /** 起動時剪定と presence 告知を行い、受信 topic の購読を開始する。キャンセルまで戻らない。 */
     suspend fun run() {
-        feed.prune(now = nowEpochMillis())
+        feed.prune(now = nowEpochMillis(), maxAgeMillis = config.timelineRetentionMaxAgeMillis)
         runCatching { attachmentCache.prune() }
             .onFailure { log.w(it) { "attachment cache prune failed" } }
         announcePresence()

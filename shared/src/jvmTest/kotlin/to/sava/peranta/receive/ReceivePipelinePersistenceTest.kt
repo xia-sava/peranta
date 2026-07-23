@@ -24,7 +24,7 @@ class ReceivePipelinePersistenceTest {
     private class FailingAppendStore : TimelineStore {
         override suspend fun append(item: TimelineItem): Unit = throw IOException("disk full")
         override suspend fun loadAll(): List<TimelineItem> = emptyList()
-        override suspend fun prune(maxItems: Int, now: Long) {}
+        override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) {}
     }
 
     private fun notification(id: String): NotificationPayload = NotificationPayload(

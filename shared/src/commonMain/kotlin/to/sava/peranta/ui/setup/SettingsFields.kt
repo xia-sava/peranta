@@ -21,6 +21,7 @@ import to.sava.peranta.ui.TAG_DEVICE_NAME
 import to.sava.peranta.ui.TAG_HIDE_QR
 import to.sava.peranta.ui.TAG_HOST
 import to.sava.peranta.ui.TAG_PORT
+import to.sava.peranta.ui.TAG_TIMELINE_RETENTION_DAYS
 import to.sava.peranta.ui.TAG_TOKEN
 
 /** QR 表示ブロックの案内文（§10.3）。 */
@@ -74,6 +75,26 @@ internal fun PortField(value: String, onValueChange: (String) -> Unit, tag: Stri
         value = value,
         onValueChange = { input -> onValueChange(input.filter { it.isDigit() }) },
         label = { Text("ポート（任意）") },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.fillMaxWidth().testTag(tag),
+    )
+}
+
+/** 「履歴の保持日数（任意）」欄の下に添える説明文（§11）。 */
+internal const val TIMELINE_RETENTION_DAYS_DESCRIPTION: String =
+    "入力した日数より古い履歴を起動時に削除します。空欄なら日数による削除は行いません。"
+
+@Composable
+internal fun TimelineRetentionDaysField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    tag: String = TAG_TIMELINE_RETENTION_DAYS,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { input -> onValueChange(input.filter { it.isDigit() }) },
+        label = { Text("履歴の保持日数（任意）") },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = Modifier.fillMaxWidth().testTag(tag),

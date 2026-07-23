@@ -127,6 +127,7 @@ fun WizardScreen(
             port = port.toIntOrNull(),
             persistSensitiveHistory = config.persistSensitiveHistory,
             attachFullTextWhenTruncated = config.attachFullTextWhenTruncated,
+            timelineRetentionDays = config.timelineRetentionDays,
         )
         config = controller.load()
         dirty = true

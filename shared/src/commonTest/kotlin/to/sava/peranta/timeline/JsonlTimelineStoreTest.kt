@@ -120,6 +120,47 @@ class JsonlTimelineStoreTest {
         assertEquals(listOf("n3", "n4", "n5"), store.loadAll().map { it.id })
     }
 
+    /**
+     * prune は maxAgeMillis 指定時、cutoff（now - maxAgeMillis）より古い timestampEpochMillis の
+     * アイテムを落とし、cutoff 以降のアイテムは残す（§11 の保持日数）。
+     */
+    @Test
+    fun pruneDropsItemsOlderThanMaxAge() = runTest {
+        val store = JsonlTimelineStore(FakeTimelineFile())
+        store.append(received("old", timestamp = 1_000))
+        store.append(received("atCutoff", timestamp = 9_000))
+        store.append(received("recent", timestamp = 9_500))
+        store.prune(now = 10_000, maxAgeMillis = 1_000)
+        assertEquals(listOf("atCutoff", "recent"), store.loadAll().map { it.id })
+    }
+
+    /** maxAgeMillis が null（既定）のときは、日数による剪定を行わず古いアイテムも残る。 */
+    @Test
+    fun pruneKeepsOldItemsWhenMaxAgeMillisIsNull() = runTest {
+        val store = JsonlTimelineStore(FakeTimelineFile())
+        store.append(received("veryOld", timestamp = 0))
+        store.prune(now = 1_000_000, maxAgeMillis = null)
+        assertEquals(listOf("veryOld"), store.loadAll().map { it.id })
+    }
+
+    /**
+     * maxAgeMillis による日数剪定と、既存の失効時刻（expiresAtEpochMillis）・件数上限の剪定は
+     * 独立に効き、互いの挙動を変えない。
+     */
+    @Test
+    fun pruneCombinesMaxAgeWithExpiryAndItemLimit() = runTest {
+        val store = JsonlTimelineStore(FakeTimelineFile())
+        // 失効済み（maxAge の対象外の新しいタイムスタンプでも expiresAt で落ちる）。
+        store.append(received("expired", timestamp = 9_900, expiresAt = 500))
+        // maxAge で落ちる（失効はしていない）。
+        store.append(received("tooOld", timestamp = 1_000))
+        // 両方の条件を満たし残る。
+        store.append(received("keep1", timestamp = 9_000))
+        store.append(received("keep2", timestamp = 9_500))
+        store.prune(maxItems = 1, now = 10_000, maxAgeMillis = 1_000)
+        assertEquals(listOf("keep2"), store.loadAll().map { it.id })
+    }
+
     /** 壊れた行があっても他の正しい行は読める。 */
     @Test
     fun corruptLineIsSkipped() = runTest {

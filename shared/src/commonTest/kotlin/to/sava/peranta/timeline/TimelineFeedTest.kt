@@ -35,7 +35,7 @@ class TimelineFeedTest {
     private class FailingStore : TimelineStore {
         override suspend fun append(item: TimelineItem): Unit = throw IllegalStateException("persist failed")
         override suspend fun loadAll(): List<TimelineItem> = emptyList()
-        override suspend fun prune(maxItems: Int, now: Long) {}
+        override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) {}
     }
 
     /** append は永続化と同時に items へ即時反映する。 */
@@ -142,7 +142,7 @@ class TimelineFeedTest {
         val store = object : TimelineStore {
             override suspend fun append(item: TimelineItem): Unit = throw IllegalStateException("persist failed")
             override suspend fun loadAll(): List<TimelineItem> = listOf(old)
-            override suspend fun prune(maxItems: Int, now: Long) {}
+            override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) {}
         }
         val feed = TimelineFeed(store)
         feed.record(notification("volatile", 200))

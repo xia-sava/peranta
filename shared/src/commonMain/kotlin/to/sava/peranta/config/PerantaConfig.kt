@@ -18,6 +18,8 @@ const val DEFAULT_HOST: String = "peranta.example.com"
  * [revokedDeviceIds] は失効させた端末の deviceId 集合で、ロスター解決時に配送先から除外する（§9）。
  * [attachFullTextWhenTruncated] が true のとき、プレビュー予算を超える本文は全文を暗号化 blob として
  * 添付し、受信側で自動展開させる（§4.3）。false なら従来どおり単純にバイト切り詰めする。
+ * [timelineRetentionDays] はタイムライン履歴の保持日数（§11）。null は日数による剪定を行わない
+ * （既定。既存ユーザーの履歴を黙って消さないため）。端末ローカルの表示設定でありペアリング QR には含めない。
  */
 data class PerantaConfig(
     val host: String = DEFAULT_HOST,
@@ -41,6 +43,7 @@ data class PerantaConfig(
     val otpSenderPackages: List<String> = emptyList(),
     val revokedDeviceIds: Set<String> = emptySet(),
     val attachFullTextWhenTruncated: Boolean = true,
+    val timelineRetentionDays: Int? = null,
 ) {
     /**
      * ペアリング済みか（共有鍵と keyId が揃っているか）。
@@ -81,3 +84,13 @@ data class PerantaConfig(
             !keyId.isNullOrBlank() &&
             (deliveryTopics.isNotEmpty() || !controlTopic.isNullOrBlank())
 }
+
+/** 1 日のミリ秒数。保持日数から [TimelineStore.prune] の経過時間へ変換する際に使う（§11）。 */
+private const val MILLIS_PER_DAY: Long = 24L * 60 * 60 * 1000
+
+/**
+ * [PerantaConfig.timelineRetentionDays] を [to.sava.peranta.timeline.TimelineStore.prune] に渡す
+ * 経過時間（ミリ秒）へ変換する。未設定（日数による剪定なし）なら null。
+ */
+val PerantaConfig.timelineRetentionMaxAgeMillis: Long?
+    get() = timelineRetentionDays?.let { it.toLong() * MILLIS_PER_DAY }

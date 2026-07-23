@@ -155,6 +155,17 @@ class ConfigRepositoryTest {
         assertTrue(repo.load().revokedDeviceIds.isEmpty())
     }
 
+    /** タイムライン保持日数は port と同じ optional int として save/load で往復し、未設定なら null に戻る（§11）。 */
+    @Test
+    fun timelineRetentionDaysRoundTrips() {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        repo.save(PerantaConfig(timelineRetentionDays = 30))
+        assertEquals(30, repo.load().timelineRetentionDays)
+        repo.save(PerantaConfig(timelineRetentionDays = null))
+        assertNull(repo.load().timelineRetentionDays)
+    }
+
     /** updateFilterRules は変換結果を filterRules だけへ反映し、他項目は保つ。 */
     @Test
     fun updateFilterRulesAppliesTransformAndKeepsOtherFields() = runTest {

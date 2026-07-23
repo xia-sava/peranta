@@ -47,6 +47,8 @@ import to.sava.peranta.ui.setup.SetupItemUi
 import to.sava.peranta.ui.setup.SetupOverviewRow
 import to.sava.peranta.ui.setup.SetupOverviewStatus
 import to.sava.peranta.ui.setup.SetupOverviewTarget
+import to.sava.peranta.ui.setup.TIMELINE_RETENTION_DAYS_DESCRIPTION
+import to.sava.peranta.ui.setup.TimelineRetentionDaysField
 import to.sava.peranta.ui.setup.TokenField
 import to.sava.peranta.ui.setup.setupOverview
 import to.sava.peranta.update.UpdateController
@@ -139,6 +141,7 @@ fun SettingsScreen(
     var hasKey by remember { mutableStateOf(!initial.sharedKeyBase64.isNullOrBlank()) }
     var persistSensitiveHistory by remember { mutableStateOf(initial.persistSensitiveHistory) }
     var attachFullTextWhenTruncated by remember { mutableStateOf(initial.attachFullTextWhenTruncated) }
+    var timelineRetentionDays by remember { mutableStateOf(initial.timelineRetentionDays?.toString().orEmpty()) }
     var sendEnabled by remember { mutableStateOf(initial.sendEnabled) }
     var smsDirectReceive by remember { mutableStateOf(initial.smsDirectReceive) }
 
@@ -167,6 +170,7 @@ fun SettingsScreen(
             port = port.toIntOrNull(),
             persistSensitiveHistory = persistSensitiveHistory,
             attachFullTextWhenTruncated = attachFullTextWhenTruncated,
+            timelineRetentionDays = timelineRetentionDays.toIntOrNull(),
         )
         dirty = true
     }
@@ -308,6 +312,15 @@ fun SettingsScreen(
                     onCheckedChange = { attachFullTextWhenTruncated = it; persistConnection() },
                     label = "長文本文の全文をシームレスに添付・展開する",
                     tag = TAG_ATTACH_FULL_TEXT,
+                )
+                TimelineRetentionDaysField(
+                    value = timelineRetentionDays,
+                    onValueChange = { timelineRetentionDays = it; persistConnection() },
+                )
+                Text(
+                    text = TIMELINE_RETENTION_DAYS_DESCRIPTION,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 if (updateController != null) {
@@ -562,6 +575,7 @@ const val TAG_DEVICE_NAME: String = "settings-deviceName"
 const val TAG_PORT: String = "settings-port"
 const val TAG_PERSIST_SENSITIVE: String = "settings-persist-sensitive"
 const val TAG_ATTACH_FULL_TEXT: String = "settings-attach-full-text"
+const val TAG_TIMELINE_RETENTION_DAYS: String = "settings-timeline-retention-days"
 const val TAG_SEND_ENABLED: String = "settings-send-enabled"
 const val TAG_SMS_DIRECT_RECEIVE: String = "settings-sms-direct-receive"
 const val TAG_UPDATE_CHECK: String = "settings-update-check"

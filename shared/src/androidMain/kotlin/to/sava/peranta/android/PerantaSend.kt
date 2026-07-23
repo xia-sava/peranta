@@ -11,6 +11,7 @@ import to.sava.peranta.blob.BlobCipher
 import to.sava.peranta.blob.KtorBlobTransport
 import to.sava.peranta.blob.uploadFullTextAttachment
 import to.sava.peranta.config.PerantaConfig
+import to.sava.peranta.config.timelineRetentionMaxAgeMillis
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.NotificationPayload
@@ -80,7 +81,8 @@ object PerantaSend {
         scope.launch {
             try {
                 val now = nowEpochMillis()
-                timelineFeed.prune(now = now)
+                val maxAgeMillis = androidConfigRepository().load().timelineRetentionMaxAgeMillis
+                timelineFeed.prune(now = now, maxAgeMillis = maxAgeMillis)
                 timelineFeed.load(now)
             } catch (cancellation: CancellationException) {
                 throw cancellation
