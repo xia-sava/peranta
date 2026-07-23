@@ -60,21 +60,23 @@ class PerantaNotificationListenerService : NotificationListenerService() {
 
     /** 対象通知の [actionIndex] 番のアクションボタンを発火する（§3.4）。 */
     fun invokeActionByKey(key: String, actionIndex: Int) = runNlsAction {
-        val action = actionAt(requireActiveNotification(key), actionIndex)
+        val action = actionAt(requireActiveNotification(key, NOTIFICATION_ACTION_FAILED_MESSAGE), actionIndex)
         try {
             action.actionIntent.send()
         } catch (e: PendingIntent.CanceledException) {
-            throw CommandExecutionException("アクションの発火に失敗しました key=$key index=$actionIndex", e)
+            log.w(e) { "action send failed key=$key index=$actionIndex" }
+            throw CommandExecutionException(NOTIFICATION_ACTION_FAILED_MESSAGE, e)
         }
         log.i { "action invoked key=$key index=$actionIndex" }
     }
 
     /** 対象アクションの [RemoteInput] に [text] を詰めて発火し、インライン返信する（§3.4）。 */
     fun replyByKey(key: String, actionIndex: Int, text: String) = runNlsAction {
-        val action = actionAt(requireActiveNotification(key), actionIndex)
+        val action = actionAt(requireActiveNotification(key, NOTIFICATION_REPLY_FAILED_MESSAGE), actionIndex)
         val remoteInputs = action.remoteInputs
         if (remoteInputs.isNullOrEmpty()) {
-            throw CommandExecutionException("返信できる入力欄がありません key=$key index=$actionIndex")
+            log.w { "no remote input for reply key=$key index=$actionIndex" }
+            throw CommandExecutionException(NOTIFICATION_REPLY_UNSUPPORTED_MESSAGE)
         }
         val intent = Intent()
         val results = Bundle()
@@ -83,7 +85,8 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         try {
             action.actionIntent.send(applicationContext, 0, intent)
         } catch (e: PendingIntent.CanceledException) {
-            throw CommandExecutionException("返信の送信に失敗しました key=$key index=$actionIndex", e)
+            log.w(e) { "reply send failed key=$key index=$actionIndex" }
+            throw CommandExecutionException(NOTIFICATION_REPLY_FAILED_MESSAGE, e)
         }
         log.i { "reply sent key=$key index=$actionIndex" }
     }
@@ -105,14 +108,20 @@ class PerantaNotificationListenerService : NotificationListenerService() {
     private fun findActiveNotification(key: String): StatusBarNotification? =
         activeNotifications?.firstOrNull { it.key == key }
 
-    private fun requireActiveNotification(key: String): StatusBarNotification =
-        findActiveNotification(key)
-            ?: throw CommandExecutionException("対象の通知が見つかりません key=$key")
+    private fun requireActiveNotification(key: String, notFoundMessage: String): StatusBarNotification {
+        val sbn = findActiveNotification(key)
+        if (sbn == null) {
+            log.w { "target notification not found key=$key" }
+            throw CommandExecutionException(notFoundMessage)
+        }
+        return sbn
+    }
 
     private fun actionAt(sbn: StatusBarNotification, index: Int): Notification.Action {
         val actions = sbn.notification.actions
         if (actions == null || index !in actions.indices) {
-            throw CommandExecutionException("アクションが見つかりません key=${sbn.key} index=$index")
+            log.w { "action index out of range key=${sbn.key} index=$index" }
+            throw CommandExecutionException(NOTIFICATION_ACTION_INDEX_MISSING_MESSAGE)
         }
         return actions[index]
     }
