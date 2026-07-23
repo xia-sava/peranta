@@ -31,6 +31,7 @@ import to.sava.peranta.timeline.TimelineStore
 import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ReceivePipelineTest {
@@ -60,6 +61,24 @@ class ReceivePipelineTest {
         notificationKey = "0|com.example.bank|1|null|10",
         postedAtEpochMillis = now - 100,
         expiresAtEpochMillis = expiresAt,
+    )
+
+    /** DISMISS 分岐の実行だけを検証するための no-op executor。 */
+    private class NoOpCommandExecutor : CommandExecutor {
+        override suspend fun dismiss(notificationKey: String) {}
+        override suspend fun invokeAction(notificationKey: String, actionIndex: Int) {}
+        override suspend fun reply(notificationKey: String, actionIndex: Int, text: String) {}
+        override suspend fun muteApp(packageName: String) {}
+        override suspend fun unmuteApp(packageName: String) {}
+    }
+
+    private fun dismissCommand(targetNotificationKey: String, id: String = "cmd1"): CommandPayload = CommandPayload(
+        id = id,
+        from = "phone",
+        to = deviceName,
+        sentAtEpochMillis = now,
+        command = CommandType.DISMISS,
+        targetNotificationKey = targetNotificationKey,
     )
 
     private suspend fun eventFor(payload: Payload, sealCipher: MessageCipher = cipher): NtfyEvent {
@@ -165,6 +184,35 @@ class ReceivePipelineTest {
         val p = ReceivePipeline(ntfy, cipher, TimelineFeed(store), deviceName, now = { now })
         p.start("my-topic")
         assertEquals(1, p.items.value.size)
+    }
+
+    /** dismiss コマンド受信で、対象 notificationKey の ReceivedNotification が sourceDismissed=true に置換される（§3.4）。 */
+    @Test
+    fun dismissCommandMarksMatchingNotificationSourceDismissed() = runTest {
+        val store = store()
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store), deviceName,
+            commandExecutor = NoOpCommandExecutor(), now = { now },
+        )
+        p.handleEvent(eventFor(notification()))
+        p.handleEvent(eventFor(dismissCommand(targetNotificationKey = "0|com.example.bank|1|null|10")))
+        val received = p.items.value.filterIsInstance<ReceivedNotification>().single()
+        assertTrue(received.sourceDismissed)
+        val stored = store.loadAll().filterIsInstance<ReceivedNotification>().last()
+        assertTrue(stored.sourceDismissed)
+    }
+
+    /** 対象キーに一致する ReceivedNotification が無ければ dismiss コマンドは何も変更しない。 */
+    @Test
+    fun dismissCommandWithNoMatchingNotificationDoesNothing() = runTest {
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName,
+            commandExecutor = NoOpCommandExecutor(), now = { now },
+        )
+        p.handleEvent(eventFor(notification()))
+        p.handleEvent(eventFor(dismissCommand(targetNotificationKey = "0|com.example.other|9|null|10")))
+        val received = p.items.value.filterIsInstance<ReceivedNotification>().single()
+        assertFalse(received.sourceDismissed)
     }
 
     private fun filePayload(id: String = "f1", to: String = "*"): FilePayload = FilePayload(

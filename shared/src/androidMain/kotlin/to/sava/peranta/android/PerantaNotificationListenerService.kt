@@ -116,9 +116,28 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         val sbn = findActiveNotification(key)
         if (sbn == null) {
             log.w { "target notification not found key=$key" }
+            broadcastSourceDismissed(key)
             throw CommandExecutionException(notFoundMessage)
         }
         return sbn
+    }
+
+    /**
+     * アクション発火・返信の対象通知が既に消えていて実行できなかったとき、既読同期と同じ dismiss を
+     * 全端末へブロードキャストする（§3.4）。これにより受信側のタイムラインからもボタンが引っ込み、
+     * 同じ失敗を繰り返し踏めなくなる。送信は非同期（[scope]）で行い、呼び出し元のエラー処理は妨げない。
+     */
+    private fun broadcastSourceDismissed(key: String) {
+        val config = androidConfigRepository().load()
+        if (!config.sendEnabled || !config.isReadyForSend) return
+        val sendConfig = config.copy(deviceId = androidConfigRepository().ensureDeviceId())
+        scope.launch {
+            if (PerantaSend.sendDismissBroadcast(key, sendConfig)) {
+                log.i { "dismiss broadcast for missing action target key=$key" }
+            } else {
+                log.d { "dismiss broadcast not sent for key=$key" }
+            }
+        }
     }
 
     private fun actionAt(sbn: StatusBarNotification, index: Int): Notification.Action {

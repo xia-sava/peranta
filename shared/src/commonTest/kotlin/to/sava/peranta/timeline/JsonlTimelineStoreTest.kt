@@ -5,6 +5,7 @@ import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Priority
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class JsonlTimelineStoreTest {
@@ -13,10 +14,12 @@ class JsonlTimelineStoreTest {
         id: String,
         timestamp: Long,
         expiresAt: Long? = null,
+        sourceDismissed: Boolean = false,
     ): ReceivedNotification = ReceivedNotification(
         id = id,
         timestampEpochMillis = timestamp,
         expiresAtEpochMillis = expiresAt,
+        sourceDismissed = sourceDismissed,
         payload = NotificationPayload(
             id = id,
             from = "phone",
@@ -176,6 +179,29 @@ class JsonlTimelineStoreTest {
         val loaded = store.loadAll()
         assertEquals(1, loaded.size)
         assertEquals("good", loaded.first().id)
+    }
+
+    /** sourceDismissed=true（§3.4）の ReceivedNotification も append/loadAll で保持される。 */
+    @Test
+    fun sourceDismissedRoundTrips() = runTest {
+        val store = JsonlTimelineStore(FakeTimelineFile())
+        val item = received("a", 100, sourceDismissed = true)
+        store.append(item)
+        assertEquals(listOf<TimelineItem>(item), store.loadAll())
+    }
+
+    /** sourceDismissed（§3.4）を持たない旧バージョン由来の行も読め、sourceDismissed は false になる。 */
+    @Test
+    fun decodeLegacyLineWithoutSourceDismissedFallsBackToFalse() = runTest {
+        val json = """
+            {"type":"received","id":"legacy1","timestampEpochMillis":100,
+            "payload":{"type":"notification","id":"legacy1","from":"phone","to":"*","sentAtEpochMillis":100,
+            "packageName":"com.example","appName":"Example","title":"t","text":"b","notificationKey":"k",
+            "postedAtEpochMillis":100}}
+        """.trimIndent()
+        val store = JsonlTimelineStore(FakeTimelineFile(listOf(json)))
+        val loaded = store.loadAll().single() as ReceivedNotification
+        assertFalse(loaded.sourceDismissed)
     }
 
     /** append は既存内容を保ったまま追記する（上書きしない）。 */

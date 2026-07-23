@@ -184,7 +184,11 @@ class ReceivePipeline(
     /** command 種別ごとに必須フィールドを検証し、[executor] の対応メソッドへ委ねる。 */
     private suspend fun dispatchCommand(executor: CommandExecutor, payload: CommandPayload) {
         when (payload.command) {
-            CommandType.DISMISS -> executor.dismiss(requireKey(payload))
+            CommandType.DISMISS -> {
+                val key = requireKey(payload)
+                executor.dismiss(key)
+                markSourceDismissed(key)
+            }
 
             CommandType.INVOKE_ACTION ->
                 executor.invokeAction(requireKey(payload), requireActionIndex(payload))
@@ -196,6 +200,28 @@ class ReceivePipeline(
 
             CommandType.UNMUTE_APP -> executor.unmuteApp(requirePackageName(payload))
         }
+    }
+
+    /**
+     * [notificationKey] に対応する受信通知を「元通知は消えた」状態にマークし、伏せ字処理
+     * （[persistItemFor]）を通して再記録する（§3.4）。DISMISS コマンドの受信時のほか、
+     * 自端末での「消す」操作（プラットフォーム側の配線）からも呼ばれる。
+     * 対象が見つからない、または既にマーク済みなら何もしない。
+     */
+    suspend fun markSourceDismissed(notificationKey: String) {
+        val target = items.value.asSequence()
+            .filterIsInstance<ReceivedNotification>()
+            .firstOrNull { it.payload.notificationKeyOrNull() == notificationKey }
+            ?: return
+        if (target.sourceDismissed) return
+        val marked = target.copy(sourceDismissed = true)
+        record(displayItem = marked, persistItem = persistItemFor(marked, marked.payload))
+        log.i { "notification marked source-dismissed key=$notificationKey" }
+    }
+
+    private fun Payload.notificationKeyOrNull(): String? = when (this) {
+        is NotificationPayload -> notificationKey
+        else -> null
     }
 
     private fun requireKey(payload: CommandPayload): String =

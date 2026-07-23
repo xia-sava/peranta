@@ -237,6 +237,27 @@ class ReceiveRedactionTest {
         assertTrue(stored.attachments.isEmpty())
     }
 
+    /**
+     * 伏せ字保存 OFF（既定）のとき、markSourceDismissed による再記録（§3.4）も persistItemFor を
+     * 通り、永続側の OTP 本文は伏せ字のまま維持される。表示側は伏せ字前の本文を保つ。
+     */
+    @Test
+    fun markSourceDismissedKeepsRedactionInStore() = runTest {
+        val store = store()
+        val pipeline = pipeline(store, persistSensitive = false)
+
+        pipeline.handleEvent(eventFor(otp()))
+        pipeline.markSourceDismissed("0|com.example.bank|1|null|10")
+
+        val displayed = pipeline.items.value.single() as ReceivedNotification
+        assertTrue(displayed.sourceDismissed)
+        assertEquals("コードは 123456 です", textOf(displayed))
+
+        val stored = store.loadAll().filterIsInstance<ReceivedNotification>().last()
+        assertTrue(stored.sourceDismissed)
+        assertEquals(SENSITIVE_HISTORY_PLACEHOLDER, textOf(stored))
+    }
+
     /** loadHistory は失効済みエントリを表示から除外するが、剪定するまでストアには残す。 */
     @Test
     fun loadHistoryHidesExpiredButKeepsStored() = runTest {

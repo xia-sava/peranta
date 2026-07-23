@@ -85,6 +85,12 @@ const val TAG_TIMELINE_REPLY_SEND: String = "timeline-reply-send"
 /** 返信本文が上限バイト数を超えているときの警告表示のタグ。 */
 const val TAG_TIMELINE_REPLY_LIMIT_WARNING: String = "timeline-reply-limit-warning"
 
+/** 元通知が消えた受信アイテムに出す注記のタグ。 */
+const val TAG_TIMELINE_SOURCE_DISMISSED_NOTE: String = "timeline-source-dismissed-note"
+
+/** 元通知が消えた受信アイテムに出す注記（§10.1）。 */
+const val SOURCE_DISMISSED_NOTE: String = "元の通知は消えています"
+
 /** 返信本文が上限バイト数を超えているときに出す警告文言。 */
 private val REPLY_LIMIT_WARNING: String =
     "返信本文が上限 $MAX_REPLY_TEXT_BYTES バイトを超えています。超過分は切り詰めて送信されます"
@@ -279,6 +285,9 @@ private fun ReceivedBubble(item: ReceivedNotification, fullText: FullTextUi?) {
  * 操作可能な受信通知バブル。左右スワイプで消し、長押し/右クリックでコンテキストメニューを開く。
  * 通知に元アクションがあればボタンとして並べる。REPLY 分類のアクションは押すとインライン返信入力を
  * 開き、それ以外は押すと送信元へ invokeAction を返送する（§10.1）。
+ * 元通知が既に消えている（[ReceivedNotification.sourceDismissed]）アイテムはアクションボタン・
+ * 返信入力・コンテキストメニューのアクション項目を出さず、代わりに注記を表示する。
+ * スワイプ・「消す」（ローカル非表示）は引き続き行える。
  */
 @Composable
 private fun InteractiveReceivedBubble(
@@ -337,16 +346,20 @@ private fun InteractiveReceivedBubble(
             ) {
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     ReceivedContent(payload, fullText)
-                    ActionButtons(payload, onActionClick)
-                    replyingIndex?.let { index ->
-                        (payload as? NotificationPayload)?.let { notificationPayload ->
-                            ReplyInput(
-                                onSend = { text ->
-                                    actions.reply(notificationPayload, index, text)
-                                    replyingIndex = null
-                                },
-                                onCancel = { replyingIndex = null },
-                            )
+                    if (item.sourceDismissed) {
+                        SourceDismissedNote()
+                    } else {
+                        ActionButtons(payload, onActionClick)
+                        replyingIndex?.let { index ->
+                            (payload as? NotificationPayload)?.let { notificationPayload ->
+                                ReplyInput(
+                                    onSend = { text ->
+                                        actions.reply(notificationPayload, index, text)
+                                        replyingIndex = null
+                                    },
+                                    onCancel = { replyingIndex = null },
+                                )
+                            }
                         }
                     }
                     SpeakerTimeRow(speaker = payload.speakerName(), time = item.timestampEpochMillis)
@@ -359,9 +372,21 @@ private fun InteractiveReceivedBubble(
                 actions = actions,
                 onActionClick = onActionClick,
                 onDismissNotification = dismiss,
+                showActionItems = !item.sourceDismissed,
             )
         }
     }
+}
+
+/** 元通知が消えた受信アイテムに出す控えめな注記（§10.1）。 */
+@Composable
+private fun SourceDismissedNote() {
+    Text(
+        text = SOURCE_DISMISSED_NOTE,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.testTag(TAG_TIMELINE_SOURCE_DISMISSED_NOTE),
+    )
 }
 
 @Composable
@@ -419,6 +444,10 @@ private fun ReplyInput(onSend: (text: String) -> Unit, onCancel: () -> Unit) {
     }
 }
 
+/**
+ * 受信通知アイテムのコンテキストメニュー。[showActionItems] が false のとき（元通知が消えた
+ * アイテム、§10.1）はアクション項目を出さず、「消す」「このアプリからの通知を非表示」は常に出す。
+ */
 @Composable
 private fun ContextMenu(
     expanded: Boolean,
@@ -427,6 +456,7 @@ private fun ContextMenu(
     actions: TimelineActions,
     onActionClick: (index: Int) -> Unit,
     onDismissNotification: () -> Unit,
+    showActionItems: Boolean,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismissRequest) {
         if (payload is NotificationPayload) {
@@ -447,7 +477,7 @@ private fun ContextMenu(
             },
             modifier = Modifier.testTag(TAG_TIMELINE_MENU_DISMISS),
         )
-        if (payload is NotificationPayload) {
+        if (payload is NotificationPayload && showActionItems) {
             payload.actions.forEachIndexed { index, name ->
                 DropdownMenuItem(
                     text = { Text(actionLabel(payload, index, name)) },

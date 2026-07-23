@@ -69,8 +69,20 @@ class TimelineScreenTest {
         postedAtEpochMillis = 1000L,
     )
 
-    private fun items(payload: NotificationPayload = notification()): MutableStateFlow<List<TimelineItem>> =
-        MutableStateFlow(listOf(ReceivedNotification(id = payload.id, timestampEpochMillis = 1000L, payload = payload)))
+    private fun items(
+        payload: NotificationPayload = notification(),
+        sourceDismissed: Boolean = false,
+    ): MutableStateFlow<List<TimelineItem>> =
+        MutableStateFlow(
+            listOf(
+                ReceivedNotification(
+                    id = payload.id,
+                    timestampEpochMillis = 1000L,
+                    payload = payload,
+                    sourceDismissed = sourceDismissed,
+                ),
+            ),
+        )
 
     /** 並び順テスト用の通知アイテム。id/本文/時刻は index で一意にし、追記順（古い順）を再現する。 */
     private fun timelineNotification(index: Int) = NotificationPayload(
@@ -355,6 +367,64 @@ class TimelineScreenTest {
         onAllNodesWithTag("${TAG_TIMELINE_ACTION_PREFIX}0").assertCountEquals(0)
         onNodeWithTag(TAG_TIMELINE_RECEIVED).performMouseInput { rightClick() }
         onAllNodesWithTag(TAG_TIMELINE_MENU_DISMISS).assertCountEquals(1)
+    }
+
+    /** sourceDismissed のアイテムはアクションボタンを出さない（§10.1）。 */
+    @Test
+    fun sourceDismissedItemHidesActionButtons() = runComposeUiTest {
+        setContent {
+            TimelineScreen(items(sourceDismissed = true), actions = TimelineActions())
+        }
+        onAllNodesWithTag("${TAG_TIMELINE_ACTION_PREFIX}0").assertCountEquals(0)
+        onAllNodesWithTag("${TAG_TIMELINE_ACTION_PREFIX}1").assertCountEquals(0)
+    }
+
+    /** sourceDismissed のアイテムは本文の下に「元の通知は消えています」の注記を出す。 */
+    @Test
+    fun sourceDismissedItemShowsNote() = runComposeUiTest {
+        setContent {
+            TimelineScreen(items(sourceDismissed = true), actions = TimelineActions())
+        }
+        onNodeWithText(SOURCE_DISMISSED_NOTE).assertExists()
+    }
+
+    /** sourceDismissed でない通常のアイテムには注記が出ない。 */
+    @Test
+    fun nonSourceDismissedItemDoesNotShowNote() = runComposeUiTest {
+        setContent {
+            TimelineScreen(items(), actions = TimelineActions())
+        }
+        onNodeWithText(SOURCE_DISMISSED_NOTE).assertDoesNotExist()
+    }
+
+    /**
+     * sourceDismissed のアイテムはコンテキストメニューのアクション項目を出さないが、
+     * 「消す」「このアプリからの通知を非表示」は引き続き出す。
+     */
+    @Test
+    fun sourceDismissedItemHidesContextMenuActionItemsButKeepsDismissAndMute() = runComposeUiTest {
+        setContent {
+            TimelineScreen(items(sourceDismissed = true), actions = TimelineActions())
+        }
+        onNodeWithTag(TAG_TIMELINE_RECEIVED).performMouseInput { rightClick() }
+        onAllNodesWithTag("${TAG_TIMELINE_MENU_ACTION_PREFIX}0").assertCountEquals(0)
+        onAllNodesWithTag(TAG_TIMELINE_MENU_DISMISS).assertCountEquals(1)
+        onAllNodesWithTag(TAG_TIMELINE_MENU_MUTE).assertCountEquals(1)
+    }
+
+    /** sourceDismissed のアイテムでも左スワイプでの「消す」は引き続きできる。 */
+    @Test
+    fun sourceDismissedItemStillSwipeDismissable() = runComposeUiTest {
+        var dismissedId: String? = null
+        setContent {
+            TimelineScreen(
+                items(sourceDismissed = true),
+                actions = TimelineActions(dismiss = { dismissedId = it.payload.id }),
+            )
+        }
+        onNodeWithTag(TAG_TIMELINE_RECEIVED).performTouchInput { swipeLeft() }
+        assertEquals("n1", dismissedId)
+        onAllNodesWithTag(TAG_TIMELINE_RECEIVED).assertCountEquals(0)
     }
 
     private fun attachmentRef(fileName: String = "photo.jpg", sizeBytes: Long = 2048) = AttachmentRef(

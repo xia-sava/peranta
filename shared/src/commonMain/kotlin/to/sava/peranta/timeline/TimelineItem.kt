@@ -30,6 +30,8 @@ data class ReceivedNotification(
     override val timestampEpochMillis: Long,
     val payload: Payload,
     override val expiresAtEpochMillis: Long? = null,
+    /** 発出元の元通知が既に消えているか（dismiss コマンド受信でマーク、§3.4）。 */
+    val sourceDismissed: Boolean = false,
 ) : TimelineItem()
 
 /**

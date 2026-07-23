@@ -283,12 +283,23 @@ object PerantaReceive {
                     return@launch
                 }
                 commandSender(appContext)?.dismiss(notificationKey)
+                markSourceDismissed(notificationKey)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
                 log.w(error) { "failed to dismiss from timeline" }
             }
         }
+    }
+
+    /**
+     * 既読同期のブロードキャストが自端末を除外するため、自端末での「消す」操作は自分の
+     * タイムラインアイテムに sourceDismissed（§3.4）が反映されない穴がある。保持中のパイプラインへ
+     * 直接マークを依頼して埋める。パイプライン未生成（未 prime）なら何もしない。
+     */
+    private suspend fun markSourceDismissed(notificationKey: String) {
+        val current = mutex.withLock { pipeline } ?: return
+        current.markSourceDismissed(notificationKey)
     }
 
     private fun launchCommand(appContext: Context, block: suspend (CommandSender) -> Unit) {

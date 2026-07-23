@@ -280,7 +280,9 @@ class DesktopReceiver(
     }
 
     /**
-     * トーストの「消す」押下時に既読同期（§3.4）の dismiss を全端末へブロードキャストする。
+     * トーストの「消す」押下時に既読同期（§3.4）の dismiss を全端末へブロードキャストし、
+     * 自端末のタイムラインアイテムも sourceDismissed としてマークする（ブロードキャストは
+     * 自端末を除外するため、自分での操作は自分で反映する必要がある）。
      * SMS など notificationKey を持たない通知は取り下げ対象にならないためログのみとする。
      */
     private fun requestDismiss(payload: Payload) {
@@ -288,7 +290,10 @@ class DesktopReceiver(
             log.i { "dismiss ignored (no notification key) payload=${payload.id}" }
             return
         }
-        toastScope.launch { commandSender.dismiss(notificationKey) }
+        toastScope.launch {
+            commandSender.dismiss(notificationKey)
+            pipeline.markSourceDismissed(notificationKey)
+        }
     }
 
     /**
@@ -360,6 +365,7 @@ class DesktopReceiver(
                 return@launch
             }
             commandSender.dismiss(notificationKey)
+            pipeline.markSourceDismissed(notificationKey)
         }
     }
 
