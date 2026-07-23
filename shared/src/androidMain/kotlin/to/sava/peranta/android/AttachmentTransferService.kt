@@ -38,6 +38,7 @@ import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.send.buildFilePayloads
+import to.sava.peranta.shared.R
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import java.io.File
@@ -348,11 +349,14 @@ class AttachmentTransferService : Service() {
         }
     }
 
-    /** サービスの生存期間中だけ出す前面化用の通知（個々の転送はこれとは別の進捗通知で表す）。 */
+    /**
+     * サービスの生存期間中だけ出す前面化用の通知（個々の転送はこれとは別の進捗通知で表す）。
+     * アップロード・ダウンロードの両方を束ねるため、方向を持たないアプリアイコンを使う。
+     */
     private fun umbrellaNotification(): Notification =
         Notification.Builder(this, CHANNEL_ID)
             .setContentTitle(UMBRELLA_TITLE)
-            .setSmallIcon(android.R.drawable.stat_sys_upload)
+            .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()
