@@ -227,6 +227,18 @@ class TimelineScreenTest {
         onNodeWithText("xia-phone・${formatTimeOfDay(1000L)}").assertExists()
     }
 
+    /** URL を含むメッセージ本文はリンク化されても、テキスト全体はそのまま表示される。 */
+    @Test
+    fun messageWithUrlStillShowsFullText() = runComposeUiTest {
+        val text = "資料は https://example.com/doc です"
+        setContent {
+            TimelineScreen(
+                MutableStateFlow(listOf(ReceivedMessage(id = "m1", timestampEpochMillis = 1000L, payload = messagePayload().copy(text = text)))),
+            )
+        }
+        onNodeWithText(text).assertExists()
+    }
+
     /** 送信済みメッセージは右バブルで本文のみ表示し、生の deviceId ヘッダは出ない（§3.4）。 */
     @Test
     fun sentMessageShowsTextWithoutDeviceIdHeader() = runComposeUiTest {

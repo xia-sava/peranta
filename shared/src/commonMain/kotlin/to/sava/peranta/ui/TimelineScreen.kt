@@ -195,7 +195,7 @@ private fun MessageBubble(item: ReceivedMessage) {
         speaker = item.payload.speakerName(),
         time = item.timestampEpochMillis,
     ) {
-        Text(text = item.payload.text, style = MaterialTheme.typography.bodyMedium)
+        LinkifiedText(text = item.payload.text, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -215,7 +215,7 @@ private fun ReceivedFileBubble(item: ReceivedFile, attachments: AttachmentUi?) {
 @Composable
 private fun FilePayloadContent(payload: FilePayload, attachments: AttachmentUi?) {
     payload.caption?.let {
-        Text(text = it, style = MaterialTheme.typography.bodyMedium)
+        LinkifiedText(text = it, style = MaterialTheme.typography.bodyMedium)
     }
     payload.attachments.forEach { ref ->
         if (attachments == null) {
@@ -378,7 +378,7 @@ private fun ReceivedContent(payload: Payload, fullText: FullTextUi?) {
     if (fullText != null && textAttachment != null) {
         ExpandableText(preview = payload.displayText(), ref = textAttachment, fullText = fullText)
     } else {
-        Text(text = payload.displayText(), style = MaterialTheme.typography.bodyMedium)
+        LinkifiedText(text = payload.displayText(), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -400,13 +400,13 @@ private fun SentBubble(item: SentNotification) {
         if (payload is FilePayload) {
             FilePayloadContent(payload, attachments = null)
         } else if (payload is MessagePayload) {
-            Text(text = payload.text, style = MaterialTheme.typography.bodyMedium)
+            LinkifiedText(text = payload.text, style = MaterialTheme.typography.bodyMedium)
         } else {
             Text(text = payload.displayHeader(), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
             payload.displayTitle()?.let {
                 Text(text = it, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium)
             }
-            Text(text = payload.displayText(), style = MaterialTheme.typography.bodyMedium)
+            LinkifiedText(text = payload.displayText(), style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

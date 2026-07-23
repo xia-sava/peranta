@@ -1,7 +1,6 @@
 package to.sava.peranta.ui
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,7 +61,7 @@ internal fun ExpandableText(
             null
         }
     }
-    Text(
+    LinkifiedText(
         text = expanded ?: preview,
         style = MaterialTheme.typography.bodyMedium,
         modifier = modifier.testTag("$TAG_FULL_TEXT_PREFIX${ref.blobId}"),
