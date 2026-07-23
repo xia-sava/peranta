@@ -152,6 +152,7 @@ class DesktopReceiver(
     private val toastScope = CoroutineScope(toastJob + ioDispatcher)
     private val sendPipeline = SendPipeline(cipher, ntfy, feed)
     private val commandSender = CommandSender(config, cipher, ntfy, sendPipeline)
+    private val composer by lazy { DesktopComposer(config, httpClient, cipher, ntfy, sendPipeline, toastScope) }
     private val selfTestProbe = SelfTestProbe()
 
     private val attachmentCache = DesktopAttachmentCache(
@@ -330,13 +331,12 @@ class DesktopReceiver(
         },
     )
 
-    /** composer からの送信操作束を組む（§5.2）。送信設定が揃っていなければ null（composer 非表示）。 */
-    fun composerUi(): MessageComposerUi? {
-        if (!config.isReadyForSend) return null
-        return MessageComposerUi(send = { text ->
-            to.sava.peranta.send.sendMessage(config, cipher, ntfy, sendPipeline, text)
-        })
-    }
+    /**
+     * composer からの送信操作束を組む（§5.2・§13 M9d）。送信設定が揃っていなければ null（composer 非表示）。
+     * ファイル添付束は blob topic が設定されているときのみ付く。ステージ済みファイルは [composer] とともに
+     * 保持され、受信機の再生成（設定変更）で消える。
+     */
+    fun composerUi(): MessageComposerUi? = if (config.isReadyForSend) composer.ui() else null
 
     /** 参加端末一覧ドロップダウンの取得口を組む（§3.5）。control topic 未設定なら null。 */
     fun rosterUi(): RosterUi? {
