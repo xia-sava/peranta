@@ -58,6 +58,8 @@ class ReceivePipeline(
     private val log: Logger = Logger.withTag("Receive"),
     private val now: () -> Long = ::nowEpochMillis,
     private val onItemAppended: (TimelineItem) -> Unit = {},
+    /** Envelope 解釈の前に生メッセージを検査し、true なら破棄する（自己疎通テストのマーカー等）。 */
+    private val interceptRawMessage: (rawMessage: String) -> Boolean = { false },
 ) {
 
     /** 現在のタイムライン。UI はこれを購読する。 */
@@ -87,6 +89,11 @@ class ReceivePipeline(
     /** 1 件の受信イベントを処理する（テストからも直接呼ぶ）。 */
     suspend fun handleEvent(event: NtfyEvent) {
         log.i { "event received: id=${event.id} topic=${event.topic}" }
+
+        if (interceptRawMessage(event.message)) {
+            log.d { "event intercepted: id=${event.id}" }
+            return
+        }
 
         val envelope = try {
             decodeEnvelope(event.message)

@@ -285,4 +285,29 @@ class ReceivePipelineTest {
         p.start("my-topic")
         assertEquals(listOf("n1"), p.items.value.map { it.id })
     }
+
+    /** interceptRawMessage が true を返したイベントは、タイムライン項目もエラー項目も生まず破棄される。 */
+    @Test
+    fun interceptedRawMessageIsDiscardedWithoutTimelineItem() = runTest {
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName,
+            now = { now },
+            interceptRawMessage = { it == "peranta-selftest:abc" },
+        )
+        p.handleEvent(NtfyEvent("e", now, "t", "peranta-selftest:abc"))
+        assertTrue(p.items.value.isEmpty())
+    }
+
+    /** interceptRawMessage が false を返したイベントは従来どおり処理され、平文はエンベロープ解析エラーになる。 */
+    @Test
+    fun nonInterceptedRawMessageFallsBackToEnvelopeDecode() = runTest {
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName,
+            now = { now },
+            interceptRawMessage = { false },
+        )
+        p.handleEvent(NtfyEvent("e", now, "t", "peranta-selftest:abc"))
+        val error = p.items.value.single() as ErrorItem
+        assertEquals(ErrorKind.ENVELOPE_DECODE, error.kind)
+    }
 }

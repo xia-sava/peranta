@@ -32,6 +32,8 @@ import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
+import to.sava.peranta.net.SelfTestProbe
+import to.sava.peranta.net.SelfTestStatus
 import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.net.httpBaseUrl
 import to.sava.peranta.pairing.SettingsController
@@ -116,6 +118,15 @@ class DesktopSettings(
     fun reloadConfig(): PerantaConfig = enrichConfig(repository, devMode)
 }
 
+/** 稼働中の Desktop 受信機が公開する自己疎通テストの操作口（§10.5）。 */
+interface DesktopSelfTest {
+    /** プローブの現在状態。動作チェックの項目描画がこれを読む。 */
+    val selfTestStatus: StateFlow<SelfTestStatus>
+
+    /** テストを非同期で開始する（実行中は何もしない）。 */
+    fun startSelfTest()
+}
+
 /**
  * Desktop 受信の中核を組み立てる。設定が揃っている（[PerantaConfig.isReadyForReceive]）
  * 前提で生成すること。受信通知は Windows トーストにも表示する（[toaster]）。
@@ -127,7 +138,7 @@ class DesktopReceiver(
     private val toaster: Toaster = createDesktopToaster(),
     private val onToastClicked: () -> Unit = {},
     private val log: Logger = Logger.withTag("DesktopReceiver"),
-) {
+) : DesktopSelfTest {
     private val httpClient = createNtfyHttpClient()
     private val feed = TimelineFeed(JsonlTimelineStore(defaultTimelineFile()))
     private val cipher = MessageCipher(Base64.decode(config.sharedKeyBase64!!), config.keyId!!)
@@ -135,6 +146,7 @@ class DesktopReceiver(
     private val toastJob = SupervisorJob()
     private val toastScope = CoroutineScope(toastJob + ioDispatcher)
     private val commandSender = CommandSender(config, cipher, ntfy, SendPipeline(cipher, ntfy, feed))
+    private val selfTestProbe = SelfTestProbe()
 
     private val attachmentCache = DesktopAttachmentCache(
         transport = KtorBlobTransport(config, httpClient),
@@ -163,10 +175,17 @@ class DesktopReceiver(
         commandExecutor = dismissExecutor,
         persistSensitiveHistory = config.persistSensitiveHistory,
         onItemAppended = ::handleAppended,
+        interceptRawMessage = selfTestProbe::consumeMarker,
     )
 
     /** UI が購読するタイムライン。 */
     val items: StateFlow<List<TimelineItem>> = pipeline.items
+
+    override val selfTestStatus: StateFlow<SelfTestStatus> get() = selfTestProbe.status
+
+    override fun startSelfTest() {
+        toastScope.launch { selfTestProbe.run(ntfy, config.receiveTopic!!) }
+    }
 
     private fun currentItems(): List<TimelineItem> = pipeline.items.value
 
