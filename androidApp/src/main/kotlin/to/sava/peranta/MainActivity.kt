@@ -46,6 +46,7 @@ import to.sava.peranta.android.AndroidSetupProbe
 import to.sava.peranta.android.AndroidWizardSetupProvider
 import to.sava.peranta.android.AttachmentTransferService
 import to.sava.peranta.android.PerantaReceive
+import to.sava.peranta.android.PerantaSend
 import to.sava.peranta.android.PerantaUnifiedPush
 import to.sava.peranta.android.androidConfigRepository
 import to.sava.peranta.config.PerantaConfig
@@ -63,6 +64,8 @@ import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.DEFAULT_EMPTY_TIMELINE_MESSAGE
 import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.failingHealthCheckIds
+import to.sava.peranta.ui.MessageComposer
+import to.sava.peranta.ui.MessageComposerUi
 import to.sava.peranta.ui.PairingScanScreen
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.QrCodeCanvas
@@ -187,6 +190,13 @@ class MainActivity : ComponentActivity() {
             config.isReadyForUnifiedPushReceive || AndroidSetupProbe(this).unifiedPushRegistered()
         val sharedFiles = extractSharedFiles(intent)
         val rosterUi = PerantaReceive.rosterUi(this)
+        // composer は送信設定が揃っていれば端末の役割を問わず出す（deviceId は PerantaSend.sendMessage が
+        // 確定するため不問、§4.4）。満たさなければ null（非表示。設定導線は既存の警告バナー等が担う）。
+        val composerUi = if (config.isReadyForSend) {
+            MessageComposerUi(send = { text -> PerantaSend.sendMessage(this, text) })
+        } else {
+            null
+        }
 
         setContent {
             // シェル内の現在地。設定を離れる遷移でも再生成後に生存させるため rememberSaveable で保持する。
@@ -354,6 +364,7 @@ class MainActivity : ComponentActivity() {
                                             },
                                         )
                                     }
+                                    composerUi?.let { MessageComposer(it) }
                                 }
 
                                 ShellDestination.Settings -> SettingsScreen(

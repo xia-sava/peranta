@@ -185,6 +185,25 @@ object PerantaSend {
     }
 
     /**
+     * composer・テキスト共有からのメッセージ送信（§4.2）。設定不足・失敗は false（例外は漏らさない）。
+     */
+    suspend fun sendMessage(context: Context, text: String): Boolean {
+        val repo = androidConfigRepository(context.applicationContext)
+        val config = repo.load().copy(deviceId = repo.ensureDeviceId())
+        if (!config.isReadyForSend) return false
+        return try {
+            val cipher = perantaCipher(config)
+            val ntfy = KtorNtfyClient(config, httpClient)
+            to.sava.peranta.send.sendMessage(config, cipher, ntfy, SendPipeline(cipher = cipher, ntfy = ntfy, store = timelineFeed), text)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            log.w(error) { "message send setup failed" }
+            false
+        }
+    }
+
+    /**
      * 元通知が消えたときの既読同期（§3.4）として、dismiss を全端末へブロードキャストする。
      * [config] は deviceId を確定した状態で渡すこと（コマンドの from に使う）。
      * 送信できた topic があれば true。設定不足・失敗時は false を返し例外を漏らさない。

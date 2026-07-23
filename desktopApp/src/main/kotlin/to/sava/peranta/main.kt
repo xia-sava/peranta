@@ -49,6 +49,7 @@ import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.platform.platformCapabilities
 import to.sava.peranta.ui.AppFilterScreen
 import to.sava.peranta.ui.HealthCheckScreen
+import to.sava.peranta.ui.MessageComposer
 import to.sava.peranta.ui.PairingScanScreen
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.QrCodeCanvas
@@ -365,6 +366,7 @@ fun main(args: Array<String>) {
                                         else -> App()
                                     }
                                 }
+                                currentReceiver?.composerUi()?.let { MessageComposer(it, sendOnEnter = true) }
                             }
 
                             ShellDestination.Settings -> SettingsScreen(

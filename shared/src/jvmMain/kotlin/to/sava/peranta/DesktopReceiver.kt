@@ -63,6 +63,7 @@ import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.AttachmentDownloadState
 import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.FullTextUi
+import to.sava.peranta.ui.MessageComposerUi
 import to.sava.peranta.ui.TimelineActions
 import to.sava.peranta.ui.shell.RosterUi
 import java.awt.Desktop
@@ -149,7 +150,8 @@ class DesktopReceiver(
     private val ntfy = KtorNtfyClient(config, httpClient, Logger.withTag("NtfyClient"))
     private val toastJob = SupervisorJob()
     private val toastScope = CoroutineScope(toastJob + ioDispatcher)
-    private val commandSender = CommandSender(config, cipher, ntfy, SendPipeline(cipher, ntfy, feed))
+    private val sendPipeline = SendPipeline(cipher, ntfy, feed)
+    private val commandSender = CommandSender(config, cipher, ntfy, sendPipeline)
     private val selfTestProbe = SelfTestProbe()
 
     private val attachmentCache = DesktopAttachmentCache(
@@ -327,6 +329,14 @@ class DesktopReceiver(
             }
         },
     )
+
+    /** composer からの送信操作束を組む（§5.2）。送信設定が揃っていなければ null（composer 非表示）。 */
+    fun composerUi(): MessageComposerUi? {
+        if (!config.isReadyForSend) return null
+        return MessageComposerUi(send = { text ->
+            to.sava.peranta.send.sendMessage(config, cipher, ntfy, sendPipeline, text)
+        })
+    }
 
     /** 参加端末一覧ドロップダウンの取得口を組む（§3.5）。control topic 未設定なら null。 */
     fun rosterUi(): RosterUi? {
