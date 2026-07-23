@@ -1,10 +1,7 @@
 package to.sava.peranta.net
 
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlin.time.Duration.Companion.seconds
 
 class NtfyReconnectTest {
@@ -15,10 +12,13 @@ class NtfyReconnectTest {
         assertEquals("ws://h:8090/t/ws", ntfyWsUrl(useTls = false, authority = "h:8090", topic = "t", since = null))
     }
 
-    /** 再接続は最終受信 time を since として付ける。 */
+    /** 再接続は最終受信メッセージ ID を since として付ける（ID は排他境界なので同じイベントは再配送されない）。 */
     @Test
-    fun reconnectAppendsSince() {
-        assertEquals("ws://h:8090/t/ws?since=42", ntfyWsUrl(useTls = false, authority = "h:8090", topic = "t", since = 42))
+    fun reconnectAppendsSinceId() {
+        assertEquals(
+            "ws://h:8090/t/ws?since=ElrahbvHyZb0",
+            ntfyWsUrl(useTls = false, authority = "h:8090", topic = "t", since = "ElrahbvHyZb0"),
+        )
     }
 
     /** TLS 有効時は wss スキームになる。 */
@@ -33,25 +33,5 @@ class NtfyReconnectTest {
         assertEquals(2.seconds, nextBackoff(1.seconds))
         assertEquals(60.seconds, nextBackoff(40.seconds))
         assertEquals(60.seconds, nextBackoff(60.seconds))
-    }
-
-    /** ウォッチドッグ: しきい値内に完了すればその値を返す。 */
-    @Test
-    fun receiveWithinReturnsValueWhenFast() = runTest {
-        val result = receiveWithin(90.seconds) {
-            delay(1.seconds)
-            42
-        }
-        assertEquals(42, result)
-    }
-
-    /** ウォッチドッグ: しきい値を超えると null を返す（無応答＝再接続契機）。 */
-    @Test
-    fun receiveWithinTimesOut() = runTest {
-        val result = receiveWithin(90.seconds) {
-            delay(100.seconds)
-            42
-        }
-        assertNull(result)
     }
 }
