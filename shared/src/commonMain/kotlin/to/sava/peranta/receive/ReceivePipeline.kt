@@ -203,20 +203,23 @@ class ReceivePipeline(
     }
 
     /**
-     * [notificationKey] に対応する受信通知を「元通知は消えた」状態にマークし、伏せ字処理
-     * （[persistItemFor]）を通して再記録する（§3.4）。DISMISS コマンドの受信時のほか、
-     * 自端末での「消す」操作（プラットフォーム側の配線）からも呼ばれる。
-     * 対象が見つからない、または既にマーク済みなら何もしない。
+     * [notificationKey] に対応する受信通知（未マーク分すべて）を「元通知は消えた」状態にマークし、
+     * 伏せ字処理（[persistItemFor]）を通して再記録する（§3.4）。同一 key で複数回再投稿された
+     * 通知（Google Messages 等）がタイムラインに積まれていても、全件をマークする。
+     * DISMISS コマンドの受信時のほか、自端末での「消す」操作（プラットフォーム側の配線）からも呼ばれる。
+     * 対象が見つからない、または全件マーク済みなら何もしない。
      */
     suspend fun markSourceDismissed(notificationKey: String) {
-        val target = items.value.asSequence()
+        val targets = items.value.asSequence()
             .filterIsInstance<ReceivedNotification>()
-            .firstOrNull { it.payload.notificationKeyOrNull() == notificationKey }
-            ?: return
-        if (target.sourceDismissed) return
-        val marked = target.copy(sourceDismissed = true)
-        record(displayItem = marked, persistItem = persistItemFor(marked, marked.payload))
-        log.i { "notification marked source-dismissed key=$notificationKey" }
+            .filter { it.payload.notificationKeyOrNull() == notificationKey && !it.sourceDismissed }
+            .toList()
+        if (targets.isEmpty()) return
+        targets.forEach { target ->
+            val marked = target.copy(sourceDismissed = true)
+            record(displayItem = marked, persistItem = persistItemFor(marked, marked.payload))
+        }
+        log.i { "notification marked source-dismissed key=$notificationKey count=${targets.size}" }
     }
 
     private fun Payload.notificationKeyOrNull(): String? = when (this) {
@@ -361,13 +364,15 @@ class ReceivePipeline(
     }
 
     /**
-     * [persistItem] を永続化し、[displayItem] を表示（[items]・[onItemAppended]）へ流す。
+     * [persistItem] を永続化し、[displayItem] を表示（[items]）へ流す。
      * 受信通知では [persistItem] を伏せ字適用後に、[displayItem] を伏せ字前にすることで、
      * 表示は本文を保ちつつ永続だけを伏せる（§11）。エラー等は両者が同一でよい。
      * 永続失敗の握り潰しとログ化は [feed] の契約（[TimelineFeed.record]）に委ねる。
+     * [onItemAppended] は新規追記のときだけ呼ぶ。同一 id の置換（[markSourceDismissed] 等による
+     * 再記録）では呼ばないため、既存アイテムの再表示（トースト・ミラー通知の再発火）は起きない。
      */
     private suspend fun record(displayItem: TimelineItem, persistItem: TimelineItem = displayItem) {
-        feed.record(displayItem, persistItem)
-        onItemAppended(displayItem)
+        val appended = feed.record(displayItem, persistItem)
+        if (appended) onItemAppended(displayItem)
     }
 }

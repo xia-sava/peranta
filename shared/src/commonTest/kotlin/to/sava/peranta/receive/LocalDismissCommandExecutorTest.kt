@@ -38,6 +38,19 @@ class LocalDismissCommandExecutorTest {
         assertEquals(listOf("id-2"), dismissed)
     }
 
+    /**
+     * 同一 notificationKey の受信通知が複数あれば全件を取り下げる（Google Messages 等の再投稿）。
+     * 最古の 1 件だけが取り下げられる不具合の回帰。
+     */
+    @Test
+    fun dismissDismissesAllMatchingNotificationsSharingKey() = runTest {
+        val dismissed = mutableListOf<String>()
+        val items = listOf<TimelineItem>(received("0|k1", "id-1"), received("0|k1", "id-2"))
+        val executor = LocalDismissCommandExecutor(items = { items }, dismissLocal = { dismissed.add(it) })
+        executor.dismiss("0|k1")
+        assertEquals(listOf("id-1", "id-2"), dismissed)
+    }
+
     /** 対象が見つからない dismiss は非致命的に扱い、何も取り下げない。 */
     @Test
     fun dismissWithoutMatchIsNonFatal() = runTest {

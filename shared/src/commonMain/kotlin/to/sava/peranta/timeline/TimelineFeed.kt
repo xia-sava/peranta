@@ -30,8 +30,9 @@ class TimelineFeed(
     /**
      * 表示用と保存用を分けて追記する（受信の伏せ字系、§11）。
      * 永続失敗は握ってログに残し、表示は継続する。
+     * 戻り値は同一 id が既存だったか（[upsert] 参照）。新規追記なら true、既存の置換なら false。
      */
-    suspend fun record(displayItem: TimelineItem, persistItem: TimelineItem = displayItem) {
+    suspend fun record(displayItem: TimelineItem, persistItem: TimelineItem = displayItem): Boolean {
         try {
             store.append(persistItem)
         } catch (e: CancellationException) {
@@ -39,7 +40,7 @@ class TimelineFeed(
         } catch (e: Exception) {
             log.e { "failed to persist timeline item id=${displayItem.id} (${e::class.simpleName})" }
         }
-        upsert(displayItem)
+        return upsert(displayItem)
     }
 
     /**
@@ -68,11 +69,22 @@ class TimelineFeed(
      */
     override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) = store.prune(maxItems, now, maxAgeMillis)
 
-    /** 同一 id は置換、初出は末尾追記。[MutableStateFlow.update] の CAS で並行追記に対して安全。 */
-    private fun upsert(item: TimelineItem) {
+    /**
+     * 同一 id は置換、初出は末尾追記。[MutableStateFlow.update] の CAS で並行追記に対して安全。
+     * 戻り値は初出（末尾追記）なら true、既存の置換なら false。
+     */
+    private fun upsert(item: TimelineItem): Boolean {
+        var appended = false
         _items.update { current ->
             val index = current.indexOfFirst { it.id == item.id }
-            if (index < 0) current + item else current.toMutableList().also { it[index] = item }
+            if (index < 0) {
+                appended = true
+                current + item
+            } else {
+                appended = false
+                current.toMutableList().also { it[index] = item }
+            }
         }
+        return appended
     }
 }

@@ -5,6 +5,7 @@ import to.sava.peranta.model.NotificationPayload
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class TimelineFeedTest {
@@ -150,6 +151,28 @@ class TimelineFeedTest {
         feed.load(now = 1_000)
 
         assertEquals(listOf("old", "volatile"), feed.items.value.map { it.id })
+    }
+
+    /** record は新規追記なら true を返す。 */
+    @Test
+    fun recordReturnsTrueForNewItem() = runTest {
+        val feed = TimelineFeed(store())
+
+        val appended = feed.record(notification("n1", 100))
+
+        assertTrue(appended)
+    }
+
+    /** record は同一 id の置換なら false を返す。 */
+    @Test
+    fun recordReturnsFalseForReplacedItem() = runTest {
+        val feed = TimelineFeed(store())
+        feed.record(notification("n1", 100))
+
+        val appended = feed.record(notification("n1", 200))
+
+        assertFalse(appended)
+        assertEquals(200, feed.items.value.single().timestampEpochMillis)
     }
 
     /** record は永続失敗を握り、items への反映は継続する。 */

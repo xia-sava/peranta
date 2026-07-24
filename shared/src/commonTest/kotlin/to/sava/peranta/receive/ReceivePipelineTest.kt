@@ -215,6 +215,43 @@ class ReceivePipelineTest {
         assertFalse(received.sourceDismissed)
     }
 
+    /**
+     * 同一 notificationKey で複数回再投稿された通知（Google Messages 等）は、DISMISS コマンドで
+     * 全件が sourceDismissed=true になる。最古の 1 件だけがマークされる不具合の回帰。
+     */
+    @Test
+    fun dismissCommandMarksAllNotificationsSharingKey() = runTest {
+        val store = store()
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store), deviceName,
+            commandExecutor = NoOpCommandExecutor(), now = { now },
+        )
+        p.handleEvent(eventFor(notification().copy(id = "n1")))
+        p.handleEvent(eventFor(notification().copy(id = "n2")))
+        p.handleEvent(eventFor(dismissCommand(targetNotificationKey = "0|com.example.bank|1|null|10")))
+        val received = p.items.value.filterIsInstance<ReceivedNotification>()
+        assertEquals(2, received.size)
+        assertTrue(received.all { it.sourceDismissed })
+    }
+
+    /**
+     * markSourceDismissed による再記録（既存アイテムの置換）は onItemAppended を再発火しない。
+     * 受信側のトースト/ミラー通知が消えた直後に再表示される不具合の回帰。
+     */
+    @Test
+    fun dismissCommandDoesNotRefireOnItemAppended() = runTest {
+        val seen = mutableListOf<TimelineItem>()
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName,
+            commandExecutor = NoOpCommandExecutor(), now = { now },
+            onItemAppended = { seen.add(it) },
+        )
+        p.handleEvent(eventFor(notification()))
+        p.handleEvent(eventFor(dismissCommand(targetNotificationKey = "0|com.example.bank|1|null|10")))
+        assertEquals(1, seen.size)
+        assertTrue(seen.single() is ReceivedNotification)
+    }
+
     private fun filePayload(id: String = "f1", to: String = "*"): FilePayload = FilePayload(
         id = id,
         from = "phone",
