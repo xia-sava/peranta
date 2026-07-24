@@ -32,6 +32,8 @@ fun App(
     fullTextUi: FullTextUi? = null,
     lazyScrollbarContent: @Composable BoxScope.(listState: LazyListState) -> Unit = {},
     emptyStateMessage: String = DEFAULT_EMPTY_TIMELINE_MESSAGE,
+    scrollToItemId: String? = null,
+    onScrollToItemHandled: () -> Unit = {},
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         TimelineScreen(
@@ -41,6 +43,8 @@ fun App(
             fullText = fullTextUi,
             lazyScrollbarContent = lazyScrollbarContent,
             emptyStateMessage = emptyStateMessage,
+            scrollToItemId = scrollToItemId,
+            onScrollToItemHandled = onScrollToItemHandled,
         )
     }
 }

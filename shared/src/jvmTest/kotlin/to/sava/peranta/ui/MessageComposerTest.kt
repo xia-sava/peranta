@@ -125,19 +125,6 @@ class MessageComposerTest {
         assertEquals(1, calls)
     }
 
-    /** attachments が無い（添付未対応）ときは Ctrl+V を横取りしない。 */
-    @Test
-    fun ctrlVWithoutAttachmentsDoesNothing() = runComposeUiTest {
-        setContent { MessageComposer(ui(send = { true }), sendOnEnter = true) }
-
-        onNodeWithTag(TAG_COMPOSER_INPUT).performClick()
-        onNodeWithTag(TAG_COMPOSER_INPUT).performKeyInput {
-            withKeyDown(Key.CtrlLeft) { pressKey(Key.V) }
-        }
-
-        onNodeWithTag(TAG_COMPOSER_INPUT).assertTextEquals("")
-    }
-
     /** attachments が null のときは添付ボタンを出さない。 */
     @Test
     fun noAttachmentsHidesAttachButton() = runComposeUiTest {

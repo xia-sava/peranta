@@ -197,6 +197,13 @@ fun main(args: Array<String>) {
         showWindowRequest.get().invoke()
         mainWindow.get()?.let(::bringWindowToFront)
     }
+    // トースト本体クリックでウィンドウを前面化したうえ、タイムラインの元アイテムまでスクロールする
+    // 要求を橋渡しする（トースト経由の呼び出しは Compose 外のスレッドから起きるため）。
+    val scrollToItemRequest = AtomicReference<(itemId: String) -> Unit>({})
+    val bringToFrontAndScrollToItem: (itemId: String) -> Unit = { itemId ->
+        bringToFront()
+        scrollToItemRequest.get().invoke(itemId)
+    }
     val updater = DesktopUpdater(desktopSettings.config, DesktopVersion.versionCode)
 
     application {
@@ -255,6 +262,11 @@ fun main(args: Array<String>) {
         // トースト経由など Compose 外からの「ウィンドウを出す」要求を可視状態へ橋渡しする。
         LaunchedEffect(Unit) { showWindowRequest.set { windowVisible = true } }
 
+        // トースト本体クリックで届いたスクロール先アイテム id。タイムライン表示中に消費されると null に戻り、
+        // 同じアイテムを続けてクリックしてもスクロールし直せる。
+        var pendingScrollItemId by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(Unit) { scrollToItemRequest.set { itemId -> pendingScrollItemId = itemId } }
+
         // 最小化はタスクバーでなくトレイへ格納する。復帰時に備えて最小化フラグは戻しておく。
         LaunchedEffect(Unit) {
             snapshotFlow { windowState.isMinimized }.collectLatest { minimized ->
@@ -290,7 +302,7 @@ fun main(args: Array<String>) {
                             DesktopReceiver(
                                 freshConfig,
                                 repository = desktopSettings.repository,
-                                onToastClicked = bringToFront,
+                                onToastClicked = bringToFrontAndScrollToItem,
                             )
                         }
                     }
@@ -362,6 +374,8 @@ fun main(args: Array<String>) {
                                             attachmentUi = currentReceiver.attachmentUi(),
                                             fullTextUi = currentReceiver.fullTextUi(),
                                             lazyScrollbarContent = { listState -> DesktopScrollbar(listState) },
+                                            scrollToItemId = pendingScrollItemId,
+                                            onScrollToItemHandled = { pendingScrollItemId = null },
                                         )
                                         else -> App()
                                     }

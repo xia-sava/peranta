@@ -668,6 +668,63 @@ class TimelineScreenTest {
         assertEquals(offsetBefore, listState.firstVisibleItemScrollOffset)
     }
 
+    /** scrollToItemId を渡すと、初期表示位置（最下部）から離れた対象アイテムまでスクロールする。 */
+    @Test
+    fun scrollToItemIdScrollsToTargetItem() = runComposeUiTest {
+        val listState = LazyListState()
+        val flow = MutableStateFlow(chronologicalItems(TEST_ITEM_COUNT))
+        setContent {
+            TimelineScreen(
+                items = flow,
+                listState = listState,
+                modifier = Modifier.size(width = LIST_TEST_WIDTH, height = LIST_TEST_HEIGHT),
+                scrollToItemId = "n1",
+            )
+        }
+        waitForIdle()
+
+        onNodeWithText("item-1").assertExists()
+    }
+
+    /** スクロール消費後は onScrollToItemHandled が呼ばれ、対象アイテム id が消費されたことを通知する。 */
+    @Test
+    fun scrollToItemIdInvokesHandledCallbackAfterConsuming() = runComposeUiTest {
+        val flow = MutableStateFlow(chronologicalItems(TEST_ITEM_COUNT))
+        var handledCount = 0
+        setContent {
+            TimelineScreen(
+                items = flow,
+                modifier = Modifier.size(width = LIST_TEST_WIDTH, height = LIST_TEST_HEIGHT),
+                scrollToItemId = "n1",
+                onScrollToItemHandled = { handledCount++ },
+            )
+        }
+        waitForIdle()
+
+        assertEquals(1, handledCount)
+    }
+
+    /** 対象アイテムが表示リストに無いとき（剪定済み等）はスクロールせず、消費のみ通知する。 */
+    @Test
+    fun scrollToItemIdNotFoundKeepsBottomPositionButStillHandled() = runComposeUiTest {
+        val listState = LazyListState()
+        val flow = MutableStateFlow(chronologicalItems(TEST_ITEM_COUNT))
+        var handled = false
+        setContent {
+            TimelineScreen(
+                items = flow,
+                listState = listState,
+                modifier = Modifier.size(width = LIST_TEST_WIDTH, height = LIST_TEST_HEIGHT),
+                scrollToItemId = "not-in-timeline",
+                onScrollToItemHandled = { handled = true },
+            )
+        }
+        waitForIdle()
+
+        assertTrue(handled)
+        onNodeWithText("item-$TEST_ITEM_COUNT").assertExists()
+    }
+
     /** スクロールバースロットには LazyColumn と同一の listState が渡され、注入した内容が描画される。 */
     @Test
     fun lazyScrollbarContentSlotIsInvokedWithListState() = runComposeUiTest {

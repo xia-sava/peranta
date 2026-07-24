@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import to.sava.peranta.model.ActionExecutionKind
 import to.sava.peranta.model.MessagePayload
@@ -122,12 +123,22 @@ class TimelineActions(
 )
 
 /**
+ * 表示中の並び [visible] から id が [targetId] のアイテムの index を返す。見つからなければ null
+ * （剪定済み・ローカル非表示等、§10.1）。
+ */
+fun timelineScrollTargetIndex(visible: List<TimelineItem>, targetId: String): Int? =
+    visible.indexOfFirst { it.id == targetId }.takeIf { it >= 0 }
+
+/**
  * チャット風タイムライン（§10.1）。受信通知は左寄せ、エラー・送信通知は右寄せに並べる。
  * [actions] が渡されると受信通知にアクションボタン・スワイプで消す・長押し/右クリックメニューを付ける。
  * 「消す」はブロードキャスト送信と同時に、往復を待たず自端末の表示から即座に取り下げる。
  * 並び順は時系列順（古い→新しい、上→下）で最新が最下部。起動時は最下部へジャンプし、
  * 最下部表示中の新着だけ追従する（§10.1）。[listState] を呼び出し側から注入でき、
  * [lazyScrollbarContent] スロットで Desktop 用スクロールバー等を注入できる（`AppFilterScreen` と同型）。
+ * [scrollToItemId] が非 null になると、対象アイテムまでアニメーション付きでスクロールし、
+ * 見つかった/見つからなかったに関わらず [onScrollToItemHandled] を呼んで消費を通知する
+ * （対象が表示リストに無ければスクロールせず消費のみ通知する）。最下部追従ロジックとは独立して動く。
  */
 @Composable
 fun TimelineScreen(
@@ -139,6 +150,8 @@ fun TimelineScreen(
     listState: LazyListState = rememberLazyListState(),
     lazyScrollbarContent: @Composable BoxScope.(listState: LazyListState) -> Unit = {},
     emptyStateMessage: String = DEFAULT_EMPTY_TIMELINE_MESSAGE,
+    scrollToItemId: String? = null,
+    onScrollToItemHandled: () -> Unit = {},
 ) {
     val list by items.collectAsState()
     val locallyDismissed = remember { mutableStateListOf<String>() }
@@ -166,6 +179,19 @@ fun TimelineScreen(
                     followJob = launch { listState.animateScrollToItem(lastIndex) }
                 }
             }
+    }
+
+    // トーストクリック等、外部からの一度きりのジャンプ要求。上の追従ロジックとは別のジョブで動くため、
+    // 追従状態（initialScrollDone・followJob）には触れない。初期表示の最下部ジャンプと競合しないよう、
+    // それが済むまで待ってから動く。
+    val onScrollToItemHandledState by rememberUpdatedState(onScrollToItemHandled)
+    LaunchedEffect(scrollToItemId) {
+        val targetId = scrollToItemId ?: return@LaunchedEffect
+        // 表示アイテムが無いまま（＝最下部ジャンプが起こらないまま）のときも待ち続けないよう、
+        // 空リストなら待たずに進む。
+        snapshotFlow { initialScrollDone || currentVisible.isEmpty() }.first { it }
+        timelineScrollTargetIndex(currentVisible, targetId)?.let { index -> listState.animateScrollToItem(index) }
+        onScrollToItemHandledState()
     }
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {

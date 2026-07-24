@@ -142,7 +142,7 @@ class DesktopReceiver(
     val config: PerantaConfig,
     private val repository: ConfigRepository,
     private val toaster: Toaster = createDesktopToaster(),
-    private val onToastClicked: () -> Unit = {},
+    private val onToastClicked: (itemId: String) -> Unit = {},
     private val log: Logger = Logger.withTag("DesktopReceiver"),
 ) : DesktopSelfTest {
     private val httpClient = createNtfyHttpClient()
@@ -270,7 +270,7 @@ class DesktopReceiver(
             ToastResult.ButtonOpen -> content.openUrl?.let { openUrlInBrowser(it) }
             ToastResult.Clicked -> {
                 log.i { "toast clicked id=${item.id}" }
-                onToastClicked()
+                onToastClicked(item.id)
             }
 
             else -> Unit
