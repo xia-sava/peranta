@@ -725,6 +725,36 @@ class TimelineScreenTest {
         onNodeWithText("item-$TEST_ITEM_COUNT").assertExists()
     }
 
+    /**
+     * scrollToItemId による一回きりのジャンプで最下部から離れた直後に新着が来ても、表示位置は
+     * 動かず追従しない（§10.1）。
+     */
+    @Test
+    fun doesNotFollowAfterScrollToItemIdJumpEvenWhenNewItemArrives() = runComposeUiTest {
+        val listState = LazyListState()
+        val flow = MutableStateFlow(chronologicalItems(TEST_ITEM_COUNT))
+        var scrollToItemId by mutableStateOf<String?>(null)
+        setContent {
+            TimelineScreen(
+                items = flow,
+                listState = listState,
+                modifier = Modifier.size(width = LIST_TEST_WIDTH, height = LIST_TEST_HEIGHT),
+                scrollToItemId = scrollToItemId,
+                onScrollToItemHandled = { scrollToItemId = null },
+            )
+        }
+        waitForIdle()
+
+        scrollToItemId = "n1"
+        waitForIdle()
+        onNodeWithText("item-1").assertExists()
+
+        flow.value = flow.value + receivedItem(TEST_ITEM_COUNT + 1)
+        waitForIdle()
+
+        onNodeWithText("item-${TEST_ITEM_COUNT + 1}").assertDoesNotExist()
+    }
+
     /** スクロールバースロットには LazyColumn と同一の listState が渡され、注入した内容が描画される。 */
     @Test
     fun lazyScrollbarContentSlotIsInvokedWithListState() = runComposeUiTest {

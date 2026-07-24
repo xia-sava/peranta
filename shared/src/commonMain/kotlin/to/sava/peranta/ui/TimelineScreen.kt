@@ -157,32 +157,44 @@ fun TimelineScreen(
     val locallyDismissed = remember { mutableStateListOf<String>() }
     val visible = list.filterNot { it.id in locallyDismissed }
 
-    // 起動時は最下部（最新）へアニメーション無しでジャンプし、以降は末尾アイテムが変わるたびに
-    // 追従するかどうかを決める（§10.1）。追従アニメーション中に次の新着が来た場合は、その時点の
-    // 表示位置（アニメーション未達のため一時的に末尾ではない）で判定せず、進行中の追従を継続して
-    // 最新の末尾へ追い直す。追従アニメーションが動いていないときだけ、下方向にこれ以上スクロール
-    // できない＝末尾まで到達していたかで新規に追従するかを判定する。最新アイテムが画面内に見えて
-    // いても、少しでも上へスクロールしていれば追従しない。
+    // 起動時は最下部（最新）へアニメーション無しでジャンプする。以降は、末尾アイテムの itemCount が
+    // 変わっていない間のスクロール／レイアウト変化を常時観測して「最下部にいるか」を wasAtBottom
+    // として記録し続け、新着（末尾アイテムの id が変わる）が来たら、その新着が反映される直前に
+    // 記録していた wasAtBottom で追従するかどうかを決める。追従アニメーション中にさらに新着が来た
+    // 場合は、wasAtBottom によらず進行中の追従を継続して最新の末尾へ追い直す。
     var initialScrollDone by remember { mutableStateOf(false) }
     val currentVisible by rememberUpdatedState(visible)
+    var wasAtBottom by remember { mutableStateOf(true) }
+    var trackedItemCount by remember { mutableStateOf(-1) }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.layoutInfo }
+            .collect {
+                if (currentVisible.size == trackedItemCount) {
+                    wasAtBottom = !listState.canScrollForward
+                }
+            }
+    }
     LaunchedEffect(listState) {
         var followJob: Job? = null
         snapshotFlow { currentVisible.lastOrNull()?.id }
             .collect {
-                val lastIndex = currentVisible.lastIndex
+                val visibleNow = currentVisible
+                val lastIndex = visibleNow.lastIndex
                 if (lastIndex < 0) return@collect
                 if (!initialScrollDone) {
                     listState.scrollToItem(lastIndex)
                     initialScrollDone = true
-                } else if (followJob?.isActive == true || !listState.canScrollForward) {
+                } else if (followJob?.isActive == true || wasAtBottom) {
                     followJob?.cancel()
                     followJob = launch { listState.animateScrollToItem(lastIndex) }
                 }
+                trackedItemCount = visibleNow.size
             }
     }
 
     // トーストクリック等、外部からの一度きりのジャンプ要求。上の追従ロジックとは別のジョブで動くため、
-    // 追従状態（initialScrollDone・followJob）には触れない。初期表示の最下部ジャンプと競合しないよう、
+    // 追従状態（initialScrollDone・followJob）には触れないが、ジャンプ後の実際の位置は wasAtBottom へ
+    // 反映し、直後の新着に対する追従可否判定へ引き継ぐ。初期表示の最下部ジャンプと競合しないよう、
     // それが済むまで待ってから動く。
     val onScrollToItemHandledState by rememberUpdatedState(onScrollToItemHandled)
     LaunchedEffect(scrollToItemId) {
@@ -190,7 +202,10 @@ fun TimelineScreen(
         // 表示アイテムが無いまま（＝最下部ジャンプが起こらないまま）のときも待ち続けないよう、
         // 空リストなら待たずに進む。
         snapshotFlow { initialScrollDone || currentVisible.isEmpty() }.first { it }
-        timelineScrollTargetIndex(currentVisible, targetId)?.let { index -> listState.animateScrollToItem(index) }
+        timelineScrollTargetIndex(currentVisible, targetId)?.let { index ->
+            listState.animateScrollToItem(index)
+            wasAtBottom = !listState.canScrollForward
+        }
         onScrollToItemHandledState()
     }
 
