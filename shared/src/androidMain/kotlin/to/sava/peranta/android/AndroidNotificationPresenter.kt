@@ -83,7 +83,7 @@ class AndroidNotificationPresenter(
             .setStyle(Notification.BigTextStyle().bigText(display.body))
             .setSmallIcon(R.drawable.ic_notification)
             .setAutoCancel(true)
-            .applyContentIntent()
+            .applyContentIntent(notificationId, display.id)
             .applyExpiry(display)
             .applyOpenUrlAction(display)
             .build()
@@ -103,27 +103,36 @@ class AndroidNotificationPresenter(
 
     /** 受信・復号エラーをローカル通知でも知らせる（§10.1）。 */
     fun showError(item: ErrorItem) {
+        val notificationId = idAllocator.idFor(item.id)
         val notification = Notification.Builder(context, CHANNEL_ERROR)
             .setContentTitle(ERROR_TITLE)
             .setContentText(item.message)
             .setStyle(Notification.BigTextStyle().bigText(item.message))
             .setSmallIcon(R.drawable.ic_notification)
             .setAutoCancel(true)
-            .applyContentIntent()
+            .applyContentIntent(notificationId, item.id)
             .build()
-        notify(idAllocator.idFor(item.id), notification)
+        notify(notificationId, notification)
     }
 
-    /** タップでアプリ本体を開く PendingIntent を付ける。起動 Intent を引けない場合は付けない。 */
-    private fun Notification.Builder.applyContentIntent(): Notification.Builder {
+    /**
+     * タップでアプリ本体を開き、タイムラインの [itemId] アイテムまでスクロールさせる PendingIntent を
+     * 付ける（§3.2）。起動 Intent を引けない場合は付けない。
+     * [requestCode] には通知ごとに異なる値（[NotificationIdAllocator.idFor] が払い出す通知 ID）を渡す。
+     * 起動 Intent は action / category が全通知で共通のため、requestCode を固定すると extra（[itemId]）
+     * だけが異なる PendingIntent が [PendingIntent.filterEquals] 上同一視され、後着の表示が先着の
+     * PendingIntent を上書きして両者とも最後にタップされた通知の extra でしか開かなくなる。
+     */
+    private fun Notification.Builder.applyContentIntent(requestCode: Int, itemId: String): Notification.Builder {
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?: run {
                 log.w { "launch intent not found; notification tap will do nothing" }
                 return this
             }
+        intent.putExtra(EXTRA_SCROLL_ITEM_ID, itemId)
         val pendingIntent = PendingIntent.getActivity(
             context,
-            0,
+            requestCode,
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )

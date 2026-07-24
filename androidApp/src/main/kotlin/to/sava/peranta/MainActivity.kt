@@ -45,10 +45,12 @@ import to.sava.peranta.android.AndroidReceiveSetupProvider
 import to.sava.peranta.android.AndroidSetupProbe
 import to.sava.peranta.android.AndroidWizardSetupProvider
 import to.sava.peranta.android.AttachmentTransferService
+import to.sava.peranta.android.EXTRA_SCROLL_ITEM_ID
 import to.sava.peranta.android.PerantaReceive
 import to.sava.peranta.android.PerantaSend
 import to.sava.peranta.android.PerantaUnifiedPush
 import to.sava.peranta.android.androidConfigRepository
+import to.sava.peranta.android.normalizeScrollItemId
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.platform.ioDispatcher
@@ -122,6 +124,12 @@ class MainActivity : ComponentActivity() {
     /** スキャン結果の受け取り先。スキャン開始のたびに差し替える（キャンセル時は null が渡る）。 */
     private var pendingScanResult: ((String?) -> Unit)? = null
 
+    /**
+     * ミラー通知タップで渡された、タイムラインの対象アイテム id（§3.2）。タイムライン表示時に
+     * 一度だけ消費され、消費後は null に戻る（Desktop の pendingScrollItemId と同型）。
+     */
+    private var pendingScrollItemId by mutableStateOf<String?>(null)
+
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (!granted) reportNotificationsDenied()
@@ -158,6 +166,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        pendingScrollItemId = consumeScrollItemId(intent)
 
         val config = androidConfigRepository().load()
         val updater = AndroidUpdater(this, config, currentVersionCode()).also { this.updater = it }
@@ -385,6 +394,8 @@ class MainActivity : ComponentActivity() {
                                             } else {
                                                 RECEIVE_NOT_READY_MESSAGE
                                             },
+                                            scrollToItemId = pendingScrollItemId,
+                                            onScrollToItemHandled = { pendingScrollItemId = null },
                                         )
                                     }
                                     composerUi?.let { MessageComposer(it) }
@@ -462,6 +473,28 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * ミラー通知タップで既存インスタンスが再利用されたとき（launchMode="singleTop"）に届く Intent
+     * を受け取る。以後の [intent] 参照が最新の値を返すよう保持し直したうえで、対象アイテム id が
+     * 載っていればタイムラインへのスクロール要求として反映する（§3.2）。載っていなければ、
+     * 消費済みでない既存のスクロール要求をそのまま保つ。
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeScrollItemId(intent)?.let { pendingScrollItemId = it }
+    }
+
+    /**
+     * Intent からミラー通知タップの対象アイテム id を取り出す。以後の Activity 再生成（[recreate]）で
+     * 同じ Intent から再度消費してしまわないよう、読み取った extra は Intent から取り除く（§3.2）。
+     */
+    private fun consumeScrollItemId(source: Intent?): String? {
+        val itemId = normalizeScrollItemId(source?.getStringExtra(EXTRA_SCROLL_ITEM_ID))
+        source?.removeExtra(EXTRA_SCROLL_ITEM_ID)
+        return itemId
     }
 
     /** 共有シート（ACTION_SEND / ACTION_SEND_MULTIPLE）で渡されたファイル Uri を取り出す。単数/複数の両方に対応する。 */
