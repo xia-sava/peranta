@@ -607,6 +607,34 @@ class TimelineScreenTest {
     }
 
     /**
+     * 最下部表示中に新着が短時間に連続で来て、前の新着への追従アニメーションが終わらないうちに
+     * 次の新着が続いても、最終的に最新アイテムまで追従できる（§10.1）。
+     */
+    @Test
+    fun followsLatestItemWhenNewItemsArriveInRapidSuccession() = runComposeUiTest {
+        val listState = LazyListState()
+        val flow = MutableStateFlow(chronologicalItems(TEST_ITEM_COUNT))
+        setContent {
+            TimelineScreen(
+                items = flow,
+                listState = listState,
+                modifier = Modifier.size(width = LIST_TEST_WIDTH, height = LIST_TEST_HEIGHT),
+            )
+        }
+        waitForIdle()
+
+        mainClock.autoAdvance = false
+        repeat(RAPID_ARRIVAL_COUNT) { offset ->
+            flow.value = flow.value + receivedItem(TEST_ITEM_COUNT + 1 + offset)
+            mainClock.advanceTimeByFrame()
+        }
+        mainClock.autoAdvance = true
+        waitForIdle()
+
+        onNodeWithText("item-${TEST_ITEM_COUNT + RAPID_ARRIVAL_COUNT}").assertExists()
+    }
+
+    /**
      * 最新アイテムが画面内に見えていても、末尾までスクロールしきっていなければ新着に追従しない
      * （追従の基準は「下方向にこれ以上スクロールできない」こと。§10.1）。
      */
@@ -665,6 +693,7 @@ class TimelineScreenTest {
         const val READING_POSITION_INDEX = 10
         val LIST_TEST_WIDTH = 300.dp
         val LIST_TEST_HEIGHT = 200.dp
+        const val RAPID_ARRIVAL_COUNT = 6
         const val SCROLLBAR_SLOT_TAG = "scrollbar-slot"
     }
 }

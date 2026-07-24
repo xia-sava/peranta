@@ -39,7 +39,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import to.sava.peranta.model.ActionExecutionKind
 import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
@@ -143,10 +145,15 @@ fun TimelineScreen(
     val visible = list.filterNot { it.id in locallyDismissed }
 
     // 起動時は最下部（最新）へアニメーション無しでジャンプし、以降は末尾アイテムが変わるたびに
-    // 「追加直前に最下部を表示していたか」を判定して追従するかどうかを決める（§10.1）。
+    // 追従するかどうかを決める（§10.1）。追従アニメーション中に次の新着が来た場合は、その時点の
+    // 表示位置（アニメーション未達のため一時的に末尾ではない）で判定せず、進行中の追従を継続して
+    // 最新の末尾へ追い直す。追従アニメーションが動いていないときだけ、下方向にこれ以上スクロール
+    // できない＝末尾まで到達していたかで新規に追従するかを判定する。最新アイテムが画面内に見えて
+    // いても、少しでも上へスクロールしていれば追従しない。
     var initialScrollDone by remember { mutableStateOf(false) }
     val currentVisible by rememberUpdatedState(visible)
     LaunchedEffect(listState) {
+        var followJob: Job? = null
         snapshotFlow { currentVisible.lastOrNull()?.id }
             .collect {
                 val lastIndex = currentVisible.lastIndex
@@ -154,13 +161,9 @@ fun TimelineScreen(
                 if (!initialScrollDone) {
                     listState.scrollToItem(lastIndex)
                     initialScrollDone = true
-                } else {
-                    // この時点のレイアウトはまだ今回の追加前を反映しているため、「下方向にこれ以上
-                    // スクロールできない＝末尾まで到達していた」ときだけ追従する。最新アイテムが
-                    // 画面内に見えていても、少しでも上へスクロールしていれば追従しない。
-                    if (!listState.canScrollForward) {
-                        listState.animateScrollToItem(lastIndex)
-                    }
+                } else if (followJob?.isActive == true || !listState.canScrollForward) {
+                    followJob?.cancel()
+                    followJob = launch { listState.animateScrollToItem(lastIndex) }
                 }
             }
     }
