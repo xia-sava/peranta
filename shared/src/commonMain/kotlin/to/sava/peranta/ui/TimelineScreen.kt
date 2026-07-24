@@ -1,6 +1,6 @@
 package to.sava.peranta.ui
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -18,12 +18,9 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -63,6 +60,9 @@ const val TAG_TIMELINE_RECEIVED: String = "timeline-received"
 
 /** インラインのアクションボタンのタグ接頭辞（末尾に action の index を付ける）。 */
 const val TAG_TIMELINE_ACTION_PREFIX: String = "timeline-action-"
+
+/** 受信通知バブル右上の × ボタンのタグ。 */
+const val TAG_TIMELINE_DISMISS_BUTTON: String = "timeline-dismiss-button"
 
 /** コンテキストメニューの「消す」項目のタグ。 */
 const val TAG_TIMELINE_MENU_DISMISS: String = "timeline-menu-dismiss"
@@ -131,7 +131,7 @@ fun timelineScrollTargetIndex(visible: List<TimelineItem>, targetId: String): In
 
 /**
  * チャット風タイムライン（§10.1）。受信通知は左寄せ、エラー・送信通知は右寄せに並べる。
- * [actions] が渡されると受信通知にアクションボタン・スワイプで消す・長押し/右クリックメニューを付ける。
+ * [actions] が渡されると受信通知にアクションボタン・右上の × ボタン・長押し/右クリックメニューを付ける。
  * 「消す」はブロードキャスト送信と同時に、往復を待たず自端末の表示から即座に取り下げる。
  * 並び順は時系列順（古い→新しい、上→下）で最新が最下部。起動時は最下部へジャンプし、
  * 最下部表示中の新着だけ追従する（§10.1）。[listState] を呼び出し側から注入でき、
@@ -326,12 +326,12 @@ private fun ReceivedBubble(item: ReceivedNotification, fullText: FullTextUi?) {
 }
 
 /**
- * 操作可能な受信通知バブル。左右スワイプで消し、長押し/右クリックでコンテキストメニューを開く。
+ * 操作可能な受信通知バブル。右上の × ボタンで消し、長押し/右クリックでコンテキストメニューを開く。
  * 通知に元アクションがあればボタンとして並べる。REPLY 分類のアクションは押すとインライン返信入力を
  * 開き、それ以外は押すと送信元へ invokeAction を返送する（§10.1）。
  * 元通知が既に消えている（[ReceivedNotification.sourceDismissed]）アイテムはアクションボタン・
  * 返信入力・コンテキストメニューのアクション項目を出さず、代わりに注記を表示する。
- * スワイプ・「消す」（ローカル非表示）は引き続き行える。
+ * × ボタン・「消す」（ローカル非表示）は引き続き行える。
  */
 @Composable
 private fun InteractiveReceivedBubble(
@@ -355,31 +355,9 @@ private fun InteractiveReceivedBubble(
         actions.dismiss(item)
         onLocalDismiss()
     }
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.Settled) {
-                false
-            } else {
-                dismiss()
-                true
-            }
-        },
-    )
-    SwipeToDismissBox(
-        state = dismissState,
-        backgroundContent = {
-            // 静止時に吹出しの背後へ赤が透けないよう、スワイプ中だけ描く。
-            if (dismissState.dismissDirection != SwipeToDismissBoxValue.Settled) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.errorContainer),
-                )
-            }
-        },
-    ) {
-        var menuOpen by remember { mutableStateOf(false) }
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+        Box {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -409,17 +387,32 @@ private fun InteractiveReceivedBubble(
                     SpeakerTimeRow(speaker = payload.speakerName(), time = item.timestampEpochMillis)
                 }
             }
-            ContextMenu(
-                expanded = menuOpen,
-                onDismissRequest = { menuOpen = false },
-                payload = payload,
-                actions = actions,
-                onActionClick = onActionClick,
-                onDismissNotification = dismiss,
-                showActionItems = !item.sourceDismissed,
-            )
+            DismissButton(onClick = dismiss, modifier = Modifier.align(Alignment.TopEnd))
         }
+        ContextMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+            payload = payload,
+            actions = actions,
+            onActionClick = onActionClick,
+            onDismissNotification = dismiss,
+            showActionItems = !item.sourceDismissed,
+        )
     }
+}
+
+/** 受信通知バブル右上の × ボタン（§10.1）。バブルの内容を邪魔しない控えめな見た目にする。 */
+@Composable
+private fun DismissButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Text(
+        text = "×",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(6.dp)
+            .testTag(TAG_TIMELINE_DISMISS_BUTTON),
+    )
 }
 
 /** 元通知が消えた受信アイテムに出す控えめな注記（§10.1）。本文より一段薄い色で出す。 */

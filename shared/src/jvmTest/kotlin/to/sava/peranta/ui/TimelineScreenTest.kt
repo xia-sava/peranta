@@ -20,10 +20,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runComposeUiTest
-import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.MutableStateFlow
 import to.sava.peranta.model.AttachmentKind
@@ -121,14 +119,14 @@ class TimelineScreenTest {
         assertEquals(Triple("phone", "0|com.example|1|null|10", 1), invoked)
     }
 
-    /** 左スワイプで dismiss を発火し、往復を待たず自分の表示から取り下げる。 */
+    /** × ボタン押下で dismiss を発火し、往復を待たず自分の表示から取り下げる。 */
     @Test
-    fun swipeDismissesAndHidesLocally() = runComposeUiTest {
+    fun dismissButtonDismissesAndHidesLocally() = runComposeUiTest {
         var dismissedId: String? = null
         setContent {
             TimelineScreen(items(), actions = TimelineActions(dismiss = { dismissedId = it.payload.id }))
         }
-        onNodeWithTag(TAG_TIMELINE_RECEIVED).performTouchInput { swipeLeft() }
+        onNodeWithTag(TAG_TIMELINE_DISMISS_BUTTON).performClick()
         assertEquals("n1", dismissedId)
         onAllNodesWithTag(TAG_TIMELINE_RECEIVED).assertCountEquals(0)
     }
@@ -358,6 +356,7 @@ class TimelineScreenTest {
         setContent { TimelineScreen(items()) }
         onAllNodesWithTag(TAG_TIMELINE_RECEIVED).assertCountEquals(0)
         onAllNodesWithTag("${TAG_TIMELINE_ACTION_PREFIX}0").assertCountEquals(0)
+        onAllNodesWithTag(TAG_TIMELINE_DISMISS_BUTTON).assertCountEquals(0)
     }
 
     /** アクションが無い通知はボタンを出さないが、コンテキストメニューは開ける。 */
@@ -412,9 +411,9 @@ class TimelineScreenTest {
         onAllNodesWithTag(TAG_TIMELINE_MENU_MUTE).assertCountEquals(1)
     }
 
-    /** sourceDismissed のアイテムでも左スワイプでの「消す」は引き続きできる。 */
+    /** sourceDismissed のアイテムにも × ボタンが出て、押すと引き続き「消す」ができる。 */
     @Test
-    fun sourceDismissedItemStillSwipeDismissable() = runComposeUiTest {
+    fun sourceDismissedItemStillHasDismissButton() = runComposeUiTest {
         var dismissedId: String? = null
         setContent {
             TimelineScreen(
@@ -422,7 +421,7 @@ class TimelineScreenTest {
                 actions = TimelineActions(dismiss = { dismissedId = it.payload.id }),
             )
         }
-        onNodeWithTag(TAG_TIMELINE_RECEIVED).performTouchInput { swipeLeft() }
+        onNodeWithTag(TAG_TIMELINE_DISMISS_BUTTON).performClick()
         assertEquals("n1", dismissedId)
         onAllNodesWithTag(TAG_TIMELINE_RECEIVED).assertCountEquals(0)
     }
