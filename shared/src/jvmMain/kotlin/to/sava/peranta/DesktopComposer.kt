@@ -1,5 +1,7 @@
 package to.sava.peranta
 
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import co.touchlab.kermit.Logger
 import io.ktor.client.HttpClient
 import io.ktor.utils.io.ByteReadChannel
@@ -9,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.jetbrains.skia.Image as SkiaImage
 import to.sava.peranta.blob.AttachmentUploadRequest
 import to.sava.peranta.blob.BlobCipher
 import to.sava.peranta.blob.KtorBlobTransport
@@ -31,21 +34,50 @@ import to.sava.peranta.ui.StagedFile
 import java.awt.FileDialog
 import java.awt.Frame
 import java.awt.Image
+import java.awt.RenderingHints
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FilterInputStream
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicLong
 import javax.imageio.ImageIO
 import kotlin.io.encoding.Base64
+import kotlin.math.roundToInt
 
 /** ファイル送信に失敗したときにタイムラインへ出す文言（§13 M9d）。 */
 internal const val FILE_SEND_FAILED_MESSAGE: String = "ファイルの送信に失敗しました。もう一度お試しください"
 
 /** クリップボード貼り付けでステージする画像の一時ファイル名（[sequence] は 1 始まりの連番）。 */
 internal fun clipboardImageFileName(sequence: Long): String = "clipboard-$sequence.png"
+
+/** ステージ済みチップにサムネイルを出す画像ファイルの拡張子（大文字小文字を区別しない）。 */
+private val IMAGE_FILE_EXTENSIONS: Set<String> = setOf("png", "jpg", "jpeg", "gif", "webp", "bmp")
+
+/** ステージ済みサムネイルへ縮小デコードする一辺の目標ピクセル数。 */
+private const val STAGED_THUMBNAIL_TARGET_PX: Int = 64
+
+/** [file] が拡張子上、ステージのチップにサムネイル表示すべき画像か。 */
+internal fun isImageFile(file: File): Boolean = file.extension.lowercase() in IMAGE_FILE_EXTENSIONS
+
+/** [maxSide] 四方に収まるよう縦横比を保って縮小した画像を返す。既に収まっているならそのまま返す（拡大はしない）。 */
+internal fun BufferedImage.scaledToFit(maxSide: Int): BufferedImage {
+    if (width <= maxSide && height <= maxSide) return this
+    val scale = maxSide.toDouble() / maxOf(width, height)
+    val targetWidth = (width * scale).roundToInt().coerceAtLeast(1)
+    val targetHeight = (height * scale).roundToInt().coerceAtLeast(1)
+    val scaled = BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_ARGB)
+    val graphics = scaled.createGraphics()
+    try {
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+        graphics.drawImage(this, 0, 0, targetWidth, targetHeight, null)
+    } finally {
+        graphics.dispose()
+    }
+    return scaled
+}
 
 /**
  * Desktop の composer 送信束（§13 M9d）。テキストのみなら [to.sava.peranta.model.MessagePayload]、
@@ -148,7 +180,25 @@ class DesktopComposer(
 
     private fun setStaged(files: List<File>) {
         stagedFiles.value = files
-        staged.value = files.map { StagedFile(it.name, it.length()) }
+        staged.value = files.map { StagedFile(it.name, it.length(), decodeStagedThumbnail(it)) }
+    }
+
+    /**
+     * 画像ファイルなら表示用に縮小したサムネイルへデコードする。原寸は Compose へ渡さず、
+     * [STAGED_THUMBNAIL_TARGET_PX] 四方に収めてから [ImageBitmap] 化する。画像でない、または
+     * デコードに失敗した場合は null（チップはファイル名＋サイズの表示へフォールバックする）。
+     */
+    private fun decodeStagedThumbnail(file: File): ImageBitmap? {
+        if (!isImageFile(file)) return null
+        return try {
+            val original = ImageIO.read(file) ?: return null
+            val scaled = original.scaledToFit(STAGED_THUMBNAIL_TARGET_PX)
+            val pngBytes = ByteArrayOutputStream().also { ImageIO.write(scaled, "png", it) }.toByteArray()
+            SkiaImage.makeFromEncoded(pngBytes).toComposeImageBitmap()
+        } catch (error: Exception) {
+            log.w(error) { "staged thumbnail decode failed for ${file.name}" }
+            null
+        }
     }
 
     /**

@@ -1,10 +1,12 @@
 package to.sava.peranta.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -21,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -28,6 +31,7 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
@@ -48,6 +52,12 @@ const val TAG_COMPOSER_ATTACH: String = "composer-attach"
 /** ステージ済み添付チップのタグ接頭辞（末尾に index）。 */
 const val TAG_COMPOSER_STAGED_PREFIX: String = "composer-staged-"
 
+/** ステージ済み添付チップの画像サムネイルのタグ接頭辞（末尾に index）。画像をデコードできたときのみ出す。 */
+const val TAG_COMPOSER_STAGED_THUMBNAIL_PREFIX: String = "composer-staged-thumbnail-"
+
+/** ステージ済みチップに表示するサムネイルの一辺（正方形）。 */
+private val STAGED_THUMBNAIL_SIZE = 32.dp
+
 /** 本文が送信上限バイト数を超えているときの警告表示のタグ。 */
 const val TAG_COMPOSER_LIMIT_WARNING: String = "composer-limit-warning"
 
@@ -55,8 +65,11 @@ const val TAG_COMPOSER_LIMIT_WARNING: String = "composer-limit-warning"
 private val MESSAGE_LIMIT_WARNING: String =
     "本文が上限 $MAX_MESSAGE_TEXT_BYTES バイトを超えています。超過分は切り詰めて送信されます"
 
-/** ステージ済みの送信予定ファイル（表示用メタ）。 */
-data class StagedFile(val name: String, val sizeBytes: Long)
+/**
+ * ステージ済みの送信予定ファイル（表示用メタ）。[thumbnail] は画像を表示用に縮小デコードできたときのみ持つ
+ * （Desktop 専用、§10.1）。非画像やデコード失敗時は null で、チップはファイル名＋サイズのみを表示する。
+ */
+data class StagedFile(val name: String, val sizeBytes: Long, val thumbnail: ImageBitmap? = null)
 
 /**
  * composer の添付操作束（§13 M9d）。Desktop だけが実装を渡し、null の端末では添付ボタンを出さない。
@@ -140,6 +153,16 @@ fun MessageComposer(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            file.thumbnail?.let { thumbnail ->
+                                Image(
+                                    bitmap = thumbnail,
+                                    contentDescription = file.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(STAGED_THUMBNAIL_SIZE)
+                                        .testTag("$TAG_COMPOSER_STAGED_THUMBNAIL_PREFIX$index"),
+                                )
+                            }
                             Text(
                                 text = "${file.name} (${formatFileSize(file.sizeBytes)})",
                                 style = MaterialTheme.typography.bodySmall,

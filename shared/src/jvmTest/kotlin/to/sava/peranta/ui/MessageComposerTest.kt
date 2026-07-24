@@ -1,5 +1,6 @@
 package to.sava.peranta.ui
 
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -168,5 +169,31 @@ class MessageComposerTest {
 
         onNodeWithTag(TAG_COMPOSER_SEND).assertTextEquals("送信")
         onNodeWithTag(TAG_COMPOSER_INPUT).assertTextEquals("キャンセルするはず")
+    }
+
+    private fun attachmentsUi(staged: List<StagedFile>): ComposerAttachmentsUi = ComposerAttachmentsUi(
+        staged = MutableStateFlow(staged),
+        uploadProgress = MutableStateFlow<TransferProgress?>(null),
+        pickFiles = {},
+        removeStaged = {},
+        pasteImage = { false },
+    )
+
+    /** サムネイルを持つステージ済みファイルは、チップにサムネイル画像を表示する。 */
+    @Test
+    fun stagedFileWithThumbnailShowsThumbnailImage() = runComposeUiTest {
+        val attachments = attachmentsUi(listOf(StagedFile("photo.png", 100, ImageBitmap(4, 4))))
+        setContent { MessageComposer(MessageComposerUi(send = { true }, attachments = attachments)) }
+
+        onNodeWithTag("${TAG_COMPOSER_STAGED_THUMBNAIL_PREFIX}0").assertExists()
+    }
+
+    /** サムネイルを持たないステージ済みファイル（非画像・デコード失敗）は、サムネイル画像を出さない。 */
+    @Test
+    fun stagedFileWithoutThumbnailShowsNoThumbnailImage() = runComposeUiTest {
+        val attachments = attachmentsUi(listOf(StagedFile("document.pdf", 100)))
+        setContent { MessageComposer(MessageComposerUi(send = { true }, attachments = attachments)) }
+
+        onNodeWithTag("${TAG_COMPOSER_STAGED_THUMBNAIL_PREFIX}0").assertDoesNotExist()
     }
 }

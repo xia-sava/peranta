@@ -27,6 +27,8 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -46,6 +48,20 @@ class DesktopComposerTest {
     private fun tempFile(name: String, content: String): File {
         val file = Files.createTempFile(name, ".bin").toFile()
         file.writeText(content)
+        tempFiles.add(file)
+        return file
+    }
+
+    private fun tempImageFile(name: String, width: Int = 40, height: Int = 20): File {
+        val file = Files.createTempFile(name, ".png").toFile()
+        ImageIO.write(BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB), "png", file)
+        tempFiles.add(file)
+        return file
+    }
+
+    private fun tempCorruptImageFile(name: String): File {
+        val file = Files.createTempFile(name, ".png").toFile()
+        file.writeText("not a real image")
         tempFiles.add(file)
         return file
     }
@@ -206,5 +222,100 @@ class DesktopComposerTest {
         )
         val staged = composer.ui().attachments!!.staged.value
         assertEquals(listOf("clipboard-1.png", "clipboard-2.png"), staged.map { it.name })
+    }
+
+    /** isImageFile は拡張子（大文字小文字を区別しない）で画像ファイルを判定する。 */
+    @Test
+    fun isImageFileDetectsCommonImageExtensionsCaseInsensitively() {
+        assertTrue(isImageFile(File("photo.png")))
+        assertTrue(isImageFile(File("photo.JPG")))
+        assertTrue(isImageFile(File("photo.jpeg")))
+        assertTrue(isImageFile(File("photo.gif")))
+        assertTrue(isImageFile(File("photo.webp")))
+        assertTrue(isImageFile(File("photo.bmp")))
+        assertFalse(isImageFile(File("document.pdf")))
+        assertFalse(isImageFile(File("noextension")))
+    }
+
+    /** scaledToFit は目標一辺を超える画像を縦横比を保ったまま縮小する。 */
+    @Test
+    fun scaledToFitShrinksOversizedImageKeepingAspectRatio() {
+        val original = BufferedImage(400, 200, BufferedImage.TYPE_INT_ARGB)
+
+        val scaled = original.scaledToFit(64)
+
+        assertEquals(64, scaled.width)
+        assertEquals(32, scaled.height)
+    }
+
+    /** scaledToFit は目標一辺以下の画像を拡大せずそのまま返す。 */
+    @Test
+    fun scaledToFitLeavesSmallImageUnchanged() {
+        val original = BufferedImage(20, 10, BufferedImage.TYPE_INT_ARGB)
+
+        val scaled = original.scaledToFit(64)
+
+        assertEquals(20, scaled.width)
+        assertEquals(10, scaled.height)
+    }
+
+    /** ステージした画像ファイルは縮小デコードされたサムネイルを持つ。 */
+    @Test
+    fun addStagedImageFileProducesThumbnail() = runTest {
+        val store = FakeTimelineStore()
+        val pipeline = SendPipeline(MessageCipher(generateKey(), "k1"), FakeNtfyClient(), store)
+        val composer = DesktopComposer(
+            config = config(),
+            httpClient = successHttpClient(),
+            cipher = MessageCipher(generateKey(), "k1"),
+            ntfy = FakeNtfyClient(),
+            sendPipeline = pipeline,
+            scope = this,
+        )
+
+        composer.addStaged(listOf(tempImageFile("f")))
+
+        val staged = composer.ui().attachments!!.staged.value
+        assertNotNull(staged.single().thumbnail)
+    }
+
+    /** ステージした非画像ファイルはサムネイルを持たず、従来どおりチップ表示のみとなる。 */
+    @Test
+    fun addStagedNonImageFileHasNoThumbnail() = runTest {
+        val store = FakeTimelineStore()
+        val pipeline = SendPipeline(MessageCipher(generateKey(), "k1"), FakeNtfyClient(), store)
+        val composer = DesktopComposer(
+            config = config(),
+            httpClient = successHttpClient(),
+            cipher = MessageCipher(generateKey(), "k1"),
+            ntfy = FakeNtfyClient(),
+            sendPipeline = pipeline,
+            scope = this,
+        )
+
+        composer.addStaged(listOf(tempFile("g", "not an image")))
+
+        val staged = composer.ui().attachments!!.staged.value
+        assertNull(staged.single().thumbnail)
+    }
+
+    /** デコードできない（拡張子は画像だが中身が壊れている）ファイルは、例外を投げず従来のチップ表示へフォールバックする。 */
+    @Test
+    fun addStagedCorruptImageFallsBackToNoThumbnail() = runTest {
+        val store = FakeTimelineStore()
+        val pipeline = SendPipeline(MessageCipher(generateKey(), "k1"), FakeNtfyClient(), store)
+        val composer = DesktopComposer(
+            config = config(),
+            httpClient = successHttpClient(),
+            cipher = MessageCipher(generateKey(), "k1"),
+            ntfy = FakeNtfyClient(),
+            sendPipeline = pipeline,
+            scope = this,
+        )
+
+        composer.addStaged(listOf(tempCorruptImageFile("h")))
+
+        val staged = composer.ui().attachments!!.staged.value
+        assertNull(staged.single().thumbnail)
     }
 }
