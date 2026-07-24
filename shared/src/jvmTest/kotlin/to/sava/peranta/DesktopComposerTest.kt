@@ -18,8 +18,10 @@ import to.sava.peranta.send.FakeTimelineStore
 import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.SentNotification
+import java.awt.image.BufferedImage
 import java.io.File
 import java.nio.file.Files
+import javax.imageio.ImageIO
 import kotlin.io.encoding.Base64
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -169,5 +171,40 @@ class DesktopComposerTest {
         val remaining = composer.ui().attachments!!.staged.value
         assertEquals(1, remaining.size)
         assertEquals(second.name, remaining.single().name)
+    }
+
+    /** クリップボード一時ファイル名は 1 始まりの連番で機械的に決まる。 */
+    @Test
+    fun clipboardImageFileNameIsSequential() {
+        assertEquals("clipboard-1.png", clipboardImageFileName(1))
+        assertEquals("clipboard-2.png", clipboardImageFileName(2))
+    }
+
+    /** stageClipboardImage は画像を PNG ファイルへ書き出し、連番のファイル名で既存のステージへ積む。 */
+    @Test
+    fun stageClipboardImageWritesPngAndStagesSequentially() = runTest {
+        val store = FakeTimelineStore()
+        val pipeline = SendPipeline(MessageCipher(generateKey(), "k1"), FakeNtfyClient(), store)
+        val composer = DesktopComposer(
+            config = config(),
+            httpClient = successHttpClient(),
+            cipher = MessageCipher(generateKey(), "k1"),
+            ntfy = FakeNtfyClient(),
+            sendPipeline = pipeline,
+            scope = this,
+        )
+        val image = BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB)
+
+        val first = composer.stageClipboardImage(image)
+        val second = composer.stageClipboardImage(image)
+
+        assertEquals("clipboard-1.png", first.name)
+        assertEquals("clipboard-2.png", second.name)
+        assertEquals(
+            "png",
+            ImageIO.getImageReaders(ImageIO.createImageInputStream(first)).next().formatName.lowercase(),
+        )
+        val staged = composer.ui().attachments!!.staged.value
+        assertEquals(listOf("clipboard-1.png", "clipboard-2.png"), staged.map { it.name })
     }
 }

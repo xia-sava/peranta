@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -66,6 +67,8 @@ class ComposerAttachmentsUi(
     val uploadProgress: StateFlow<TransferProgress?>,
     val pickFiles: () -> Unit,
     val removeStaged: (index: Int) -> Unit,
+    /** クリップボードに画像が有ればステージへ追加して true を返す。無ければ何もせず false（通常の貼り付けに委ねる）。 */
+    val pasteImage: () -> Boolean,
 )
 
 /**
@@ -84,7 +87,8 @@ private fun exceedsMessageLimit(text: String): Boolean =
 /**
  * タイムライン下部の入力欄（§10.1）。テキスト入力・送信・（渡されれば）ファイル添付を担う。
  * [sendOnEnter] が真のとき Enter で送信・Shift+Enter で改行する（Desktop 用）。偽（Android 既定）では
- * キー操作を横取りせず IME の改行に任せる。
+ * キー操作を横取りせず IME の改行に任せる。添付が有るときは Ctrl+V でクリップボード画像もステージへ
+ * 追加する（[ComposerAttachmentsUi.pasteImage]）。画像が無ければ通常のテキスト貼り付けに委ねる。
  */
 @Composable
 fun MessageComposer(
@@ -159,14 +163,18 @@ fun MessageComposer(
                     modifier = Modifier.testTag(TAG_COMPOSER_ATTACH),
                 ) { Text("📎") }
             }
+            val pasteImage = attachments?.pasteImage
             val textFieldModifier = Modifier.weight(1f).testTag(TAG_COMPOSER_INPUT).let { base ->
-                if (sendOnEnter) {
+                if (sendOnEnter || pasteImage != null) {
                     base.onPreviewKeyEvent { event ->
-                        if (event.type == KeyEventType.KeyDown && event.key == Key.Enter && !event.isShiftPressed) {
-                            if (!sending && hasContent) onSendClick()
-                            true
-                        } else {
-                            false
+                        when {
+                            event.type != KeyEventType.KeyDown -> false
+                            sendOnEnter && event.key == Key.Enter && !event.isShiftPressed -> {
+                                if (!sending && hasContent) onSendClick()
+                                true
+                            }
+                            pasteImage != null && event.isCtrlPressed && event.key == Key.V -> pasteImage()
+                            else -> false
                         }
                     }
                 } else {

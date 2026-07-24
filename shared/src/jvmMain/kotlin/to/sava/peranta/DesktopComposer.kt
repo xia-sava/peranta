@@ -30,14 +30,22 @@ import to.sava.peranta.ui.MessageComposerUi
 import to.sava.peranta.ui.StagedFile
 import java.awt.FileDialog
 import java.awt.Frame
+import java.awt.Image
+import java.awt.Toolkit
+import java.awt.datatransfer.DataFlavor
+import java.awt.image.BufferedImage
 import java.io.File
 import java.io.FilterInputStream
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicLong
+import javax.imageio.ImageIO
 import kotlin.io.encoding.Base64
 
 /** ファイル送信に失敗したときにタイムラインへ出す文言（§13 M9d）。 */
 internal const val FILE_SEND_FAILED_MESSAGE: String = "ファイルの送信に失敗しました。もう一度お試しください"
+
+/** クリップボード貼り付けでステージする画像の一時ファイル名（[sequence] は 1 始まりの連番）。 */
+internal fun clipboardImageFileName(sequence: Long): String = "clipboard-$sequence.png"
 
 /**
  * Desktop の composer 送信束（§13 M9d）。テキストのみなら [to.sava.peranta.model.MessagePayload]、
@@ -56,6 +64,8 @@ class DesktopComposer(
     private val stagedFiles = MutableStateFlow<List<File>>(emptyList())
     private val staged = MutableStateFlow<List<StagedFile>>(emptyList())
     private val uploadProgress = MutableStateFlow<TransferProgress?>(null)
+    private val clipboardImageCounter = AtomicLong(0)
+    private val clipboardImageDir: File by lazy { Files.createTempDirectory("peranta-clipboard").toFile() }
 
     /** composer が使う操作束。添付は [config.blobTopic][PerantaConfig.blobTopic] が有るときのみ有効にする。 */
     fun ui(): MessageComposerUi = MessageComposerUi(
@@ -66,6 +76,7 @@ class DesktopComposer(
                 uploadProgress = uploadProgress.asStateFlow(),
                 pickFiles = ::pickFiles,
                 removeStaged = ::removeStaged,
+                pasteImage = ::pasteImageFromClipboard,
             )
         } else {
             null
@@ -92,6 +103,47 @@ class DesktopComposer(
     /** 選択済みファイルをステージへ積む。テストからも直接呼べるよう [FileDialog] 起動から切り離してある。 */
     internal fun addStaged(files: List<File>) {
         setStaged(stagedFiles.value + files)
+    }
+
+    /**
+     * composer への Ctrl+V を横取りする（§10.1）。クリップボードに画像が有れば PNG 一時ファイルへ
+     * 書き出してステージへ追加し true を返す（イベント消費）。画像が無ければ何もせず false を返し、
+     * composer 側の通常のテキスト貼り付けに委ねる。
+     */
+    private fun pasteImageFromClipboard(): Boolean {
+        val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+        if (!clipboard.isDataFlavorAvailable(DataFlavor.imageFlavor)) return false
+        return try {
+            val image = clipboard.getData(DataFlavor.imageFlavor) as? Image ?: return false
+            stageClipboardImage(image)
+            true
+        } catch (error: Exception) {
+            log.w(error) { "clipboard image paste failed" }
+            false
+        }
+    }
+
+    /**
+     * [image] を PNG 一時ファイルへ書き出してステージへ積み、そのファイルを返す。
+     * テストからも直接呼べるようクリップボード読み取りから切り離してある。
+     */
+    internal fun stageClipboardImage(image: Image): File {
+        val target = File(clipboardImageDir, clipboardImageFileName(clipboardImageCounter.incrementAndGet()))
+        ImageIO.write(image.toBufferedImage(), "png", target)
+        addStaged(listOf(target))
+        return target
+    }
+
+    private fun Image.toBufferedImage(): BufferedImage {
+        if (this is BufferedImage) return this
+        val buffered = BufferedImage(getWidth(null), getHeight(null), BufferedImage.TYPE_INT_ARGB)
+        val graphics = buffered.createGraphics()
+        try {
+            graphics.drawImage(this, 0, 0, null)
+        } finally {
+            graphics.dispose()
+        }
+        return buffered
     }
 
     private fun setStaged(files: List<File>) {

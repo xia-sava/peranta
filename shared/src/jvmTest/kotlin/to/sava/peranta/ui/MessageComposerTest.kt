@@ -12,6 +12,8 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.withKeyDown
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.MutableStateFlow
+import to.sava.peranta.blob.TransferProgress
 import to.sava.peranta.send.MAX_MESSAGE_TEXT_BYTES
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,6 +23,14 @@ import kotlin.test.assertTrue
 class MessageComposerTest {
 
     private fun ui(send: suspend (String) -> Boolean): MessageComposerUi = MessageComposerUi(send = send)
+
+    private fun attachmentsUi(pasteImage: () -> Boolean = { false }): ComposerAttachmentsUi = ComposerAttachmentsUi(
+        staged = MutableStateFlow(emptyList()),
+        uploadProgress = MutableStateFlow<TransferProgress?>(null),
+        pickFiles = {},
+        removeStaged = {},
+        pasteImage = pasteImage,
+    )
 
     /** 空文字では送信ボタンが無効化される。 */
     @Test
@@ -78,6 +88,54 @@ class MessageComposerTest {
 
         assertEquals(0, sendCount)
         onNodeWithTag(TAG_COMPOSER_INPUT).assertTextEquals("1行目\n")
+    }
+
+    /** Ctrl+V でクリップボードに画像が有れば pasteImage を呼び、イベントを消費して既定の貼り付けを行わない。 */
+    @Test
+    fun ctrlVWithClipboardImageStagesAndConsumesEvent() = runComposeUiTest {
+        var calls = 0
+        val attachments = attachmentsUi(pasteImage = { calls++; true })
+        setContent {
+            MessageComposer(MessageComposerUi(send = { true }, attachments = attachments), sendOnEnter = true)
+        }
+
+        onNodeWithTag(TAG_COMPOSER_INPUT).performClick()
+        onNodeWithTag(TAG_COMPOSER_INPUT).performKeyInput {
+            withKeyDown(Key.CtrlLeft) { pressKey(Key.V) }
+        }
+
+        assertEquals(1, calls)
+        onNodeWithTag(TAG_COMPOSER_INPUT).assertTextEquals("")
+    }
+
+    /** クリップボードに画像が無ければ pasteImage は false を返し、貼り付けハンドラは通常の貼り付けに委ねる。 */
+    @Test
+    fun ctrlVWithoutClipboardImageFallsThroughToDefaultPaste() = runComposeUiTest {
+        var calls = 0
+        val attachments = attachmentsUi(pasteImage = { calls++; false })
+        setContent {
+            MessageComposer(MessageComposerUi(send = { true }, attachments = attachments), sendOnEnter = true)
+        }
+
+        onNodeWithTag(TAG_COMPOSER_INPUT).performClick()
+        onNodeWithTag(TAG_COMPOSER_INPUT).performKeyInput {
+            withKeyDown(Key.CtrlLeft) { pressKey(Key.V) }
+        }
+
+        assertEquals(1, calls)
+    }
+
+    /** attachments が無い（添付未対応）ときは Ctrl+V を横取りしない。 */
+    @Test
+    fun ctrlVWithoutAttachmentsDoesNothing() = runComposeUiTest {
+        setContent { MessageComposer(ui(send = { true }), sendOnEnter = true) }
+
+        onNodeWithTag(TAG_COMPOSER_INPUT).performClick()
+        onNodeWithTag(TAG_COMPOSER_INPUT).performKeyInput {
+            withKeyDown(Key.CtrlLeft) { pressKey(Key.V) }
+        }
+
+        onNodeWithTag(TAG_COMPOSER_INPUT).assertTextEquals("")
     }
 
     /** attachments が null のときは添付ボタンを出さない。 */
