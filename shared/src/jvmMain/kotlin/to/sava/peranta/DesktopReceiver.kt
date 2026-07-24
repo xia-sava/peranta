@@ -55,6 +55,7 @@ import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.timeline.defaultTimelineFile
+import to.sava.peranta.toast.ReceivedNotificationToast
 import to.sava.peranta.toast.ToastResult
 import to.sava.peranta.toast.Toaster
 import to.sava.peranta.toast.createDesktopToaster
@@ -253,12 +254,12 @@ class DesktopReceiver(
     }
 
     /** タイムラインに載った新規アイテムをトースト表示へ回す（受信処理はブロックしない）。 */
-    private fun handleAppended(item: TimelineItem) {
+    internal fun handleAppended(item: TimelineItem) {
         when (item) {
             is ReceivedNotification -> toastScope.launch { showNotificationToast(item) }
-            is ErrorItem -> toastScope.launch { showErrorToast(item) }
-            is ReceivedFile -> toastScope.launch { toaster.show(toastContentFor(item)) }
-            is ReceivedMessage -> toastScope.launch { toaster.show(toastContentFor(item)) }
+            is ErrorItem -> toastScope.launch { showToast(item.id, toastContentFor(item)) }
+            is ReceivedFile -> toastScope.launch { showToast(item.id, toastContentFor(item)) }
+            is ReceivedMessage -> toastScope.launch { showToast(item.id, toastContentFor(item)) }
             else -> Unit
         }
     }
@@ -277,8 +278,15 @@ class DesktopReceiver(
         }
     }
 
-    private suspend fun showErrorToast(item: ErrorItem) {
-        toaster.show(toastContentFor(item))
+    /**
+     * 受信ファイル・受信メッセージ・エラーのトーストを表示し、クリックのみ前面化＋該当アイテムへの
+     * スクロールへ配線する（§3.3）。「消す」ボタン押下は送るべき既読同期コマンドを持たないため何もしない。
+     */
+    private suspend fun showToast(itemId: String, content: ReceivedNotificationToast) {
+        if (toaster.show(content) == ToastResult.Clicked) {
+            log.i { "toast clicked id=$itemId" }
+            onToastClicked(itemId)
+        }
     }
 
     /** トーストの「開く」ボタン押下で本文中の URL を既定ブラウザで開く（受信端末ローカル、§3.3）。 */
