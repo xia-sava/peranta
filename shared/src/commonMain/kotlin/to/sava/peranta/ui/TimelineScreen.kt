@@ -422,13 +422,13 @@ private fun InteractiveReceivedBubble(
     }
 }
 
-/** 元通知が消えた受信アイテムに出す控えめな注記（§10.1）。 */
+/** 元通知が消えた受信アイテムに出す控えめな注記（§10.1）。本文より一段薄い色で出す。 */
 @Composable
 private fun SourceDismissedNote() {
     Text(
         text = SOURCE_DISMISSED_NOTE,
         style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = MaterialTheme.colorScheme.outline,
         modifier = Modifier.testTag(TAG_TIMELINE_SOURCE_DISMISSED_NOTE),
     )
 }
