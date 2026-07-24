@@ -357,16 +357,17 @@ private fun InteractiveReceivedBubble(
     }
     var menuOpen by remember { mutableStateOf(false) }
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
-        Box {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier
-                    .testTag(TAG_TIMELINE_RECEIVED)
-                    .timelineContextGesture(enabled = true) { menuOpen = true },
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier
+                .testTag(TAG_TIMELINE_RECEIVED)
+                .timelineContextGesture(enabled = true) { menuOpen = true },
+        ) {
+            // バルーン幅は本文と × ボタンを合わせた幅。× は本文に被せず右隣（上寄せ）に置く。
+            Row(verticalAlignment = Alignment.Top) {
+                Column(modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp)) {
                     ReceivedContent(payload, fullText)
                     if (item.sourceDismissed) {
                         SourceDismissedNote()
@@ -386,8 +387,8 @@ private fun InteractiveReceivedBubble(
                     }
                     SpeakerTimeRow(speaker = payload.speakerName(), time = item.timestampEpochMillis)
                 }
+                DismissButton(onClick = dismiss)
             }
-            DismissButton(onClick = dismiss, modifier = Modifier.align(Alignment.TopEnd))
         }
         ContextMenu(
             expanded = menuOpen,
