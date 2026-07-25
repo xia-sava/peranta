@@ -44,8 +44,11 @@ object CompanionAssociation {
     /**
      * 通知リスナーを張り直す。信頼済みかの判定はバインド時に効くため、登録した直後に
      * 呼ばないと、次に OS がバインドし直すまで伏せ字のままになる。
+     * [NotificationListenerService.requestRebind] は解かれているリスナーを繋ぎ直す API で、
+     * バインド中は空振りする。そのため接続中はいったん解いてから繋ぎ直す。
      */
     fun rebindNotificationListener(context: Context) {
+        PerantaNotificationListenerService.activeInstance?.requestUnbind()
         NotificationListenerService.requestRebind(
             ComponentName(context.applicationContext, PerantaNotificationListenerService::class.java),
         )
