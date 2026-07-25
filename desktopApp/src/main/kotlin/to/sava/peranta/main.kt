@@ -47,6 +47,9 @@ import to.sava.peranta.pairing.pairingQrMatrix
 import to.sava.peranta.platform.initLogging
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.platform.platformCapabilities
+import to.sava.peranta.toast.ComposeToaster
+import to.sava.peranta.toast.ToastHost
+import to.sava.peranta.toast.WindowsNotificationSound
 import to.sava.peranta.ui.AppFilterScreen
 import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.MessageComposer
@@ -205,6 +208,8 @@ fun main(args: Array<String>) {
         scrollToItemRequest.get().invoke(itemId)
     }
     val updater = DesktopUpdater(desktopSettings.config, DesktopVersion.versionCode)
+    // トーストは受信機より長生きさせる。設定変更で受信機を作り直しても表示中のものを引き継ぐ。
+    val toaster = ComposeToaster(WindowsNotificationSound())
 
     application {
         // 設定保存のたびに増やす世代番号。受信機は世代の変化で作り直される。
@@ -277,6 +282,8 @@ fun main(args: Array<String>) {
             }
         }
 
+        ToastHost(toaster)
+
         PerantaTray(
             onActivate = bringToFront,
             onOpenSettings = {
@@ -302,6 +309,7 @@ fun main(args: Array<String>) {
                             DesktopReceiver(
                                 freshConfig,
                                 repository = desktopSettings.repository,
+                                toaster = toaster,
                                 onToastClicked = bringToFrontAndScrollToItem,
                             )
                         }

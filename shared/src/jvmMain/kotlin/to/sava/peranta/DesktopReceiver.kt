@@ -58,7 +58,6 @@ import to.sava.peranta.timeline.defaultTimelineFile
 import to.sava.peranta.toast.ReceivedNotificationToast
 import to.sava.peranta.toast.ToastResult
 import to.sava.peranta.toast.Toaster
-import to.sava.peranta.toast.createDesktopToaster
 import to.sava.peranta.toast.toastContentFor
 import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.AttachmentDownloadState
@@ -136,13 +135,13 @@ interface DesktopSelfTest {
 
 /**
  * Desktop 受信の中核を組み立てる。設定が揃っている（[PerantaConfig.isReadyForReceive]）
- * 前提で生成すること。受信通知は Windows トーストにも表示する（[toaster]）。
+ * 前提で生成すること。受信通知はトーストにも表示する（[toaster]）。
  * [repository] はアプリフィルタ画面（§10.4-1）のローカルミラー永続化と共有する設定リポジトリ。
  */
 class DesktopReceiver(
     val config: PerantaConfig,
     private val repository: ConfigRepository,
-    private val toaster: Toaster = createDesktopToaster(),
+    private val toaster: Toaster,
     private val onToastClicked: (itemId: String) -> Unit = {},
     private val log: Logger = Logger.withTag("DesktopReceiver"),
 ) : DesktopSelfTest {

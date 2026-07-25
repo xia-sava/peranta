@@ -132,10 +132,14 @@ kover {
                 classes("to.sava.peranta.pairing.QrCodeKt")
                 // QR ドット行列の値オブジェクト（描画・PNG 書き出しの入力。round-trip テストで間接的に担保する）。
                 classes("to.sava.peranta.pairing.QrMatrix")
-                // toast パッケージのうち SnoreToast プロセス起動・exe 展開・OS 判定・データ定義の配線
-                // （実行に Windows と同梱 exe が要る。純粋ロジックは SnoreToastCommand / ToastContentKt）。
-                classes("to.sava.peranta.toast.SnoreToastToaster")
-                classes("to.sava.peranta.toast.SnoreToastResolverKt")
+                // toast パッケージのうち OS のサウンド設定の読み取りと再生・データ定義の配線
+                // （実行に Windows と音声出力が要る。純粋ロジックは WindowsNotificationSoundKt）。
+                classes("to.sava.peranta.toast.WindowsNotificationSound")
+                // トーストのウィンドウ配置・描画（実画面とマウス入力が要る。純粋ロジックは
+                // ToastStackKt / ToastSwipeKt で、表示の契約は ComposeToasterTest で担保する）。
+                classes("to.sava.peranta.toast.ToastHostKt*")
+                classes("to.sava.peranta.toast.ToastCardKt*")
+                classes("to.sava.peranta.toast.ToastPalette")
                 classes("to.sava.peranta.toast.NoOpToaster")
                 classes("to.sava.peranta.toast.ReceivedNotificationToast")
                 classes("to.sava.peranta.toast.ToastResult")
