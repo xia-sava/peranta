@@ -14,6 +14,11 @@
             android:name="android.permission.QUERY_ALL_PACKAGES"
             tools:ignore="QueryAllPackagesPermission"/>
 
+    <!-- コンパニオン機器としての登録に必須。登録があると通知リスナーが信頼済みとして扱われ、
+         機微と判定された通知の本文も受け取れる。登録できない端末でも動くため必須にはしない。 -->
+    <uses-feature
+            android:name="android.software.companion_device_setup"
+            android:required="false"/>
     <uses-feature
             android:name="android.hardware.telephony"
             android:required="false"/>

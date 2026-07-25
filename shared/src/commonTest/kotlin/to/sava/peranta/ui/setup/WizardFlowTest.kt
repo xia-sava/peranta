@@ -167,6 +167,44 @@ class WizardFlowTest {
         assertFalse(ids.any { it in ReceiveSetupSteps.orderedIds })
     }
 
+    /** コンパニオン機器の登録を要する端末では、自動転送 ON の権限ページに登録ページが加わる。 */
+    @Test
+    fun forwardOnShowsCompanionPageWhenRequired() {
+        val ids = pageIds(
+            androidCaps.copy(requiresCompanionAssociation = true),
+            paired(PerantaConfig(smsDirectReceive = true)),
+            WizardAnswers(source = WizardSourceChoice.JOIN, forward = true),
+        )
+        assertTrue(ids.contains(WizardFlow.PAGE_PERM_COMPANION))
+        // 通知アクセスを許可した直後に登録させたいので、その次に置く。
+        assertEquals(
+            ids.indexOf(WizardFlow.PAGE_PERM_NLS) + 1,
+            ids.indexOf(WizardFlow.PAGE_PERM_COMPANION),
+        )
+    }
+
+    /** 登録を要しない端末（Android 14 以下）では登録ページを出さない。 */
+    @Test
+    fun forwardOnOmitsCompanionPageWhenNotRequired() {
+        val ids = pageIds(
+            androidCaps,
+            paired(PerantaConfig(smsDirectReceive = true)),
+            WizardAnswers(source = WizardSourceChoice.JOIN, forward = true),
+        )
+        assertFalse(ids.contains(WizardFlow.PAGE_PERM_COMPANION))
+    }
+
+    /** 自動転送しない端末では、登録を要する端末でも登録ページは出ない（通知を捕捉しないため）。 */
+    @Test
+    fun forwardOffOmitsCompanionPage() {
+        val ids = pageIds(
+            androidCaps.copy(requiresCompanionAssociation = true),
+            paired(),
+            WizardAnswers(source = WizardSourceChoice.JOIN, forward = false),
+        )
+        assertFalse(ids.contains(WizardFlow.PAGE_PERM_COMPANION))
+    }
+
     /** SMS 直接受信が OFF なら自動転送 ON でも SMS ページは出ない。 */
     @Test
     fun forwardOnOmitsSmsPageWhenSmsDirectReceiveOff() {

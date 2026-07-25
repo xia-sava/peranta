@@ -1,11 +1,14 @@
 package to.sava.peranta
 
 import android.Manifest
+import android.companion.AssociationInfo
+import android.companion.CompanionDeviceManager
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -16,6 +19,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -45,6 +49,7 @@ import to.sava.peranta.android.AndroidReceiveSetupProvider
 import to.sava.peranta.android.AndroidSetupProbe
 import to.sava.peranta.android.AndroidWizardSetupProvider
 import to.sava.peranta.android.AttachmentTransferService
+import to.sava.peranta.android.CompanionAssociation
 import to.sava.peranta.android.EXTRA_SCROLL_ITEM_ID
 import to.sava.peranta.android.PerantaReceive
 import to.sava.peranta.android.PerantaSend
@@ -92,6 +97,18 @@ private const val NOTIFICATIONS_DENIED_MESSAGE =
 /** カメラ権限が拒否されたときに案内する文言（手動貼り付けへのフォールバックを明示する）。 */
 private const val CAMERA_DENIED_MESSAGE =
     "カメラの権限が許可されていません。ペアリング文字列を貼り付けて取り込んでください"
+
+/** コンパニオン機器の登録をユーザーが取りやめたときの文言。 */
+private const val COMPANION_CANCELLED_MESSAGE =
+    "登録しなかったため、一部の通知は本文を受け取れません"
+
+/** コンパニオン機器の一覧を出せなかったときの文言。 */
+private const val COMPANION_FAILED_MESSAGE =
+    "機器の一覧を取得できませんでした。Bluetooth を有効にしてからもう一度お試しください"
+
+/** コンパニオン機器の登録に対応していない端末で出す文言。 */
+private const val COMPANION_UNAVAILABLE_MESSAGE =
+    "この端末はコンパニオン機器の登録に対応していません"
 
 /** 受信設定が未完了の端末で空のタイムラインに出す文言（設定の完了を促す）。 */
 private const val RECEIVE_NOT_READY_MESSAGE =
@@ -163,6 +180,19 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch { actions.copyToDocument(uri) }
         }
 
+    /**
+     * コンパニオン機器の登録ダイアログのランチャー。登録できたら通知リスナーを張り直す
+     * （信頼済みかの判定はバインド時に効くため、張り直すまで通知の本文は伏せられたままになる）。
+     */
+    private val companionAssociationLauncher =
+        registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                CompanionAssociation.rebindNotificationListener(this)
+            } else {
+                Toast.makeText(this, COMPANION_CANCELLED_MESSAGE, Toast.LENGTH_LONG).show()
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -193,7 +223,7 @@ class MainActivity : ComponentActivity() {
         }
 
         val receiveSetupProvider = AndroidReceiveSetupProvider(this)
-        val wizardSetupProvider = AndroidWizardSetupProvider(this)
+        val wizardSetupProvider = AndroidWizardSetupProvider(this, ::requestCompanionAssociation)
         // 受信のセットアップは受信ロールの設定が揃うか、UnifiedPush 登録済みのとき使えるようにする。
         // 登録済みなら config が欠けても修復の作業台へ戻れるようにする。入口は設定画面のセットアップ状況の受信経路の行。
         val receiveSetupAvailable =
@@ -232,7 +262,11 @@ class MainActivity : ComponentActivity() {
 
             // 動作チェックの UnifiedPush 系項目は受信のセットアップ画面へ誘導する。onOpen で診断からその画面へ移す。
             val healthChecker = remember {
-                AndroidHealthChecker(this@MainActivity) { destination = ShellDestination.ReceiveSetup }
+                AndroidHealthChecker(
+                    context = this@MainActivity,
+                    onOpenReceiveSetup = { destination = ShellDestination.ReceiveSetup },
+                    onRequestCompanionAssociation = ::requestCompanionAssociation,
+                )
             }
 
             // タイムラインを表示するたびに動作チェックを実行し、対処の要る未達があればタイムライン上部の
@@ -634,6 +668,35 @@ class MainActivity : ComponentActivity() {
         } else {
             cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
+    }
+
+    /**
+     * コンパニオン機器の登録ダイアログを出す。システムが周囲の機器を探して一覧を出し、
+     * ユーザーが選ぶと [companionAssociationLauncher] へ結果が返る。
+     */
+    private fun requestCompanionAssociation() {
+        val manager = CompanionAssociation.manager(this)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || manager == null) {
+            Toast.makeText(this, COMPANION_UNAVAILABLE_MESSAGE, Toast.LENGTH_LONG).show()
+            return
+        }
+        manager.associate(
+            CompanionAssociation.request(),
+            mainExecutor,
+            object : CompanionDeviceManager.Callback() {
+                override fun onAssociationPending(intentSender: IntentSender) {
+                    companionAssociationLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+                }
+
+                override fun onAssociationCreated(associationInfo: AssociationInfo) {
+                    CompanionAssociation.rebindNotificationListener(this@MainActivity)
+                }
+
+                override fun onFailure(error: CharSequence?) {
+                    Toast.makeText(this@MainActivity, COMPANION_FAILED_MESSAGE, Toast.LENGTH_LONG).show()
+                }
+            },
+        )
     }
 
     private fun launchScanner() {

@@ -15,6 +15,11 @@ data class PlatformCapabilities(
     val requiresPostNotificationsPermission: Boolean,
     /** OS 起動時に自動起動する仕組みを持つか。 */
     val supportsAutoStart: Boolean,
+    /**
+     * 通知の本文を余さず捕捉するのに、コンパニオン機器としての登録を要するか。
+     * Android 15 以降は登録の無いアプリの通知リスナーへ本文が渡らない通知がある。
+     */
+    val requiresCompanionAssociation: Boolean = false,
 )
 
 /** 実行中のプラットフォームの [PlatformCapabilities] を返す。 */

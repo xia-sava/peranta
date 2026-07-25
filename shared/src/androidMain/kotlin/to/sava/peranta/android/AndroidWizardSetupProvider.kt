@@ -13,21 +13,29 @@ private const val SELF_BATTERY_DESCRIPTION: String =
     "バックグラウンドでも通知を取りこぼさないよう、この端末を最適化から除外します。"
 private const val POST_NOTIFICATIONS_DESCRIPTION: String =
     "受け取った通知をこの端末に表示するために、通知を有効にします。"
+private const val COMPANION_DESCRIPTION: String =
+    "メッセージの本文も転送できるようにするため、PC とセットで使う機器としてこの端末を登録します。" +
+        "一覧から PC を選んでください。"
 
 /**
  * ウィザードの項目ページへ渡す [SetupItemUi] 列を組む供給元。
  * 権限系（通知アクセス・省電力除外・SMS・通知表示）は [AndroidSetupProbe] の判定・操作から commonMain の
  * [permissionSetupItem] で組み立て、受信系は M2 の [AndroidReceiveSetupProvider] へ委譲して二重配線を避ける。
  * ウィザードは id で必要な項目だけ拾う。
+ * コンパニオン機器の登録（[CompanionAssociation]）はシステムのダイアログを Activity から起こす必要があるため、
+ * 操作だけ [onRequestCompanionAssociation] で注入する。登録が要らない端末では項目自体を出さない。
  */
-class AndroidWizardSetupProvider(context: Context) : SetupItemsProvider {
+class AndroidWizardSetupProvider(
+    context: Context,
+    private val onRequestCompanionAssociation: () -> Unit = {},
+) : SetupItemsProvider {
 
     private val appContext = context.applicationContext
     private val probe = AndroidSetupProbe(appContext)
     private val receiveSetupProvider = AndroidReceiveSetupProvider(appContext)
 
     override suspend fun items(): List<SetupItemUi> {
-        val permissionItems = listOf(
+        val permissionItems = listOfNotNull(
             permissionSetupItem(
                 id = WizardFlow.ITEM_NLS,
                 title = "通知へのアクセス",
@@ -36,6 +44,7 @@ class AndroidWizardSetupProvider(context: Context) : SetupItemsProvider {
                 actionLabel = "権限を許可",
                 onFix = probe::openNls,
             ),
+            companionItem(),
             permissionSetupItem(
                 id = WizardFlow.ITEM_SELF_BATTERY,
                 title = "バッテリー最適化の除外",
@@ -62,5 +71,18 @@ class AndroidWizardSetupProvider(context: Context) : SetupItemsProvider {
             ),
         )
         return permissionItems + receiveSetupProvider.items()
+    }
+
+    /** コンパニオン機器の登録項目。登録が要らない Android バージョンでは null（項目を出さない）。 */
+    private fun companionItem(): SetupItemUi? {
+        if (!CompanionAssociation.isRequired()) return null
+        return permissionSetupItem(
+            id = WizardFlow.ITEM_COMPANION,
+            title = "PC とのペア登録",
+            description = COMPANION_DESCRIPTION,
+            granted = CompanionAssociation.isAssociated(appContext),
+            actionLabel = "登録する",
+            onFix = onRequestCompanionAssociation,
+        )
     }
 }

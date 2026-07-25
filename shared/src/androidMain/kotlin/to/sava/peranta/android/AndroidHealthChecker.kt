@@ -20,6 +20,7 @@ private val OEM_POWER_SAVE_MANUFACTURERS = setOf("SHARP")
 class AndroidHealthChecker(
     context: Context,
     private val onOpenReceiveSetup: () -> Unit,
+    private val onRequestCompanionAssociation: () -> Unit = {},
 ) : HealthChecker {
 
     private val appContext = context.applicationContext
@@ -31,6 +32,7 @@ class AndroidHealthChecker(
         return buildList {
             if (config.sendEnabled) {
                 add(notificationListenerItem())
+                companionAssociationItem()?.let { add(it) }
                 add(selfBatteryItem())
                 if (config.smsDirectReceive) {
                     add(smsPermissionItem())
@@ -59,6 +61,29 @@ class AndroidHealthChecker(
             detail = if (granted) null else "通知を捕捉して転送するには通知へのアクセスを許可してください。",
             fixLabel = if (granted) null else "権限を許可",
             onFix = if (granted) null else probe::openNls,
+        )
+    }
+
+    /**
+     * コンパニオン機器の登録（[CompanionAssociation]）。登録が要らない Android バージョンでは項目を出さない。
+     * 未登録でも大半の通知は本文まで転送できるため、失敗ではなく情報として出す。
+     * OS 更新でこの条件が生じた端末（設定当時は不要だった端末）へ気づかせる役割も持つ。
+     */
+    private fun companionAssociationItem(): HealthCheckItem? {
+        if (!CompanionAssociation.isRequired()) return null
+        val associated = CompanionAssociation.isAssociated(appContext)
+        return HealthCheckItem(
+            id = "companion",
+            label = "PC とのペア登録",
+            state = if (associated) HealthCheckState.PASS else HealthCheckState.INFO,
+            detail = if (associated) {
+                null
+            } else {
+                "未登録のあいだは、一部の通知でメッセージの本文を転送できません。" +
+                    "PC とセットで使う機器として登録すると本文もそのまま送れます。"
+            },
+            fixLabel = if (associated) null else "登録する",
+            onFix = if (associated) null else onRequestCompanionAssociation,
         )
     }
 

@@ -54,6 +54,7 @@ object WizardFlow {
     const val PAGE_PERM_SELF_BATTERY: String = "perm-self-battery"
     const val PAGE_PERM_SMS: String = "perm-sms"
     const val PAGE_PERM_POST_NOTIFICATIONS: String = "perm-post-notifications"
+    const val PAGE_PERM_COMPANION: String = "perm-companion"
     const val PAGE_REVERSE_CHANNEL: String = "reverse-channel"
     const val PAGE_DONE: String = "done"
 
@@ -62,6 +63,7 @@ object WizardFlow {
     const val ITEM_SELF_BATTERY: String = "self-battery"
     const val ITEM_SMS: String = "sms"
     const val ITEM_POST_NOTIFICATIONS: String = "post-notifications"
+    const val ITEM_COMPANION: String = "companion"
 
     /** 自動起動項目の id（Desktop）。 */
     const val ITEM_AUTOSTART: String = "autostart"
@@ -112,6 +114,9 @@ object WizardFlow {
     private fun forwardPermissionPages(caps: PlatformCapabilities, config: PerantaConfig): List<WizardPage> =
         buildList {
             add(WizardPage(PAGE_PERM_NLS, "通知へのアクセス", itemIds = listOf(ITEM_NLS)))
+            if (caps.requiresCompanionAssociation) {
+                add(WizardPage(PAGE_PERM_COMPANION, "PC とのペア登録", itemIds = listOf(ITEM_COMPANION)))
+            }
             add(WizardPage(PAGE_PERM_SELF_BATTERY, "バッテリー最適化の除外", itemIds = listOf(ITEM_SELF_BATTERY)))
             if (caps.canReceiveSms && config.smsDirectReceive) {
                 add(WizardPage(PAGE_PERM_SMS, "SMS の受信", itemIds = listOf(ITEM_SMS)))
