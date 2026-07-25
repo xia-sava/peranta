@@ -20,6 +20,9 @@ dependencies {
     implementation(libs.compose.uiToolingPreview)
 }
 
+// 配布物の名前。インストール先ディレクトリ・ランチャー exe・スタートメニューの表示名になる。
+val perantaPackageName = "Peranta"
+
 // 版数の単一ソース（gradle プロパティ）。配布時は -Pperanta.versionCode / -Pperanta.versionName で上書きする。
 val perantaVersionCode = providers.gradleProperty("peranta.versionCode").getOrElse("1")
 val perantaVersionName = providers.gradleProperty("peranta.versionName").getOrElse("0.0.0")
@@ -50,7 +53,7 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "to.sava.peranta"
+            packageName = perantaPackageName
             packageVersion = "1.0.0"
 
             windows {
@@ -58,6 +61,9 @@ compose.desktop {
                 // 設定・鍵・履歴をユーザー領域に持つ単一ユーザー向けアプリなので、
                 // インストールと更新に管理者権限を要求しない。
                 perUserInstall = true
+                // スタートメニューへ起動口を作る。グループ名を省くと "Unknown" フォルダに入る。
+                menu = true
+                menuGroup = perantaPackageName
             }
         }
     }
