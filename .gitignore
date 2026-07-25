@@ -18,6 +18,7 @@ captures
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
+__pycache__/
 ### Java and Kotlin template
 # Compiled class file
 *.class

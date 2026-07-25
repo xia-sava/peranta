@@ -21,11 +21,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -80,14 +78,11 @@ import java.awt.datatransfer.StringSelection
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.system.exitProcess
 
-/** トレイ・ウィンドウ用の簡易アイコン。 */
-private val perantaIcon: Painter = object : Painter() {
-    override val intrinsicSize: Size = Size(64f, 64f)
-    override fun DrawScope.onDraw() {
-        drawRoundRect(color = Color(0xFF4C6EF5), cornerRadius = CornerRadius(14f, 14f))
-        drawCircle(color = Color.White, radius = size.minDimension / 4f)
-    }
-}
+/** ウィンドウ枠とタスクバーに出るアイコン。縮小されるので同梱している最大サイズを渡す。 */
+private const val WINDOW_ICON_SIZE = 256
+
+private val perantaIcon: Painter =
+    BitmapPainter(PerantaIcon.image(WINDOW_ICON_SIZE).toComposeImageBitmap())
 
 /** ペアリング URI を QR として描画する。commonMain の設定画面へスロットとして注入する。 */
 @Composable
