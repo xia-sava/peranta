@@ -61,6 +61,9 @@ compose.desktop {
                 // 設定・鍵・履歴をユーザー領域に持つ単一ユーザー向けアプリなので、
                 // インストールと更新に管理者権限を要求しない。
                 perUserInstall = true
+                // 版を上げた MSI が旧版を置き換えるよう、アップグレードコードを固定する
+                // （省くとビルドごとに別の UUID が振られ、新旧が並存してしまう）。
+                upgradeUuid = "d8b68daa-f997-4213-bdc3-bfbfe2a9fdc5"
                 // スタートメニューへ起動口を作る。グループ名を省くと "Unknown" フォルダに入る。
                 menu = true
                 menuGroup = perantaPackageName
