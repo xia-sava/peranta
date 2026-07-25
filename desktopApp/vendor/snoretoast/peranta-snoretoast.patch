@@ -1,5 +1,5 @@
---- a/src/main.cpp	2026-07-24 08:09:39.962613600 +0900
-+++ b/src/main.cpp	2026-07-24 08:09:40.239724600 +0900
+--- a/src/main.cpp	2025-10-27 22:59:43.000000000 +0900
++++ b/src/main.cpp	2026-07-25 09:35:28.577381300 +0900
 @@ -134,6 +134,7 @@
      std::wstring sound(L"Notification.Default");
      std::wstring buttons;
@@ -25,9 +25,17 @@
              app.displayToast(title, body, image);
              return app.userAction();
          } else {
---- a/src/snoretoasts.cpp	2026-07-24 08:09:39.980636000 +0900
-+++ b/src/snoretoasts.cpp	2026-07-24 08:09:40.240223200 +0900
-@@ -83,6 +83,8 @@
+--- a/src/snoretoasts.cpp	2025-10-27 22:59:43.000000000 +0900
++++ b/src/snoretoasts.cpp	2026-07-25 09:36:04.514048900 +0900
+@@ -35,6 +35,7 @@
+ 
+ namespace {
+ constexpr DWORD EVENT_TIMEOUT = 60 * 1000; // one minute should be more than enough
++constexpr DWORD PERSISTENT_EVENT_TIMEOUT = 24 * 60 * 60 * 1000; // persistent toasts wait for the user
+ }
+ 
+ class SnoreToastsPrivate
+@@ -83,6 +84,8 @@
  
      Duration m_duration = Duration::Short;
  
@@ -36,7 +44,7 @@
      SnoreToastActions::Actions m_action = SnoreToastActions::Actions::Clicked;
  
      ComPtr<IXmlDocument> m_toastXml;
-@@ -155,6 +157,9 @@
+@@ -155,6 +158,9 @@
      ST_RETURN_ON_ERROR(addAttribute(L"launch", rootAttributes.Get(), data));
      ST_RETURN_ON_ERROR(addAttribute(L"duration", rootAttributes.Get(),
                                      d->m_duration == Duration::Short ? L"short" : L"long"));
@@ -46,7 +54,17 @@
      // Adding buttons
      if (!d->m_buttons.empty()) {
          setButtons(root);
-@@ -512,6 +517,11 @@
+@@ -194,7 +200,8 @@
+ {
+     if (d->m_eventHanlder.Get()) {
+         HANDLE event = d->m_eventHanlder.Get()->event();
+-        if (WaitForSingleObject(event, EVENT_TIMEOUT) == WAIT_TIMEOUT) {
++        const DWORD timeout = d->m_persistent ? PERSISTENT_EVENT_TIMEOUT : EVENT_TIMEOUT;
++        if (WaitForSingleObject(event, timeout) == WAIT_TIMEOUT) {
+             d->m_action = SnoreToastActions::Actions::Error;
+         } else {
+             d->m_action = d->m_eventHanlder.Get()->userAction();
+@@ -512,6 +519,11 @@
      d->m_duration = duration;
  }
  
@@ -58,8 +76,8 @@
  Duration SnoreToasts::duration() const
  {
      return d->m_duration;
---- a/src/snoretoasts.h	2026-07-24 08:09:39.987234200 +0900
-+++ b/src/snoretoasts.h	2026-07-24 08:09:40.240223200 +0900
+--- a/src/snoretoasts.h	2025-10-27 22:59:43.000000000 +0900
++++ b/src/snoretoasts.h	2026-07-25 09:35:28.578383200 +0900
 @@ -82,6 +82,8 @@
      Duration duration() const;
      void setDuration(Duration duration);
@@ -69,8 +87,8 @@
      std::wstring formatAction(const SnoreToastActions::Actions &action,
                                const std::vector<std::pair<std::wstring_view, std::wstring_view>>
                                        &extraData = {}) const;
---- a/src/toasteventhandler.cpp	2026-07-24 08:09:39.987734400 +0900
-+++ b/src/toasteventhandler.cpp	2026-07-24 08:10:02.551029600 +0900
+--- a/src/toasteventhandler.cpp	2025-10-27 22:59:43.000000000 +0900
++++ b/src/toasteventhandler.cpp	2026-07-25 09:35:28.578887300 +0900
 @@ -24,6 +24,8 @@
  #include <wchar.h>
  #include <algorithm>
