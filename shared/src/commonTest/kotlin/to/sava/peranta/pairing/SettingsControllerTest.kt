@@ -20,6 +20,29 @@ class SettingsControllerTest {
         return SettingsController(repo) to repo
     }
 
+    /** 既定値を埋めた接続設定の保存。各テストは検証したい項目だけを渡す。 */
+    private fun SettingsController.saveConnection(
+        host: String = "example.test",
+        accessToken: String? = "tk",
+        deviceName: String? = "desktop-1",
+        port: Int? = null,
+        persistSensitiveHistory: Boolean = false,
+        attachFullTextWhenTruncated: Boolean = true,
+        timelineRetentionDays: Int? = null,
+        autoDisplayImages: Boolean = true,
+        attachNotificationImages: Boolean = true,
+    ) = saveConnectionSettings(
+        host = host,
+        accessToken = accessToken,
+        deviceName = deviceName,
+        port = port,
+        persistSensitiveHistory = persistSensitiveHistory,
+        attachFullTextWhenTruncated = attachFullTextWhenTruncated,
+        timelineRetentionDays = timelineRetentionDays,
+        autoDisplayImages = autoDisplayImages,
+        attachNotificationImages = attachNotificationImages,
+    )
+
     /** keyId 採番: 未設定・非数値・1 未満は "1"、正の整数はその +1。 */
     @Test
     fun nextKeyIdCoversBoundaries() {
@@ -39,16 +62,7 @@ class SettingsControllerTest {
     fun saveConnectionSettingsPersistsValues() {
         val (controller, repo) = controllerWith()
 
-        controller.saveConnectionSettings(
-            host = "example.test",
-            accessToken = "tk",
-            deviceName = "desktop-1",
-            port = 8090,
-            persistSensitiveHistory = false,
-            attachFullTextWhenTruncated = true,
-            timelineRetentionDays = null,
-            autoDisplayImages = true,
-        )
+        controller.saveConnection(port = 8090)
 
         val loaded = repo.load()
         assertEquals("example.test", loaded.host)
@@ -63,16 +77,7 @@ class SettingsControllerTest {
     fun saveConnectionSettingsNormalizesTlsToTrue() {
         val (controller, repo) = controllerWith(PerantaConfig(useTls = false))
 
-        controller.saveConnectionSettings(
-            host = "example.test",
-            accessToken = "tk",
-            deviceName = "desktop-1",
-            port = null,
-            persistSensitiveHistory = false,
-            attachFullTextWhenTruncated = true,
-            timelineRetentionDays = null,
-            autoDisplayImages = true,
-        )
+        controller.saveConnection()
 
         assertTrue(repo.load().useTls)
     }
@@ -82,16 +87,7 @@ class SettingsControllerTest {
     fun saveConnectionSettingsNormalizesBlanks() {
         val (controller, repo) = controllerWith()
 
-        controller.saveConnectionSettings(
-            host = "example.test",
-            accessToken = "",
-            deviceName = "  ",
-            port = null,
-            persistSensitiveHistory = false,
-            attachFullTextWhenTruncated = true,
-            timelineRetentionDays = null,
-            autoDisplayImages = true,
-        )
+        controller.saveConnection(accessToken = "", deviceName = "  ")
 
         val loaded = repo.load()
         assertNull(loaded.accessToken)
@@ -106,31 +102,13 @@ class SettingsControllerTest {
             PerantaConfig(persistSensitiveHistory = false, attachFullTextWhenTruncated = true),
         )
 
-        controller.saveConnectionSettings(
-            host = "example.test",
-            accessToken = "tk",
-            deviceName = "desktop-1",
-            port = null,
-            persistSensitiveHistory = true,
-            attachFullTextWhenTruncated = false,
-            timelineRetentionDays = null,
-            autoDisplayImages = true,
-        )
+        controller.saveConnection(persistSensitiveHistory = true, attachFullTextWhenTruncated = false)
 
         val loaded = repo.load()
         assertTrue(loaded.persistSensitiveHistory)
         assertFalse(loaded.attachFullTextWhenTruncated)
 
-        controller.saveConnectionSettings(
-            host = "example.test",
-            accessToken = "tk",
-            deviceName = "desktop-1",
-            port = null,
-            persistSensitiveHistory = false,
-            attachFullTextWhenTruncated = true,
-            timelineRetentionDays = null,
-            autoDisplayImages = true,
-        )
+        controller.saveConnection(persistSensitiveHistory = false, attachFullTextWhenTruncated = true)
 
         val revertedLoaded = repo.load()
         assertFalse(revertedLoaded.persistSensitiveHistory)
@@ -142,29 +120,11 @@ class SettingsControllerTest {
     fun saveConnectionSettingsPersistsTimelineRetentionDays() {
         val (controller, repo) = controllerWith(PerantaConfig(timelineRetentionDays = null))
 
-        controller.saveConnectionSettings(
-            host = "example.test",
-            accessToken = "tk",
-            deviceName = "desktop-1",
-            port = null,
-            persistSensitiveHistory = false,
-            attachFullTextWhenTruncated = true,
-            timelineRetentionDays = 30,
-            autoDisplayImages = true,
-        )
+        controller.saveConnection(timelineRetentionDays = 30)
 
         assertEquals(30, repo.load().timelineRetentionDays)
 
-        controller.saveConnectionSettings(
-            host = "example.test",
-            accessToken = "tk",
-            deviceName = "desktop-1",
-            port = null,
-            persistSensitiveHistory = false,
-            attachFullTextWhenTruncated = true,
-            timelineRetentionDays = null,
-            autoDisplayImages = true,
-        )
+        controller.saveConnection(timelineRetentionDays = null)
 
         assertNull(repo.load().timelineRetentionDays)
     }
@@ -174,31 +134,27 @@ class SettingsControllerTest {
     fun saveConnectionSettingsPersistsAutoDisplayImages() {
         val (controller, repo) = controllerWith(PerantaConfig(autoDisplayImages = true))
 
-        controller.saveConnectionSettings(
-            host = "example.test",
-            accessToken = "tk",
-            deviceName = "desktop-1",
-            port = null,
-            persistSensitiveHistory = false,
-            attachFullTextWhenTruncated = true,
-            timelineRetentionDays = null,
-            autoDisplayImages = false,
-        )
+        controller.saveConnection(autoDisplayImages = false)
 
         assertFalse(repo.load().autoDisplayImages)
 
-        controller.saveConnectionSettings(
-            host = "example.test",
-            accessToken = "tk",
-            deviceName = "desktop-1",
-            port = null,
-            persistSensitiveHistory = false,
-            attachFullTextWhenTruncated = true,
-            timelineRetentionDays = null,
-            autoDisplayImages = true,
-        )
+        controller.saveConnection(autoDisplayImages = true)
 
         assertTrue(repo.load().autoDisplayImages)
+    }
+
+    /** 通知画像の転送トグル（§4.3.1）の保存/読み込みラウンドトリップ。 */
+    @Test
+    fun saveConnectionSettingsPersistsAttachNotificationImages() {
+        val (controller, repo) = controllerWith(PerantaConfig(attachNotificationImages = true))
+
+        controller.saveConnection(attachNotificationImages = false)
+
+        assertFalse(repo.load().attachNotificationImages)
+
+        controller.saveConnection(attachNotificationImages = true)
+
+        assertTrue(repo.load().attachNotificationImages)
     }
 
     /** 鍵未設定からの作成: 32 バイト鍵が入り keyId は "1" になる。 */

@@ -252,6 +252,129 @@ class ReceivePipelineTest {
         assertTrue(seen.single() is ReceivedNotification)
     }
 
+    /** 画像添付を足した改版（§4.3.1）。同じ id・改版番号だけが異なる。 */
+    private fun revisedNotification(): NotificationPayload = notification().copy(
+        attachments = listOf(
+            AttachmentRef(
+                blobId = "blob-img",
+                url = "https://peranta.sava.to/file/img",
+                fileName = "notification-9900.jpg",
+                mimeType = "image/jpeg",
+                sizeBytes = 2048,
+                kind = AttachmentKind.IMAGE,
+                enc = BlobEnc(keyId = "k1", saltBase64 = "c2FsdA==", chunkSize = 1024, totalChunks = 1),
+            ),
+        ),
+        revision = 1,
+    )
+
+    /**
+     * 改版は既存アイテムを差し替える（§4.3.1）。行は増えず、受信時刻は初回配送のものが残り、
+     * 表示の更新は onItemUpdated へ流れる（onItemAppended は再発火しない）。
+     */
+    @Test
+    fun revisionReplacesExistingItemAndFiresOnItemUpdated() = runTest {
+        val appended = mutableListOf<TimelineItem>()
+        val updated = mutableListOf<TimelineItem>()
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName, now = { now },
+            onItemAppended = { appended.add(it) },
+            onItemUpdated = { updated.add(it) },
+        )
+        p.handleEvent(eventFor(notification()))
+        p.handleEvent(eventFor(revisedNotification()))
+
+        val received = p.items.value.single() as ReceivedNotification
+        assertEquals(now, received.timestampEpochMillis)
+        assertEquals(listOf("blob-img"), (received.payload as NotificationPayload).attachments.map { it.blobId })
+        assertEquals(1, appended.size)
+        assertEquals(1, updated.size)
+    }
+
+    /** 改版は元通知が消えた印を保ったまま payload だけ差し替える。 */
+    @Test
+    fun revisionKeepsSourceDismissedMark() = runTest {
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName,
+            commandExecutor = NoOpCommandExecutor(), now = { now },
+        )
+        p.handleEvent(eventFor(notification()))
+        p.handleEvent(eventFor(dismissCommand(targetNotificationKey = "0|com.example.bank|1|null|10")))
+        p.handleEvent(eventFor(revisedNotification()))
+
+        val received = p.items.value.single() as ReceivedNotification
+        assertTrue(received.sourceDismissed)
+        assertEquals(listOf("blob-img"), (received.payload as NotificationPayload).attachments.map { it.blobId })
+    }
+
+    /** 同じ改版が二重に届いても一度しか適用しない。 */
+    @Test
+    fun duplicateRevisionIsDropped() = runTest {
+        val updated = mutableListOf<TimelineItem>()
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName, now = { now },
+            onItemUpdated = { updated.add(it) },
+        )
+        p.handleEvent(eventFor(notification()))
+        p.handleEvent(eventFor(revisedNotification()))
+        p.handleEvent(eventFor(revisedNotification()))
+
+        assertEquals(1, updated.size)
+    }
+
+    /**
+     * 初回配送が届かなかった場合、改版は新規アイテムとして表示する。
+     * 画像付きの通知が丸ごと落ちるより、表示できるものは表示する。
+     */
+    @Test
+    fun revisionWithoutOriginalIsAppended() = runTest {
+        val appended = mutableListOf<TimelineItem>()
+        val updated = mutableListOf<TimelineItem>()
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName, now = { now },
+            onItemAppended = { appended.add(it) },
+            onItemUpdated = { updated.add(it) },
+        )
+        p.handleEvent(eventFor(revisedNotification()))
+
+        assertEquals(1, p.items.value.size)
+        assertEquals(1, appended.size)
+        assertTrue(updated.isEmpty())
+    }
+
+    /**
+     * 配送順が入れ替わり、改版のあとに初回配送が届いても画像を巻き戻さない。
+     * 再送に回った初回配送が遅れて到着するケースの保険。
+     */
+    @Test
+    fun lateOriginalDoesNotOverwriteRevision() = runTest {
+        val p = pipeline()
+        p.handleEvent(eventFor(revisedNotification()))
+        p.handleEvent(eventFor(notification()))
+
+        val received = p.items.value.single() as ReceivedNotification
+        assertEquals(listOf("blob-img"), (received.payload as NotificationPayload).attachments.map { it.blobId })
+    }
+
+    /** 改版済みで保存された履歴を読み直したあとは、同じ改版が再適用されない。 */
+    @Test
+    fun revisionInHistoryIsNotReapplied() = runTest {
+        val store = store()
+        val first = ReceivePipeline(FakeNtfyClient(), cipher, TimelineFeed(store), deviceName, now = { now })
+        first.handleEvent(eventFor(notification()))
+        first.handleEvent(eventFor(revisedNotification()))
+
+        val updated = mutableListOf<TimelineItem>()
+        val restarted = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store), deviceName, now = { now },
+            onItemUpdated = { updated.add(it) },
+        )
+        restarted.loadHistory()
+        restarted.handleEvent(eventFor(revisedNotification()))
+
+        assertTrue(updated.isEmpty())
+    }
+
     private fun filePayload(id: String = "f1", to: String = "*"): FilePayload = FilePayload(
         id = id,
         from = "phone",

@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
@@ -74,13 +75,26 @@ class AndroidNotificationPresenter(
         show(displayFor(item))
     }
 
-    private fun show(display: NotificationDisplay) {
+    /**
+     * 表示済みの受信通知を、後から届いた画像を付けて出し直す（§4.3.1）。
+     * 同じ通知 ID へ [Notification.Builder.setOnlyAlertOnce] 付きで出すため、音も振動も鳴らない。
+     */
+    fun update(item: ReceivedNotification, image: Bitmap) {
+        val display = displayFor(item) ?: run {
+            log.d { "notification update skipped (not displayable) id=${item.id}" }
+            return
+        }
+        show(display, image)
+    }
+
+    private fun show(display: NotificationDisplay, image: Bitmap? = null) {
         val channelId = channelIdFor(channelKindFor(display.priority))
         val notificationId = idAllocator.idFor(display.id)
         val notification = Notification.Builder(context, channelId)
             .setContentTitle(display.title)
             .setContentText(display.body)
-            .setStyle(Notification.BigTextStyle().bigText(display.body))
+            .setStyle(styleFor(display, image))
+            .setOnlyAlertOnce(image != null)
             .setSmallIcon(R.drawable.ic_notification)
             .setAutoCancel(true)
             .applyContentIntent(notificationId, display.id)
@@ -89,6 +103,14 @@ class AndroidNotificationPresenter(
             .build()
         notify(notificationId, notification)
     }
+
+    /** 画像が届いていれば大きな画像で、無ければ本文の全文表示で組む。 */
+    private fun styleFor(display: NotificationDisplay, image: Bitmap?): Notification.Style =
+        if (image == null) {
+            Notification.BigTextStyle().bigText(display.body)
+        } else {
+            Notification.BigPictureStyle().bigPicture(image).setSummaryText(display.body)
+        }
 
     /**
      * 表示済みの受信通知を取り下げる（既読同期、§3.4）。

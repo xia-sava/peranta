@@ -39,6 +39,7 @@ class SettingsController(private val repository: ConfigRepository) {
         attachFullTextWhenTruncated: Boolean,
         timelineRetentionDays: Int?,
         autoDisplayImages: Boolean,
+        attachNotificationImages: Boolean,
     ): PerantaConfig {
         val updated = repository.load().copy(
             host = host,
@@ -49,6 +50,7 @@ class SettingsController(private val repository: ConfigRepository) {
             attachFullTextWhenTruncated = attachFullTextWhenTruncated,
             timelineRetentionDays = timelineRetentionDays,
             autoDisplayImages = autoDisplayImages,
+            attachNotificationImages = attachNotificationImages,
         )
         repository.save(updated)
         return updated

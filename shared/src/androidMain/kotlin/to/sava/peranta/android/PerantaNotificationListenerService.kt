@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.app.RemoteInput
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
@@ -18,6 +19,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.model.NotificationActionDetail
+import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.receive.CommandExecutionException
@@ -209,7 +211,7 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             priority = resolvePriority(sbn.notification),
         )
         val isCrossProfile = sbn.user != Process.myUserHandle()
-        forward(input, deviceId, config, isCrossProfile)
+        forward(input, deviceId, config, isCrossProfile, sbn.notification)
     }
 
     private fun forward(
@@ -217,6 +219,7 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         deviceId: String,
         config: PerantaConfig,
         isCrossProfilePackage: Boolean,
+        notification: Notification,
     ) {
         val prepared = prepareForwardedNotification(
             input = input,
@@ -239,6 +242,8 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         PerantaSend.forwarded.remember(prepared.payload.notificationKey)
         // 内容も記録し、同一内容のままの再投稿（未読会話の再掲など）を次回以降スキップする（§3.1）。
         PerantaSend.reposts.recordForwarded(input.notificationKey, input.title, input.text)
+        // 画像は転送すると決めてから取り出す。符号化とアップロードは本文の転送を遅らせないよう後追いで行う（§4.3.1）。
+        val image = if (config.attachNotificationImages) notificationImageOf(applicationContext, notification) else null
         scope.launch {
             // 長文本文なら全文を暗号化 blob として添付し、インラインは切り詰めプレビューにする（§4.3）。
             val payload = PerantaSend.withFullTextAttachment(
@@ -249,6 +254,20 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             } else {
                 log.d { "notification queued for retry or dropped id=${payload.id}" }
             }
+            forwardImage(payload, image, sendConfig)
+        }
+    }
+
+    /**
+     * 本文の転送に続けて、通知の画像を添付した改版を送る（§4.3.1）。
+     * 画像が無い・添付しない判定のときは何も送らない。
+     */
+    private suspend fun forwardImage(payload: NotificationPayload, image: Bitmap?, config: PerantaConfig) {
+        val revised = PerantaSend.withNotificationImage(applicationContext, payload, image, config) ?: return
+        if (PerantaSend.dispatch(applicationContext, revised, config)) {
+            log.i { "notification image sent id=${revised.id} revision=${revised.revision}" }
+        } else {
+            log.d { "notification image queued for retry or dropped id=${revised.id}" }
         }
     }
 

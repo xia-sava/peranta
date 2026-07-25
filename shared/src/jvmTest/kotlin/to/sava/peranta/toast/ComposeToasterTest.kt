@@ -62,6 +62,31 @@ class ComposeToasterTest {
         assertEquals(ToastResult.Closed, withTimeout(timeoutMillis) { second.await() })
     }
 
+    /** update は表示中のトーストの内容を差し替える（後から届いた画像の差し込み、§4.3.1）。 */
+    @Test
+    fun updateReplacesContentOfActiveToast() = runBlocking {
+        val toaster = ComposeToaster()
+        val shown = async { toaster.show(toastItem("a")) }
+        toaster.awaitActive(1)
+
+        toaster.update(toastItem("a").copy(body = "画像付き本文"))
+        val updatedBody = toaster.active.single().item.body
+        toaster.active.single().finish(ToastResult.Dismissed)
+        withTimeout(timeoutMillis) { shown.await() }
+
+        assertEquals("画像付き本文", updatedBody)
+    }
+
+    /** 表示していないトーストへの update は何もしない（既に消えたトーストへの差し込み）。 */
+    @Test
+    fun updateForMissingToastIsIgnored() = runBlocking {
+        val toaster = ComposeToaster()
+
+        toaster.update(toastItem("gone"))
+
+        assertTrue(toaster.active.isEmpty())
+    }
+
     /** 同時表示の上限を超えた表示要求は待たずに Failed を返す。 */
     @Test
     fun showRejectsWhenLimitReached() = runBlocking {

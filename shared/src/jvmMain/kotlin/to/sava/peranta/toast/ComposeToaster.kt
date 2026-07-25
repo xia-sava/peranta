@@ -1,6 +1,9 @@
 package to.sava.peranta.toast
 
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CompletableDeferred
@@ -19,7 +22,11 @@ fun interface ToastSound {
 }
 
 /** 表示中の 1 トースト。ユーザー操作か取り下げで [finish] され、それが [Toaster.show] の戻り値になる。 */
-class ActiveToast internal constructor(val item: ReceivedNotificationToast) {
+class ActiveToast internal constructor(item: ReceivedNotificationToast) {
+
+    /** 表示内容。後から届いた画像の差し込み（§4.3.1）で表示中に差し替わる。 */
+    var item: ReceivedNotificationToast by mutableStateOf(item)
+        internal set
 
     private val outcome = CompletableDeferred<ToastResult>()
 
@@ -63,5 +70,12 @@ class ComposeToaster(
     override suspend fun close(id: String) {
         active.filter { it.item.id == id }.forEach { it.finish(ToastResult.Closed) }
         log.i { "toast close id=$id" }
+    }
+
+    override suspend fun update(item: ReceivedNotificationToast) {
+        val targets = active.filter { it.item.id == item.id }
+        if (targets.isEmpty()) return
+        targets.forEach { it.item = item }
+        log.i { "toast updated id=${item.id}" }
     }
 }

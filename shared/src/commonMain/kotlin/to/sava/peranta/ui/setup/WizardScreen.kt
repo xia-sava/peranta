@@ -129,6 +129,7 @@ fun WizardScreen(
             attachFullTextWhenTruncated = config.attachFullTextWhenTruncated,
             timelineRetentionDays = config.timelineRetentionDays,
             autoDisplayImages = config.autoDisplayImages,
+            attachNotificationImages = config.attachNotificationImages,
         )
         config = controller.load()
         dirty = true

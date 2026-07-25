@@ -63,6 +63,7 @@ import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.AttachmentDownloadState
 import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.FullTextUi
+import to.sava.peranta.ui.displayAttachments
 import to.sava.peranta.ui.MessageComposerUi
 import to.sava.peranta.ui.TimelineActions
 import to.sava.peranta.ui.shell.RosterUi
@@ -183,6 +184,7 @@ class DesktopReceiver(
         commandExecutor = dismissExecutor,
         persistSensitiveHistory = config.persistSensitiveHistory,
         onItemAppended = ::handleAppended,
+        onItemUpdated = ::handleUpdated,
         interceptRawMessage = selfTestProbe::consumeMarker,
     )
 
@@ -214,12 +216,10 @@ class DesktopReceiver(
      */
     private suspend fun primeCachedAttachmentStates() {
         pipeline.items.collect { items ->
-            items.filterIsInstance<ReceivedFile>().forEach { file ->
-                file.payload.attachments.forEach { ref ->
-                    knownRefs[ref.blobId] = ref
-                    if (attachmentStates.value[ref.blobId] == null) {
-                        attachmentCache.cachedFile(ref)?.let { markCached(ref) }
-                    }
+            items.flatMap { item -> item.displayAttachments() }.forEach { ref ->
+                knownRefs[ref.blobId] = ref
+                if (attachmentStates.value[ref.blobId] == null) {
+                    attachmentCache.cachedFile(ref)?.let { markCached(ref) }
                 }
             }
         }
@@ -261,6 +261,32 @@ class DesktopReceiver(
             is ReceivedMessage -> toastScope.launch { showToast(item.id, toastContentFor(item)) }
             else -> Unit
         }
+    }
+
+    /**
+     * 改版で差し替わった受信通知を表示へ反映する（§4.3.1）。後から届いた画像を取得し、
+     * まだ表示中のトーストへ差し込む。タイムラインのバブルは items の更新で自動的に追随する。
+     */
+    internal fun handleUpdated(item: TimelineItem) {
+        if (item !is ReceivedNotification) return
+        toastScope.launch { showToastImage(item) }
+    }
+
+    /**
+     * 通知に後から付いた画像を取得し、表示中のトーストへ差し込む（§4.3.1）。
+     * 画像の自動表示が OFF、画像添付が無い、取得・デコードに失敗した場合は何もしない。
+     * トーストが既に消えていれば [Toaster.update] が空振りする。
+     */
+    private suspend fun showToastImage(item: ReceivedNotification) {
+        if (!config.autoDisplayImages) return
+        val ref = item.payload.displayAttachments().firstOrNull { it.kind == AttachmentKind.IMAGE } ?: return
+        val thumbnail = attachmentStates.value[ref.blobId]?.thumbnail
+            ?: run {
+                startDownload(ref).join()
+                attachmentStates.value[ref.blobId]?.thumbnail
+            }
+            ?: return
+        toastContentFor(item)?.let { toaster.update(it.copy(image = thumbnail)) }
     }
 
     private suspend fun showNotificationToast(item: ReceivedNotification) {
@@ -434,10 +460,13 @@ class DesktopReceiver(
         }
     }
 
-    /** [ref] の添付を手動ダウンロードする。既に進行中なら二重起動しない。 */
-    private fun startDownload(ref: AttachmentRef) {
+    /**
+     * [ref] の添付をダウンロードする。既に進行中ならそのジョブを返し、二重起動しない。
+     * 戻り値は完了を待てるジョブで、トーストへの画像差し込み（§4.3.1）が取得完了を待つのに使う。
+     */
+    private fun startDownload(ref: AttachmentRef): Job {
         knownRefs[ref.blobId] = ref
-        if (downloadJobs[ref.blobId]?.isActive == true) return
+        downloadJobs[ref.blobId]?.takeIf { it.isActive }?.let { return it }
         attachmentStates.update { it + (ref.blobId to AttachmentDownloadState(progress = TransferProgress.running(ref.sizeBytes))) }
         val job = toastScope.launch {
             try {
@@ -464,6 +493,7 @@ class DesktopReceiver(
             }
         }
         downloadJobs[ref.blobId] = job
+        return job
     }
 
     /** 進行中のダウンロードをキャンセルし、未取得状態へ戻す。 */

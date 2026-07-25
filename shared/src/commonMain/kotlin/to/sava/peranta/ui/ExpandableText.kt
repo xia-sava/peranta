@@ -10,12 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import kotlinx.coroutines.CancellationException
-import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
-import to.sava.peranta.model.FilePayload
-import to.sava.peranta.model.NotificationPayload
-import to.sava.peranta.model.Payload
-import to.sava.peranta.model.SmsPayload
 
 /** 自動展開する本文のタグ接頭辞（末尾に blobId を付ける）。 */
 const val TAG_FULL_TEXT_PREFIX: String = "full-text-"
@@ -28,17 +23,6 @@ const val TAG_FULL_TEXT_PREFIX: String = "full-text-"
 class FullTextUi(
     val fetchFullText: suspend (AttachmentRef) -> String?,
 )
-
-/** payload に含まれる全文添付（kind=TEXT）を返す。無ければ null。 */
-internal fun Payload.fullTextAttachment(): AttachmentRef? =
-    attachmentsOf(this).firstOrNull { it.kind == AttachmentKind.TEXT }
-
-private fun attachmentsOf(payload: Payload): List<AttachmentRef> = when (payload) {
-    is NotificationPayload -> payload.attachments
-    is SmsPayload -> payload.attachments
-    is FilePayload -> payload.attachments
-    else -> emptyList()
-}
 
 /**
  * 切り詰めプレビュー [preview] を表示し、表示された時点で [ref] の全文添付を自動取得して差し替える（§4.3）。

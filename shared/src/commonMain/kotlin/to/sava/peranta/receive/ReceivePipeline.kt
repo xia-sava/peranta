@@ -60,6 +60,11 @@ class ReceivePipeline(
     private val log: Logger = Logger.withTag("Receive"),
     private val now: () -> Long = ::nowEpochMillis,
     private val onItemAppended: (TimelineItem) -> Unit = {},
+    /**
+     * 既存アイテムが改版で差し替わったときに呼ぶ（§4.3.1）。表示中のトーストへの画像の差し込みや、
+     * OS 通知の出し直しに使う。新規追記（[onItemAppended]）とは排他で、既読同期による再記録では呼ばない。
+     */
+    private val onItemUpdated: (TimelineItem) -> Unit = {},
     /** Envelope 解釈の前に生メッセージを検査し、true なら破棄する（自己疎通テストのマーカー等）。 */
     private val interceptRawMessage: (rawMessage: String) -> Boolean = { false },
 ) {
@@ -76,7 +81,11 @@ class ReceivePipeline(
      */
     suspend fun loadHistory() {
         val history = feed.load(now())
-        history.forEach { rememberId(it.id) }
+        history.forEach { item ->
+            rememberId(item.id)
+            // 改版済みで保存された通知は、その改版のキーも既知にして再適用を防ぐ（§4.3.1）。
+            (item as? ReceivedNotification)?.let { rememberId(dedupeKeyOf(it.payload)) }
+        }
         log.i { "receive pipeline primed: history=${history.size}" }
     }
 
@@ -130,7 +139,7 @@ class ReceivePipeline(
 
         when (payload) {
             is NotificationPayload, is SmsPayload -> {
-                if (!rememberId(payload.id)) {
+                if (!rememberId(dedupeKeyOf(payload))) {
                     log.d { "dropping duplicate payload id=${payload.id}" }
                     return
                 }
@@ -269,17 +278,48 @@ class ReceivePipeline(
         return true
     }
 
+    /**
+     * 受信通知をタイムラインへ載せる。改版（§4.3.1）で差し替える既存アイテムがあるときは、受信時刻と
+     * 元通知消滅の印を保ったまま payload だけ入れ替える。差し替え先が無ければ通常の新規追記として扱う
+     * （初回配送が届かなかった場合でも改版だけで表示できる）。
+     * 配送順が入れ替わって古い改版が後から届いたときは、既に載っている新しい内容を守るため捨てる。
+     */
     private suspend fun appendReceived(payload: Payload) {
-        val expiresAt = expiresAtOf(payload)
-        val displayItem = ReceivedNotification(
-            id = payload.id,
-            timestampEpochMillis = now(),
-            payload = payload,
-            expiresAtEpochMillis = expiresAt,
+        val existing = existingNotification(payload.id)
+        if (revisionOf(existing?.payload) > revisionOf(payload)) {
+            log.d { "dropping superseded payload id=${payload.id} revision=${revisionOf(payload)}" }
+            return
+        }
+        val revised = existing?.takeIf { revisionOf(payload) > 0 }
+        val displayItem = revised?.copy(payload = payload, expiresAtEpochMillis = expiresAtOf(payload))
+            ?: ReceivedNotification(
+                id = payload.id,
+                timestampEpochMillis = now(),
+                payload = payload,
+                expiresAtEpochMillis = expiresAtOf(payload),
+            )
+        record(
+            displayItem = displayItem,
+            persistItem = persistItemFor(displayItem, payload),
+            updated = revised != null,
         )
-        record(displayItem = displayItem, persistItem = persistItemFor(displayItem, payload))
-        log.i { "notification appended id=${payload.id}" }
+        log.i { "notification appended id=${payload.id} revision=${revisionOf(payload)}" }
     }
+
+    /** タイムラインに載っている同一 id の受信通知。無ければ null。 */
+    private fun existingNotification(payloadId: String): ReceivedNotification? =
+        items.value.asSequence()
+            .filterIsInstance<ReceivedNotification>()
+            .firstOrNull { it.id == payloadId }
+
+    /** 重複排除キー。改版された通知だけ id と revision の対で見る（§4.3.1）。 */
+    private fun dedupeKeyOf(payload: Payload): String =
+        when (val revision = revisionOf(payload)) {
+            0 -> payload.id
+            else -> "${payload.id}#$revision"
+        }
+
+    private fun revisionOf(payload: Payload?): Int = (payload as? NotificationPayload)?.revision ?: 0
 
     /**
      * 受信した画像・ファイル転送（§4.3）をタイムラインへ [ReceivedFile] として追記する。
@@ -370,9 +410,17 @@ class ReceivePipeline(
      * 永続失敗の握り潰しとログ化は [feed] の契約（[TimelineFeed.record]）に委ねる。
      * [onItemAppended] は新規追記のときだけ呼ぶ。同一 id の置換（[markSourceDismissed] 等による
      * 再記録）では呼ばないため、既存アイテムの再表示（トースト・ミラー通知の再発火）は起きない。
+     * [updated] を立てた置換（改版の反映、§4.3.1）だけは [onItemUpdated] で表示の更新を促す。
      */
-    private suspend fun record(displayItem: TimelineItem, persistItem: TimelineItem = displayItem) {
+    private suspend fun record(
+        displayItem: TimelineItem,
+        persistItem: TimelineItem = displayItem,
+        updated: Boolean = false,
+    ) {
         val appended = feed.record(displayItem, persistItem)
-        if (appended) onItemAppended(displayItem)
+        when {
+            appended -> onItemAppended(displayItem)
+            updated -> onItemUpdated(displayItem)
+        }
     }
 }

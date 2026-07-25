@@ -2,6 +2,7 @@ package to.sava.peranta.android
 
 import android.content.Context
 import android.content.res.Resources
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -23,11 +24,11 @@ import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.platform.ioDispatcher
-import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.ui.AttachmentDownloadState
 import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.FullTextUi
+import to.sava.peranta.ui.displayAttachments
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.encoding.Base64
@@ -42,11 +43,14 @@ private const val MAX_THUMBNAIL_DECODE_BYTES: Long = 25L * 1024 * 1024
 /** サムネイルの目標一辺（dp）。この寸法に収まるよう縮小デコードして OOM を防ぐ（カード表示は最大 220dp）。 */
 private const val THUMBNAIL_TARGET_DP: Int = 220
 
+/** 通知に載せる画像の目標一辺（dp）。BigPictureStyle の表示幅に対して十分な解像度（§4.3.1）。 */
+private const val NOTIFICATION_IMAGE_TARGET_DP: Int = 480
+
 /**
  * [width]×[height] の画像を [reqWidth]×[reqHeight] に収めるための [BitmapFactory] inSampleSize（2 の累乗）を求める。
  * フルサイズのビットマップを確保せず、表示に必要な解像度までデコード時に間引くための係数（AOSP 標準パターン）。
  */
-internal fun thumbnailSampleSize(width: Int, height: Int, reqWidth: Int, reqHeight: Int): Int {
+internal fun decodeSampleSize(width: Int, height: Int, reqWidth: Int, reqHeight: Int): Int {
     if (width <= 0 || height <= 0 || reqWidth <= 0 || reqHeight <= 0) return 1
     var sampleSize = 1
     if (height > reqHeight || width > reqWidth) {
@@ -138,13 +142,30 @@ object AndroidAttachmentReceive {
     fun primeCached(context: Context, config: PerantaConfig, items: List<TimelineItem>) {
         if (!config.hasSharedKey) return
         val cache = cache(context, config)
-        items.filterIsInstance<ReceivedFile>().forEach { file ->
-            file.payload.attachments.forEach { ref ->
-                if (_states.value[ref.blobId] == null) {
-                    cache.cachedFile(ref)?.let { markCached(ref, it) }
-                }
+        items.flatMap { item -> item.displayAttachments() }.forEach { ref ->
+            if (_states.value[ref.blobId] == null) {
+                cache.cachedFile(ref)?.let { markCached(ref, it) }
             }
         }
+    }
+
+    /**
+     * 通知に後から付いた画像（§4.3.1）を取得・復号し、OS 通知に載せられる [Bitmap] にして返す。
+     * 併せてダウンロード状態を「取得済み」にするため、タイムラインのカードにも同じ画像が出る。
+     * 設定不足・取得失敗・デコード失敗では null を返し、通知は本文だけのまま据え置く。
+     */
+    suspend fun notificationImage(context: Context, config: PerantaConfig, ref: AttachmentRef): Bitmap? {
+        if (!config.hasSharedKey) return null
+        val cache = cache(context, config)
+        val file = cache.cachedFile(ref) ?: try {
+            withContext(ioDispatcher) { cache.download(ref) }.also { markCached(ref, it) }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            log.w(error) { "notification image fetch failed blobId=${ref.blobId}" }
+            return null
+        }
+        return decodeSampled(file, notificationImageTargetPixels())
     }
 
     /**
@@ -156,26 +177,35 @@ object AndroidAttachmentReceive {
         if (attachmentKindForMimeType(ref.mimeType) != AttachmentKind.IMAGE) return null
         if (file.length() > MAX_THUMBNAIL_DECODE_BYTES) return null
         return try {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(file.absolutePath, bounds)
-            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
-                null
-            } else {
-                val target = thumbnailTargetPixels()
-                val options = BitmapFactory.Options().apply {
-                    inSampleSize = thumbnailSampleSize(bounds.outWidth, bounds.outHeight, target, target)
-                }
-                BitmapFactory.decodeFile(file.absolutePath, options)?.asImageBitmap()
-            }
+            decodeSampled(file, thumbnailTargetPixels())?.asImageBitmap()
         } catch (error: Exception) {
             log.w(error) { "thumbnail decode failed blobId=${ref.blobId}" }
             null
         }
     }
 
+    /**
+     * [file] の画像を [targetPixels] に収まる解像度まで間引いてデコードする。
+     * まず [BitmapFactory.Options.inJustDecodeBounds] で寸法だけ読み、[decodeSampleSize] を掛けて縮小する。
+     * フルサイズのビットマップを抱えて OOM するのを避けるための AOSP 標準パターン。
+     */
+    private fun decodeSampled(file: File, targetPixels: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = decodeSampleSize(bounds.outWidth, bounds.outHeight, targetPixels, targetPixels)
+        }
+        return BitmapFactory.decodeFile(file.absolutePath, options)
+    }
+
     /** サムネイルの目標一辺（ピクセル）。端末の表示密度を掛けて dp をピクセルへ変換する。 */
     private fun thumbnailTargetPixels(): Int =
         (THUMBNAIL_TARGET_DP * Resources.getSystem().displayMetrics.density).roundToInt()
+
+    /** 通知に載せる画像の目標一辺（ピクセル）。システム側でも縮小されるため、これ以上大きく読む意味はない。 */
+    private fun notificationImageTargetPixels(): Int =
+        (NOTIFICATION_IMAGE_TARGET_DP * Resources.getSystem().displayMetrics.density).roundToInt()
 
     /**
      * タイムラインの添付カード用の操作束を作る（§4.3、§10.1）。ダウンロード・キャンセルはフォアグラウンド

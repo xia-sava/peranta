@@ -23,6 +23,8 @@ const val DEFAULT_HOST: String = "peranta.example.com"
  * [autoDisplayImages] が true のとき、タイムラインに現れた画像添付を自動でダウンロードして表示する（§4.3）。
  * false なら従来どおり手動でダウンロードボタンを押すまで取得しない。端末ローカルの表示設定であり
  * ペアリング QR には含めない。
+ * [attachNotificationImages] が true のとき、転送する通知に元の画像を添付する（§4.3.1）。
+ * 端末ローカルの送信設定でありペアリング QR には含めない。
  */
 data class PerantaConfig(
     val host: String = DEFAULT_HOST,
@@ -48,6 +50,7 @@ data class PerantaConfig(
     val attachFullTextWhenTruncated: Boolean = true,
     val timelineRetentionDays: Int? = null,
     val autoDisplayImages: Boolean = true,
+    val attachNotificationImages: Boolean = true,
 ) {
     /**
      * ペアリング済みか（共有鍵と keyId が揃っているか）。

@@ -1,18 +1,23 @@
 package to.sava.peranta.android
 
 import android.content.Context
+import android.graphics.Bitmap
 import co.touchlab.kermit.Logger
 import co.touchlab.kermit.Severity
+import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import to.sava.peranta.blob.AttachmentUploadRequest
 import to.sava.peranta.blob.BlobCipher
 import to.sava.peranta.blob.KtorBlobTransport
+import to.sava.peranta.blob.uploadAttachment
 import to.sava.peranta.blob.uploadFullTextAttachment
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.timelineRetentionMaxAgeMillis
 import to.sava.peranta.crypto.MessageCipher
+import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
@@ -24,8 +29,11 @@ import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.send.CommandSender
 import to.sava.peranta.send.ForwardedKeyTracker
 import to.sava.peranta.send.SendPipeline
+import to.sava.peranta.send.UploadedAttachmentCache
 import to.sava.peranta.send.attachFullTextIfNeeded
 import to.sava.peranta.send.resolveSendTopics
+import to.sava.peranta.send.shouldAttachNotificationImage
+import to.sava.peranta.send.withImageAttachment
 import to.sava.peranta.send.SmsDedupeTracker
 import to.sava.peranta.send.NotificationRepostTracker
 import to.sava.peranta.timeline.JsonlTimelineStore
@@ -58,6 +66,9 @@ object PerantaSend {
 
     /** 自端末が転送した通知の key を覚え、元通知の削除検知で既読同期の要否を判定する（§3.4）。 */
     val forwarded = ForwardedKeyTracker()
+
+    /** 同じ通知画像を再投稿のたびに上げ直さないための記憶（§4.3.1）。 */
+    private val uploadedImages = UploadedAttachmentCache()
 
     private val httpClient by lazy { createNtfyHttpClient() }
 
@@ -182,6 +193,70 @@ object PerantaSend {
         val cipher = BlobCipher(Base64.decode(config.sharedKeyBase64!!), config.keyId!!)
         val transport = KtorBlobTransport(config, httpClient)
         return uploadFullTextAttachment(transport, cipher, blobTopic, text)
+    }
+
+    /**
+     * 通知に元の画像を添付した改版を組む（§4.3.1）。画像が無い・トグル OFF・伏せ字対象・
+     * 符号化後が上限超過のいずれかなら null を返し、画像なしの初回配送のままにする。
+     * アップロード失敗も握って null を返す（画像が付かないだけで本文の配送は既に済んでいる）。
+     */
+    suspend fun withNotificationImage(
+        context: Context,
+        payload: NotificationPayload,
+        image: Bitmap?,
+        config: PerantaConfig,
+    ): NotificationPayload? {
+        if (image == null) return null
+        val allowed = shouldAttachNotificationImage(
+            payload = payload,
+            attachNotificationImages = config.attachNotificationImages,
+            persistSensitiveHistory = config.persistSensitiveHistory,
+        )
+        if (!allowed) return null
+        return try {
+            val bytes = encodeNotificationImage(image) ?: run {
+                log.d { "notification image exceeds the size budget; skipping id=${payload.id}" }
+                return null
+            }
+            withImageAttachment(payload, uploadNotificationImage(context, config, bytes, payload.postedAtEpochMillis))
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            log.w(error) { "notification image attach failed id=${payload.id}" }
+            null
+        }
+    }
+
+    /**
+     * 符号化済みの通知画像を暗号化 blob としてアップロードし、[AttachmentRef] を返す（§4.3.1）。
+     * 同一内容を既に上げていれば、その参照を使い回してアップロードを省く。
+     */
+    private suspend fun uploadNotificationImage(
+        context: Context,
+        config: PerantaConfig,
+        bytes: ByteArray,
+        postedAtEpochMillis: Long,
+    ): AttachmentRef {
+        val contentHash = contentHashOf(bytes)
+        uploadedImages.find(contentHash, nowEpochMillis())?.let { return it }
+        val repo = androidConfigRepository(context)
+        val blobTopic = config.blobTopic ?: repo.ensureBlobTopic()
+        val cipher = BlobCipher(Base64.decode(config.sharedKeyBase64!!), config.keyId!!)
+        val transport = KtorBlobTransport(config, httpClient)
+        val ref = uploadAttachment(
+            transport = transport,
+            blobCipher = cipher,
+            blobTopic = blobTopic,
+            request = AttachmentUploadRequest(
+                fileName = "notification-$postedAtEpochMillis.jpg",
+                mimeType = NOTIFICATION_IMAGE_MIME,
+                sizeBytes = bytes.size.toLong(),
+                kind = AttachmentKind.IMAGE,
+                openSource = { ByteReadChannel(bytes) },
+            ),
+        )
+        uploadedImages.remember(contentHash, ref)
+        return ref
     }
 
     /**

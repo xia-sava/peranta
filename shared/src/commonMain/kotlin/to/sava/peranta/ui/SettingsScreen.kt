@@ -80,6 +80,10 @@ private const val PERSIST_SENSITIVE_HISTORY_DESCRIPTION: String =
 private const val AUTO_DISPLAY_IMAGES_DESCRIPTION: String =
     "受信した画像を自動でダウンロードして表示します。通信量が気になる場合は OFF にしてください。"
 
+/** 通知画像の転送トグルの説明文（§4.3.1）。 */
+private const val ATTACH_NOTIFICATION_IMAGES_DESCRIPTION: String =
+    "この端末が転送する通知に、通知に付いていた画像を添えます。通信量が気になる場合は OFF にしてください。"
+
 /** 共有鍵・トークン未設定で QR を作れないときの案内文。 */
 private const val PAIRING_PREREQUISITE_NOTICE: String = "先にトークンと共有鍵を設定してください。"
 
@@ -145,6 +149,7 @@ fun SettingsScreen(
     var hasKey by remember { mutableStateOf(!initial.sharedKeyBase64.isNullOrBlank()) }
     var persistSensitiveHistory by remember { mutableStateOf(initial.persistSensitiveHistory) }
     var attachFullTextWhenTruncated by remember { mutableStateOf(initial.attachFullTextWhenTruncated) }
+    var attachNotificationImages by remember { mutableStateOf(initial.attachNotificationImages) }
     var timelineRetentionDays by remember { mutableStateOf(initial.timelineRetentionDays?.toString().orEmpty()) }
     var autoDisplayImages by remember { mutableStateOf(initial.autoDisplayImages) }
     var sendEnabled by remember { mutableStateOf(initial.sendEnabled) }
@@ -177,6 +182,7 @@ fun SettingsScreen(
             attachFullTextWhenTruncated = attachFullTextWhenTruncated,
             timelineRetentionDays = timelineRetentionDays.toIntOrNull(),
             autoDisplayImages = autoDisplayImages,
+            attachNotificationImages = attachNotificationImages,
         )
         dirty = true
     }
@@ -318,6 +324,17 @@ fun SettingsScreen(
                     onCheckedChange = { attachFullTextWhenTruncated = it; persistConnection() },
                     label = "長文本文の全文をシームレスに添付・展開する",
                     tag = TAG_ATTACH_FULL_TEXT,
+                )
+                LabeledCheckbox(
+                    checked = attachNotificationImages,
+                    onCheckedChange = { attachNotificationImages = it; persistConnection() },
+                    label = "通知の画像も転送する",
+                    tag = TAG_ATTACH_NOTIFICATION_IMAGES,
+                )
+                Text(
+                    text = ATTACH_NOTIFICATION_IMAGES_DESCRIPTION,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 TimelineRetentionDaysField(
                     value = timelineRetentionDays,
@@ -594,6 +611,9 @@ const val TAG_PERSIST_SENSITIVE: String = "settings-persist-sensitive"
 const val TAG_ATTACH_FULL_TEXT: String = "settings-attach-full-text"
 const val TAG_TIMELINE_RETENTION_DAYS: String = "settings-timeline-retention-days"
 const val TAG_AUTO_DISPLAY_IMAGES: String = "settings-auto-display-images"
+
+/** 通知画像の転送トグルのテストタグ。 */
+const val TAG_ATTACH_NOTIFICATION_IMAGES: String = "settings-attach-notification-images"
 const val TAG_SEND_ENABLED: String = "settings-send-enabled"
 const val TAG_SMS_DIRECT_RECEIVE: String = "settings-sms-direct-receive"
 const val TAG_UPDATE_CHECK: String = "settings-update-check"

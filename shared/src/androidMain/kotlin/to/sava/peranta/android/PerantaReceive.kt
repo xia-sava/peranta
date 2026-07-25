@@ -11,7 +11,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.PipelineKey
+import to.sava.peranta.blob.attachmentKindForMimeType
 import to.sava.peranta.config.toPipelineKey
+import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.model.nowEpochMillis
@@ -33,6 +35,7 @@ import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.TimelineActions
+import to.sava.peranta.ui.displayAttachments
 import to.sava.peranta.ui.shell.RosterUi
 
 /** イベントに詰める固定 topic ラベル。エンドポイント URL は秘匿するため運搬に含めない（§16）。 */
@@ -177,6 +180,7 @@ object PerantaReceive {
             commandExecutor = commandExecutor,
             persistSensitiveHistory = config.persistSensitiveHistory,
             onItemAppended = { item -> onAppended(presenter, item) },
+            onItemUpdated = { item -> onUpdated(appContext, presenter, item) },
         )
         created.loadHistory()
         pipeline = created
@@ -186,6 +190,23 @@ object PerantaReceive {
 
     private fun onAppended(presenter: AndroidNotificationPresenter, item: TimelineItem) {
         present(presenter, item)
+    }
+
+    /**
+     * 改版で差し替わった受信通知を表示へ反映する（§4.3.1）。後から届いた画像を取得し、
+     * 表示済みの通知を音を鳴らさずに出し直す。画像の自動表示が OFF なら取得しない。
+     */
+    private fun onUpdated(context: Context, presenter: AndroidNotificationPresenter, item: TimelineItem) {
+        if (item !is ReceivedNotification) return
+        val ref = item.payload.displayAttachments()
+            .firstOrNull { attachmentKindForMimeType(it.mimeType) == AttachmentKind.IMAGE }
+            ?: return
+        commandScope.launch {
+            val config = androidConfigRepository(context).load()
+            if (!config.autoDisplayImages) return@launch
+            val image = AndroidAttachmentReceive.notificationImage(context, config, ref) ?: return@launch
+            presenter.update(item, image)
+        }
     }
 
     private fun present(presenter: AndroidNotificationPresenter, item: TimelineItem) {

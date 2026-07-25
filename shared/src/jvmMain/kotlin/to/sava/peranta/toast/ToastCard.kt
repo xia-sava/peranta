@@ -1,5 +1,6 @@
 package to.sava.peranta.toast
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -19,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -35,6 +38,9 @@ private const val DISMISS_BUTTON_LABEL = "消す"
 
 /** 本文に出す最大行数。 */
 private const val BODY_MAX_LINES = 4
+
+/** 差し込まれた画像の表示高さの上限。トーストが画面を占有しない程度に抑える（§4.3.1）。 */
+private val IMAGE_MAX_HEIGHT = 160.dp
 
 /**
  * トースト本体。周囲のアプリの通知と並んだときに浮かないよう、Windows のトーストに寄せた
@@ -82,6 +88,15 @@ internal fun ToastCard(
             maxLines = BODY_MAX_LINES,
             overflow = TextOverflow.Ellipsis,
         )
+        item.image?.let { image ->
+            Spacer(Modifier.height(8.dp))
+            Image(
+                bitmap = image,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth().heightIn(max = IMAGE_MAX_HEIGHT).clip(RoundedCornerShape(4.dp)),
+            )
+        }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (item.openUrl != null) {

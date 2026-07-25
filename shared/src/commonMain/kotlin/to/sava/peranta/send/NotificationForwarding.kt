@@ -237,15 +237,33 @@ fun shouldAttachFullText(
     val byteLength = utf8ByteLength(fullText)
     if (byteLength <= FULL_TEXT_PREVIEW_BYTES) return false
     if (byteLength > MAX_FULL_TEXT_ATTACHMENT_BYTES) return false
-    return !isSensitiveForFullText(payload, persistSensitiveHistory)
+    return !isSensitiveForAttachment(payload, persistSensitiveHistory)
 }
 
 /**
- * この payload の本文が履歴で伏せ字対象か（＝全文 blob を作らない対象か）を既存判定で見る。
+ * この payload の本文が履歴で伏せ字対象か（＝blob 添付を作らない対象か）を既存判定で見る。
  * [payloadForPersistence] は伏せる必要が無ければ同一インスタンスを返すため、その同一性で判定する。
  */
-private fun isSensitiveForFullText(payload: Payload, persistSensitiveHistory: Boolean): Boolean =
+private fun isSensitiveForAttachment(payload: Payload, persistSensitiveHistory: Boolean): Boolean =
     payloadForPersistence(payload, keepSensitive = persistSensitiveHistory) !== payload
+
+/**
+ * 通知に元の画像を添付すべきか判定する（§4.3.1）。
+ * [attachNotificationImages] が false（トグル OFF）なら付けない。履歴で本文を伏せる対象
+ * （OTP 通知・SMS）も、全文添付と同じ理由で付けない。
+ */
+fun shouldAttachNotificationImage(
+    payload: Payload,
+    attachNotificationImages: Boolean,
+    persistSensitiveHistory: Boolean,
+): Boolean = attachNotificationImages && !isSensitiveForAttachment(payload, persistSensitiveHistory)
+
+/**
+ * アップロード済みの画像を足した改版の通知を組む（§4.3.1）。
+ * 受信側が既存アイテムの差し替えとして扱えるよう改版番号を上げる。
+ */
+fun withImageAttachment(payload: NotificationPayload, image: AttachmentRef): NotificationPayload =
+    payload.copy(attachments = payload.attachments + image, revision = payload.revision + 1)
 
 /**
  * 本文全文が長い通知に全文添付を付ける（§4.3）。添付不要（トグル OFF・センシティブ・プレビュー予算内）なら

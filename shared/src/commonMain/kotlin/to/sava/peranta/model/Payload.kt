@@ -118,6 +118,11 @@ data class NotificationPayload(
     val expiresAtEpochMillis: Long? = null,
     val priority: Priority = Priority.NORMAL,
     val attachments: List<AttachmentRef> = emptyList(),
+    /**
+     * 同一 [id] の改版番号（§4.3.1）。初回配送は 0 で、画像添付を後から足した配送で 1 以上になる。
+     * 受信側は [id] と対で重複排除し、既存アイテムの差し替えとして扱う。
+     */
+    val revision: Int = 0,
     override val fromName: String? = null,
 ) : Payload()
 

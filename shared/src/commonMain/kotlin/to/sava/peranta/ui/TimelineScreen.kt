@@ -257,9 +257,9 @@ private fun TimelineRow(
     when (item) {
         is ReceivedNotification ->
             if (actions == null) {
-                ReceivedBubble(item, fullText)
+                ReceivedBubble(item, attachments, fullText)
             } else {
-                InteractiveReceivedBubble(item, actions, fullText, onLocalDismiss)
+                InteractiveReceivedBubble(item, actions, attachments, fullText, onLocalDismiss)
             }
 
         is ReceivedFile -> ReceivedFileBubble(item, attachments)
@@ -313,7 +313,7 @@ private fun FilePayloadContent(payload: FilePayload, attachments: AttachmentUi?)
 }
 
 @Composable
-private fun ReceivedBubble(item: ReceivedNotification, fullText: FullTextUi?) {
+private fun ReceivedBubble(item: ReceivedNotification, attachments: AttachmentUi?, fullText: FullTextUi?) {
     Bubble(
         alignment = Alignment.CenterStart,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -321,7 +321,7 @@ private fun ReceivedBubble(item: ReceivedNotification, fullText: FullTextUi?) {
         speaker = item.payload.speakerName(),
         time = item.timestampEpochMillis,
     ) {
-        ReceivedContent(item.payload, fullText)
+        ReceivedContent(item.payload, attachments, fullText)
     }
 }
 
@@ -337,6 +337,7 @@ private fun ReceivedBubble(item: ReceivedNotification, fullText: FullTextUi?) {
 private fun InteractiveReceivedBubble(
     item: ReceivedNotification,
     actions: TimelineActions,
+    attachments: AttachmentUi?,
     fullText: FullTextUi?,
     onLocalDismiss: () -> Unit,
 ) {
@@ -368,7 +369,7 @@ private fun InteractiveReceivedBubble(
             // バルーン幅は本文と × ボタンを合わせた幅。× は本文に被せず右隣（上寄せ）に置く。
             Row(verticalAlignment = Alignment.Top) {
                 Column(modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp)) {
-                    ReceivedContent(payload, fullText)
+                    ReceivedContent(payload, attachments, fullText)
                     if (item.sourceDismissed) {
                         SourceDismissedNote()
                     } else {
@@ -530,8 +531,12 @@ private fun ContextMenu(
     }
 }
 
+/**
+ * 受信した通知・SMS の内容（§10.1）。本文に続けて画像・ファイル添付のカードを並べる（§4.3.1）。
+ * 添付操作を持たない画面（[attachments] が null）ではカードを出さない。
+ */
 @Composable
-private fun ReceivedContent(payload: Payload, fullText: FullTextUi?) {
+private fun ReceivedContent(payload: Payload, attachments: AttachmentUi?, fullText: FullTextUi?) {
     Text(
         text = payload.displayHeader(),
         fontWeight = FontWeight.SemiBold,
@@ -545,6 +550,9 @@ private fun ReceivedContent(payload: Payload, fullText: FullTextUi?) {
         ExpandableText(preview = payload.displayText(), ref = textAttachment, fullText = fullText)
     } else {
         LinkifiedText(text = payload.displayText(), style = MaterialTheme.typography.bodyMedium)
+    }
+    if (attachments != null) {
+        payload.displayAttachments().forEach { ref -> AttachmentCard(ref, attachments) }
     }
 }
 

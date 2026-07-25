@@ -40,6 +40,7 @@ class DesktopReceiverToastClickTest {
             return result
         }
         override suspend fun close(id: String) = Unit
+        override suspend fun update(item: ReceivedNotificationToast) = Unit
     }
 
     private fun testConfig(): PerantaConfig = PerantaConfig(
