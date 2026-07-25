@@ -303,7 +303,8 @@ class ReceivePipeline(
             persistItem = persistItemFor(displayItem, payload),
             updated = revised != null,
         )
-        log.i { "notification appended id=${payload.id} revision=${revisionOf(payload)}" }
+        val outcome = if (revised != null) "revised" else "appended"
+        log.i { "notification $outcome id=${payload.id} revision=${revisionOf(payload)}" }
     }
 
     /** タイムラインに載っている同一 id の受信通知。無ければ null。 */
