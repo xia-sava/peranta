@@ -256,6 +256,9 @@ compose.desktop {
 
             windows {
                 iconFile.set(project.file("icons/peranta.ico"))
+                // 設定・鍵・履歴をユーザー領域に持つ単一ユーザー向けアプリなので、
+                // インストールと更新に管理者権限を要求しない。
+                perUserInstall = true
             }
         }
     }
