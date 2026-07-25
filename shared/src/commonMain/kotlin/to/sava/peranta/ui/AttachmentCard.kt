@@ -218,7 +218,7 @@ private fun AttachmentControls(
 }
 
 /** サーバ側の添付保持期限を過ぎているか（過ぎているとダウンロード不可）。 */
-private fun isBlobExpired(ref: AttachmentRef, now: Long): Boolean {
+internal fun isBlobExpired(ref: AttachmentRef, now: Long): Boolean {
     val expiresAt = ref.blobExpiresAtEpochMillis ?: return false
     return expiresAt < now
 }

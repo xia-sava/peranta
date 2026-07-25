@@ -16,19 +16,30 @@ import kotlin.math.roundToInt
 /** 転送する通知画像の MIME 型（§4.3.1）。 */
 const val NOTIFICATION_IMAGE_MIME: String = "image/jpeg"
 
+/** 転送する送信者アイコンの MIME 型（§4.3.1）。輪郭の透過を保つため PNG とする。 */
+const val SENDER_ICON_MIME: String = "image/png"
+
 /** 転送する通知画像の長辺の上限 px。これを超える画像は縮小してから符号化する（§4.3.1）。 */
 private const val MAX_IMAGE_LONG_EDGE: Int = 1440
+
+/** 転送する送信者アイコンの長辺の上限 px。ヘッダの小さな円に収まれば足りる（§4.3.1）。 */
+private const val MAX_ICON_LONG_EDGE: Int = 128
 
 /** 通知画像を JPEG へ符号化するときの品質。 */
 private const val IMAGE_JPEG_QUALITY: Int = 85
 
+/** PNG は可逆のため品質指定を使わないが、[Bitmap.compress] が引数を要求する。 */
+private const val ICON_PNG_QUALITY: Int = 100
+
 /** 符号化後の通知画像として許容する上限バイト数。超えるものは添付しない（§4.3.1）。 */
 private const val MAX_ENCODED_IMAGE_BYTES: Int = 2 * 1024 * 1024
+
+/** 符号化後の送信者アイコンとして許容する上限バイト数（§4.3.1）。 */
+private const val MAX_ENCODED_ICON_BYTES: Int = 64 * 1024
 
 /**
  * 通知が持つ本文画像（BigPictureStyle）を取り出す（§4.3.1）。持たない通知では null。
  * Android 12 以降は `Icon` で載るため、Bitmap 直載せの旧形式と両方を見る。
- * 送信者アイコン（largeIcon）は写真ではないため対象にしない。
  */
 fun notificationImageOf(context: Context, notification: Notification): Bitmap? {
     val extras = notification.extras
@@ -42,17 +53,41 @@ fun notificationImageOf(context: Context, notification: Notification): Bitmap? {
 }
 
 /**
+ * 通知が持つ送信者アイコン（largeIcon）を取り出す（§4.3.1）。持たない通知では null。
+ * メッセージアプリでは相手の連絡先写真やアバターがここに載る。
+ */
+fun senderIconOf(context: Context, notification: Notification): Bitmap? =
+    notification.getLargeIcon()?.loadDrawable(context)?.toBitmap()
+
+/**
  * 通知画像を配送用のバイト列へ符号化する（§4.3.1）。長辺を上限まで縮小して JPEG にする。
  * 符号化しても上限バイト数に収まらない場合は null を返し、呼び出し側は添付を諦める。
  */
-fun encodeNotificationImage(image: Bitmap): ByteArray? {
-    val source = image.toSoftwareBitmap()
-    val scaled = source.scaleToLongEdge(MAX_IMAGE_LONG_EDGE)
+fun encodeNotificationImage(image: Bitmap): ByteArray? =
+    encodeScaled(image, MAX_IMAGE_LONG_EDGE, Bitmap.CompressFormat.JPEG, IMAGE_JPEG_QUALITY, MAX_ENCODED_IMAGE_BYTES)
+
+/**
+ * 送信者アイコンを配送用のバイト列へ符号化する（§4.3.1）。挙動は [encodeNotificationImage] と同じで、
+ * 円に切り抜かれた輪郭の透過を残すため PNG にする。
+ */
+fun encodeSenderIcon(icon: Bitmap): ByteArray? =
+    encodeScaled(icon, MAX_ICON_LONG_EDGE, Bitmap.CompressFormat.PNG, ICON_PNG_QUALITY, MAX_ENCODED_ICON_BYTES)
+
+/** 長辺を [maxLongEdge] まで縮めて符号化する。[maxBytes] に収まらなければ null。 */
+private fun encodeScaled(
+    bitmap: Bitmap,
+    maxLongEdge: Int,
+    format: Bitmap.CompressFormat,
+    quality: Int,
+    maxBytes: Int,
+): ByteArray? {
+    val source = bitmap.toSoftwareBitmap()
+    val scaled = source.scaleToLongEdge(maxLongEdge)
     val buffer = ByteArrayOutputStream()
-    scaled.compress(Bitmap.CompressFormat.JPEG, IMAGE_JPEG_QUALITY, buffer)
+    scaled.compress(format, quality, buffer)
     if (scaled !== source) scaled.recycle()
-    if (source !== image) source.recycle()
-    return buffer.toByteArray().takeIf { it.size <= MAX_ENCODED_IMAGE_BYTES }
+    if (source !== bitmap) source.recycle()
+    return buffer.toByteArray().takeIf { it.size <= maxBytes }
 }
 
 /** [bytes] の SHA-256 を 16 進表記で返す。同一画像の再アップロードを避ける照合キーに使う（§4.3.1）。 */

@@ -36,6 +36,7 @@ import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.TimelineActions
 import to.sava.peranta.ui.displayAttachments
+import to.sava.peranta.ui.senderIcon
 import to.sava.peranta.ui.shell.RosterUi
 
 /** イベントに詰める固定 topic ラベル。エンドポイント URL は秘匿するため運搬に含めない（§16）。 */
@@ -193,19 +194,23 @@ object PerantaReceive {
     }
 
     /**
-     * 改版で差し替わった受信通知を表示へ反映する（§4.3.1）。後から届いた画像を取得し、
-     * 表示済みの通知を音を鳴らさずに出し直す。画像の自動表示が OFF なら取得しない。
+     * 改版で差し替わった受信通知を表示へ反映する（§4.3.1）。後から届いた画像と送信者アイコンを取得し、
+     * 表示済みの通知を音を鳴らさずに出し直す。本文画像は自動表示が OFF なら取得しない。
      */
     private fun onUpdated(context: Context, presenter: AndroidNotificationPresenter, item: TimelineItem) {
         if (item !is ReceivedNotification) return
-        val ref = item.payload.displayAttachments()
+        val imageRef = item.payload.displayAttachments()
             .firstOrNull { attachmentKindForMimeType(it.mimeType) == AttachmentKind.IMAGE }
-            ?: return
+        val senderIconRef = item.payload.senderIcon()
+        if (imageRef == null && senderIconRef == null) return
         commandScope.launch {
             val config = androidConfigRepository(context).load()
-            if (!config.autoDisplayImages) return@launch
-            val image = AndroidAttachmentReceive.notificationImage(context, config, ref) ?: return@launch
-            presenter.update(item, image)
+            val image = imageRef
+                ?.takeIf { config.autoDisplayImages }
+                ?.let { AndroidAttachmentReceive.notificationImage(context, config, it) }
+            val senderIcon = senderIconRef?.let { AndroidAttachmentReceive.notificationImage(context, config, it) }
+            if (image == null && senderIcon == null) return@launch
+            presenter.update(item, image, senderIcon)
         }
     }
 

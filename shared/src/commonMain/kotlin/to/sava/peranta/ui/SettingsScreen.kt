@@ -82,7 +82,8 @@ private const val AUTO_DISPLAY_IMAGES_DESCRIPTION: String =
 
 /** 通知画像の転送トグルの説明文（§4.3.1）。 */
 private const val ATTACH_NOTIFICATION_IMAGES_DESCRIPTION: String =
-    "この端末が転送する通知に、通知に付いていた画像を添えます。通信量が気になる場合は OFF にしてください。"
+    "この端末が転送する通知に、通知に付いていた画像と送信者のアイコンを添えます。" +
+        "通信量が気になる場合は OFF にしてください。"
 
 /** 共有鍵・トークン未設定で QR を作れないときの案内文。 */
 private const val PAIRING_PREREQUISITE_NOTICE: String = "先にトークンと共有鍵を設定してください。"

@@ -244,6 +244,7 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         PerantaSend.reposts.recordForwarded(input.notificationKey, input.title, input.text)
         // 画像は転送すると決めてから取り出す。符号化とアップロードは本文の転送を遅らせないよう後追いで行う（§4.3.1）。
         val image = if (config.attachNotificationImages) notificationImageOf(applicationContext, notification) else null
+        val senderIcon = if (config.attachNotificationImages) senderIconOf(applicationContext, notification) else null
         scope.launch {
             // 長文本文なら全文を暗号化 blob として添付し、インラインは切り詰めプレビューにする（§4.3）。
             val payload = PerantaSend.withFullTextAttachment(
@@ -254,20 +255,26 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             } else {
                 log.d { "notification queued for retry or dropped id=${payload.id}" }
             }
-            forwardImage(payload, image, sendConfig)
+            forwardImages(payload, image, senderIcon, sendConfig)
         }
     }
 
     /**
-     * 本文の転送に続けて、通知の画像を添付した改版を送る（§4.3.1）。
-     * 画像が無い・添付しない判定のときは何も送らない。
+     * 本文の転送に続けて、通知の画像と送信者アイコンを添付した改版を送る（§4.3.1）。
+     * どちらも無い・添付しない判定のときは何も送らない。
      */
-    private suspend fun forwardImage(payload: NotificationPayload, image: Bitmap?, config: PerantaConfig) {
-        val revised = PerantaSend.withNotificationImage(applicationContext, payload, image, config) ?: return
+    private suspend fun forwardImages(
+        payload: NotificationPayload,
+        image: Bitmap?,
+        senderIcon: Bitmap?,
+        config: PerantaConfig,
+    ) {
+        val revised = PerantaSend.withNotificationImages(applicationContext, payload, image, senderIcon, config)
+            ?: return
         if (PerantaSend.dispatch(applicationContext, revised, config)) {
-            log.i { "notification image sent id=${revised.id} revision=${revised.revision}" }
+            log.i { "notification images sent id=${revised.id} revision=${revised.revision}" }
         } else {
-            log.d { "notification image queued for retry or dropped id=${revised.id}" }
+            log.d { "notification images queued for retry or dropped id=${revised.id}" }
         }
     }
 

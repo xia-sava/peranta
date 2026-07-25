@@ -4,6 +4,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AttachmentSerializationTest {
@@ -130,6 +131,49 @@ class AttachmentSerializationTest {
             attachments = listOf(attachment().copy(kind = AttachmentKind.TEXT)),
         )
         assertEquals(payload, decodePayload(encodePayload(payload)))
+    }
+
+    /** 通知は送信者アイコンを含めてラウンドトリップする（§4.3.1）。 */
+    @Test
+    fun notificationWithSenderIconRoundTrip() {
+        val payload = NotificationPayload(
+            id = "n-1",
+            from = "phone",
+            to = BROADCAST_TARGET,
+            sentAtEpochMillis = 1_000,
+            packageName = "com.example.chat",
+            appName = "Chat",
+            title = "田中さん",
+            text = "写真を送りました",
+            notificationKey = "0|com.example.chat|1|null|10",
+            postedAtEpochMillis = 900,
+            attachments = listOf(attachment("blob-photo")),
+            senderIcon = attachment("blob-icon").copy(fileName = "sender-icon-900.png", mimeType = "image/png"),
+            revision = 1,
+        )
+        assertEquals(payload, decodePayload(encodePayload(payload)))
+    }
+
+    /** senderIcon を持たない旧 JSON も null 既定で復元される（後方互換）。 */
+    @Test
+    fun notificationWithoutSenderIconDefaultsToNull() {
+        val json = """
+            {
+              "type": "notification",
+              "id": "n-2",
+              "from": "phone",
+              "to": "*",
+              "sentAtEpochMillis": 10,
+              "packageName": "com.example.chat",
+              "appName": "Chat",
+              "title": "田中さん",
+              "text": "写真を送りました",
+              "notificationKey": "0|com.example.chat|1|null|10",
+              "postedAtEpochMillis": 9
+            }
+        """.trimIndent()
+        val decoded = decodePayload(json) as NotificationPayload
+        assertNull(decoded.senderIcon)
     }
 
     /** attachments を持たない旧 SMS JSON も、空リスト既定で復元される（後方互換）。 */

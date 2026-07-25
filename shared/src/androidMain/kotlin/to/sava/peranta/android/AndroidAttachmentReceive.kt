@@ -29,6 +29,7 @@ import to.sava.peranta.ui.AttachmentDownloadState
 import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.FullTextUi
 import to.sava.peranta.ui.displayAttachments
+import to.sava.peranta.ui.referencedAttachments
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.io.encoding.Base64
@@ -142,7 +143,7 @@ object AndroidAttachmentReceive {
     fun primeCached(context: Context, config: PerantaConfig, items: List<TimelineItem>) {
         if (!config.hasSharedKey) return
         val cache = cache(context, config)
-        items.flatMap { item -> item.displayAttachments() }.forEach { ref ->
+        items.flatMap { item -> item.referencedAttachments() }.forEach { ref ->
             if (_states.value[ref.blobId] == null) {
                 cache.cachedFile(ref)?.let { markCached(ref, it) }
             }

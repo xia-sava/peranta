@@ -33,7 +33,7 @@ import to.sava.peranta.send.UploadedAttachmentCache
 import to.sava.peranta.send.attachFullTextIfNeeded
 import to.sava.peranta.send.resolveSendTopics
 import to.sava.peranta.send.shouldAttachNotificationImage
-import to.sava.peranta.send.withImageAttachment
+import to.sava.peranta.send.withImageAttachments
 import to.sava.peranta.send.SmsDedupeTracker
 import to.sava.peranta.send.NotificationRepostTracker
 import to.sava.peranta.timeline.JsonlTimelineStore
@@ -196,17 +196,19 @@ object PerantaSend {
     }
 
     /**
-     * 通知に元の画像を添付した改版を組む（§4.3.1）。画像が無い・トグル OFF・伏せ字対象・
-     * 符号化後が上限超過のいずれかなら null を返し、画像なしの初回配送のままにする。
+     * 通知に元の画像と送信者アイコンを添付した改版を組む（§4.3.1）。どちらも無い・トグル OFF・
+     * 伏せ字対象のいずれかなら null を返し、画像なしの初回配送のままにする。
+     * 片方だけ符号化に失敗した場合はもう片方だけを付ける。
      * アップロード失敗も握って null を返す（画像が付かないだけで本文の配送は既に済んでいる）。
      */
-    suspend fun withNotificationImage(
+    suspend fun withNotificationImages(
         context: Context,
         payload: NotificationPayload,
         image: Bitmap?,
+        senderIcon: Bitmap?,
         config: PerantaConfig,
     ): NotificationPayload? {
-        if (image == null) return null
+        if (image == null && senderIcon == null) return null
         val allowed = shouldAttachNotificationImage(
             payload = payload,
             attachNotificationImages = config.attachNotificationImages,
@@ -214,11 +216,15 @@ object PerantaSend {
         )
         if (!allowed) return null
         return try {
-            val bytes = encodeNotificationImage(image) ?: run {
-                log.d { "notification image exceeds the size budget; skipping id=${payload.id}" }
-                return null
-            }
-            withImageAttachment(payload, uploadNotificationImage(context, config, bytes, payload.postedAtEpochMillis))
+            withImageAttachments(
+                payload = payload,
+                image = image
+                    ?.let { encodeNotificationImage(it) ?: logOversized("image", payload.id) }
+                    ?.let { uploadImage(context, config, it, imageFileName(payload), NOTIFICATION_IMAGE_MIME) },
+                senderIcon = senderIcon
+                    ?.let { encodeSenderIcon(it) ?: logOversized("sender icon", payload.id) }
+                    ?.let { uploadImage(context, config, it, senderIconFileName(payload), SENDER_ICON_MIME) },
+            )
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
@@ -227,15 +233,29 @@ object PerantaSend {
         }
     }
 
+    /** 符号化後が上限を超えて添付を諦めたことを記録し、null を返す。 */
+    private fun logOversized(what: String, payloadId: String): ByteArray? {
+        log.d { "notification $what exceeds the size budget; skipping id=$payloadId" }
+        return null
+    }
+
+    private fun imageFileName(payload: NotificationPayload): String =
+        "notification-${payload.postedAtEpochMillis}.jpg"
+
+    private fun senderIconFileName(payload: NotificationPayload): String =
+        "sender-icon-${payload.postedAtEpochMillis}.png"
+
     /**
-     * 符号化済みの通知画像を暗号化 blob としてアップロードし、[AttachmentRef] を返す（§4.3.1）。
+     * 符号化済みの画像を暗号化 blob としてアップロードし、[AttachmentRef] を返す（§4.3.1）。
      * 同一内容を既に上げていれば、その参照を使い回してアップロードを省く。
+     * 送信者アイコンは同じ相手からの通知で繰り返し現れるため、この使い回しがよく効く。
      */
-    private suspend fun uploadNotificationImage(
+    private suspend fun uploadImage(
         context: Context,
         config: PerantaConfig,
         bytes: ByteArray,
-        postedAtEpochMillis: Long,
+        fileName: String,
+        mimeType: String,
     ): AttachmentRef {
         val contentHash = contentHashOf(bytes)
         uploadedImages.find(contentHash, nowEpochMillis())?.let { return it }
@@ -248,8 +268,8 @@ object PerantaSend {
             blobCipher = cipher,
             blobTopic = blobTopic,
             request = AttachmentUploadRequest(
-                fileName = "notification-$postedAtEpochMillis.jpg",
-                mimeType = NOTIFICATION_IMAGE_MIME,
+                fileName = fileName,
+                mimeType = mimeType,
                 sizeBytes = bytes.size.toLong(),
                 kind = AttachmentKind.IMAGE,
                 openSource = { ByteReadChannel(bytes) },

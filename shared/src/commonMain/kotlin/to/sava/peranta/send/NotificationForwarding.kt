@@ -248,7 +248,7 @@ private fun isSensitiveForAttachment(payload: Payload, persistSensitiveHistory: 
     payloadForPersistence(payload, keepSensitive = persistSensitiveHistory) !== payload
 
 /**
- * 通知に元の画像を添付すべきか判定する（§4.3.1）。
+ * 通知に元の画像・送信者アイコンを添付すべきか判定する（§4.3.1）。
  * [attachNotificationImages] が false（トグル OFF）なら付けない。履歴で本文を伏せる対象
  * （OTP 通知・SMS）も、全文添付と同じ理由で付けない。
  */
@@ -259,11 +259,22 @@ fun shouldAttachNotificationImage(
 ): Boolean = attachNotificationImages && !isSensitiveForAttachment(payload, persistSensitiveHistory)
 
 /**
- * アップロード済みの画像を足した改版の通知を組む（§4.3.1）。
- * 受信側が既存アイテムの差し替えとして扱えるよう改版番号を上げる。
+ * アップロード済みの本文画像 [image]・送信者アイコン [senderIcon] を足した改版の通知を組む（§4.3.1）。
+ * どちらも無ければ null を返し、呼び出し側は改版を送らない。両方あっても改版は 1 回だけ進め、
+ * 受信側が 1 度の差し替えで両方を受け取れるようにする。
  */
-fun withImageAttachment(payload: NotificationPayload, image: AttachmentRef): NotificationPayload =
-    payload.copy(attachments = payload.attachments + image, revision = payload.revision + 1)
+fun withImageAttachments(
+    payload: NotificationPayload,
+    image: AttachmentRef? = null,
+    senderIcon: AttachmentRef? = null,
+): NotificationPayload? {
+    if (image == null && senderIcon == null) return null
+    return payload.copy(
+        attachments = image?.let { payload.attachments + it } ?: payload.attachments,
+        senderIcon = senderIcon ?: payload.senderIcon,
+        revision = payload.revision + 1,
+    )
+}
 
 /**
  * 本文全文が長い通知に全文添付を付ける（§4.3）。添付不要（トグル OFF・センシティブ・プレビュー予算内）なら

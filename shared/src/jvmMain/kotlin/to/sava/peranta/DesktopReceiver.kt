@@ -64,6 +64,8 @@ import to.sava.peranta.ui.AttachmentDownloadState
 import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.FullTextUi
 import to.sava.peranta.ui.displayAttachments
+import to.sava.peranta.ui.referencedAttachments
+import to.sava.peranta.ui.senderIcon
 import to.sava.peranta.ui.MessageComposerUi
 import to.sava.peranta.ui.TimelineActions
 import to.sava.peranta.ui.shell.RosterUi
@@ -216,7 +218,7 @@ class DesktopReceiver(
      */
     private suspend fun primeCachedAttachmentStates() {
         pipeline.items.collect { items ->
-            items.flatMap { item -> item.displayAttachments() }.forEach { ref ->
+            items.flatMap { item -> item.referencedAttachments() }.forEach { ref ->
                 knownRefs[ref.blobId] = ref
                 if (attachmentStates.value[ref.blobId] == null) {
                     attachmentCache.cachedFile(ref)?.let { markCached(ref) }
@@ -264,33 +266,45 @@ class DesktopReceiver(
     }
 
     /**
-     * 改版で差し替わった受信通知を表示へ反映する（§4.3.1）。後から届いた画像を取得し、
+     * 改版で差し替わった受信通知を表示へ反映する（§4.3.1）。後から届いた画像と送信者アイコンを取得し、
      * まだ表示中のトーストへ差し込む。タイムラインのバブルは items の更新で自動的に追随する。
      */
     internal fun handleUpdated(item: TimelineItem) {
         if (item !is ReceivedNotification) return
-        toastScope.launch { showToastImage(item) }
+        toastScope.launch { updateToastImages(item) }
     }
 
     /**
-     * 通知に後から付いた画像を取得し、表示中のトーストへ差し込む（§4.3.1）。
-     * 画像の自動表示が OFF、画像添付が無い、取得・デコードに失敗した場合は何もしない。
-     * トーストが既に消えていれば [Toaster.update] が空振りする。
+     * 通知に後から付いた画像・送信者アイコンを取得し、表示中のトーストへ差し込む（§4.3.1）。
+     * どちらも取得できなければ何もしない。トーストが既に消えていれば [Toaster.update] が空振りする。
      */
-    private suspend fun showToastImage(item: ReceivedNotification) {
-        if (!config.autoDisplayImages) return
-        val ref = item.payload.displayAttachments().firstOrNull { it.kind == AttachmentKind.IMAGE } ?: return
-        val thumbnail = attachmentStates.value[ref.blobId]?.thumbnail
-            ?: run {
-                startDownload(ref).join()
-                attachmentStates.value[ref.blobId]?.thumbnail
-            }
-            ?: return
-        toastContentFor(item)?.let { toaster.update(it.copy(image = thumbnail)) }
+    private suspend fun updateToastImages(item: ReceivedNotification) {
+        val image = if (config.autoDisplayImages) fetchThumbnail(item.payload.toastImage()) else null
+        val senderIcon = fetchThumbnail(item.payload.senderIcon())
+        if (image == null && senderIcon == null) return
+        toastContentFor(item)?.let { toaster.update(it.copy(image = image, senderIcon = senderIcon)) }
+    }
+
+    /**
+     * [ref] のサムネイルを返す。取得済みならそれを、未取得ならダウンロードの完了を待って返す。
+     * 参照が無い・取得やデコードに失敗した場合は null。
+     */
+    private suspend fun fetchThumbnail(ref: AttachmentRef?): ImageBitmap? {
+        if (ref == null) return null
+        attachmentStates.value[ref.blobId]?.thumbnail?.let { return it }
+        startDownload(ref).join()
+        return attachmentStates.value[ref.blobId]?.thumbnail
+    }
+
+    /** 取得済みのサムネイルだけを添える。初回表示を待たせないため、ここではダウンロードを起こさない。 */
+    private fun ReceivedNotificationToast.withCachedImages(item: ReceivedNotification): ReceivedNotificationToast {
+        val image = item.payload.toastImage()?.let { attachmentStates.value[it.blobId]?.thumbnail }
+        val senderIcon = item.payload.senderIcon()?.let { attachmentStates.value[it.blobId]?.thumbnail }
+        return copy(image = image, senderIcon = senderIcon)
     }
 
     private suspend fun showNotificationToast(item: ReceivedNotification) {
-        val content = toastContentFor(item) ?: return
+        val content = toastContentFor(item)?.withCachedImages(item) ?: return
         when (toaster.show(content)) {
             ToastResult.ButtonDismiss -> requestDismiss(item.payload)
             ToastResult.ButtonOpen -> content.openUrl?.let { openUrlInBrowser(it) }
@@ -585,3 +599,7 @@ class DesktopReceiver(
         const val MAX_THUMBNAIL_DECODE_BYTES: Long = 25L * 1024 * 1024
     }
 }
+
+/** トーストへ差し込む本文画像の参照（§4.3.1）。画像添付が無ければ null。 */
+private fun Payload.toastImage(): AttachmentRef? =
+    displayAttachments().firstOrNull { it.kind == AttachmentKind.IMAGE }

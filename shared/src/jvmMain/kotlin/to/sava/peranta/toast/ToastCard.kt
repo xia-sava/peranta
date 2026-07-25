@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +43,9 @@ private const val BODY_MAX_LINES = 4
 
 /** 差し込まれた画像の表示高さの上限。トーストが画面を占有しない程度に抑える（§4.3.1）。 */
 private val IMAGE_MAX_HEIGHT = 160.dp
+
+/** 件名の左に添える送信者アイコンの一辺（§4.3.1）。 */
+private val SENDER_ICON_SIZE = 24.dp
 
 /**
  * トースト本体。周囲のアプリの通知と並んだときに浮かないよう、Windows のトーストに寄せた
@@ -74,12 +79,25 @@ internal fun ToastCard(
             CloseGlyph(palette.caption) { onResult(ToastResult.Dismissed) }
         }
         Spacer(Modifier.height(6.dp))
-        Text(
-            text = item.title,
-            color = palette.title,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            item.senderIcon?.let { icon ->
+                Image(
+                    bitmap = icon,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(SENDER_ICON_SIZE).clip(CircleShape),
+                )
+            }
+            Text(
+                text = item.title,
+                color = palette.title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
         Spacer(Modifier.height(3.dp))
         Text(
             text = item.body,

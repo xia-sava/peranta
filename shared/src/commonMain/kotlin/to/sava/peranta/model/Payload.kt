@@ -119,6 +119,12 @@ data class NotificationPayload(
     val priority: Priority = Priority.NORMAL,
     val attachments: List<AttachmentRef> = emptyList(),
     /**
+     * 元通知の送信者アイコン（largeIcon、§4.3.1）。本文の画像と同じく暗号化 blob として別送する。
+     * 表示側はバブルのヘッダやトーストのアイコンに使い、添付カードには出さないため
+     * [attachments] とは別に持つ。
+     */
+    val senderIcon: AttachmentRef? = null,
+    /**
      * 同一 [id] の改版番号（§4.3.1）。初回配送は 0 で、画像添付を後から足した配送で 1 以上になる。
      * 受信側は [id] と対で重複排除し、既存アイテムの差し替えとして扱う。
      */

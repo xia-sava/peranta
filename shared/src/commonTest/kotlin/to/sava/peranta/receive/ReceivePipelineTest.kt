@@ -291,6 +291,23 @@ class ReceivePipelineTest {
         assertEquals(1, updated.size)
     }
 
+    /** 送信者アイコンだけの改版でも既存アイテムを差し替える（本文画像の無い通知でもアイコンは届く）。 */
+    @Test
+    fun revisionWithSenderIconOnlyReplacesExistingItem() = runTest {
+        val updated = mutableListOf<TimelineItem>()
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName, now = { now },
+            onItemUpdated = { updated.add(it) },
+        )
+        val senderIcon = revisedNotification().attachments.single().copy(blobId = "blob-icon")
+        p.handleEvent(eventFor(notification()))
+        p.handleEvent(eventFor(notification().copy(senderIcon = senderIcon, revision = 1)))
+
+        val received = p.items.value.single() as ReceivedNotification
+        assertEquals("blob-icon", (received.payload as NotificationPayload).senderIcon?.blobId)
+        assertEquals(1, updated.size)
+    }
+
     /** 改版は元通知が消えた印を保ったまま payload だけ差し替える。 */
     @Test
     fun revisionKeepsSourceDismissedMark() = runTest {

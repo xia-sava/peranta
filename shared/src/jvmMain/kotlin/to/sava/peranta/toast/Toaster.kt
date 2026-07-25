@@ -11,6 +11,8 @@ data class ReceivedNotificationToast(
     val openUrl: String? = null,
     /** 通知に付いていた画像。本文より遅れて届くため、表示中に差し込まれることがある（§4.3.1）。 */
     val image: ImageBitmap? = null,
+    /** 元通知の送信者アイコン。画像と同じく本文より遅れて届くことがある（§4.3.1）。 */
+    val senderIcon: ImageBitmap? = null,
 )
 
 /** トースト表示の結果。 */

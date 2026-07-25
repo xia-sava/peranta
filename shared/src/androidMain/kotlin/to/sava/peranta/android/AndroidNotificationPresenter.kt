@@ -76,25 +76,31 @@ class AndroidNotificationPresenter(
     }
 
     /**
-     * 表示済みの受信通知を、後から届いた画像を付けて出し直す（§4.3.1）。
+     * 表示済みの受信通知を、後から届いた画像・送信者アイコンを付けて出し直す（§4.3.1）。
      * 同じ通知 ID へ [Notification.Builder.setOnlyAlertOnce] 付きで出すため、音も振動も鳴らない。
      */
-    fun update(item: ReceivedNotification, image: Bitmap) {
+    fun update(item: ReceivedNotification, image: Bitmap?, senderIcon: Bitmap?) {
         val display = displayFor(item) ?: run {
             log.d { "notification update skipped (not displayable) id=${item.id}" }
             return
         }
-        show(display, image)
+        show(display, image, senderIcon, silent = true)
     }
 
-    private fun show(display: NotificationDisplay, image: Bitmap? = null) {
+    private fun show(
+        display: NotificationDisplay,
+        image: Bitmap? = null,
+        senderIcon: Bitmap? = null,
+        silent: Boolean = false,
+    ) {
         val channelId = channelIdFor(channelKindFor(display.priority))
         val notificationId = idAllocator.idFor(display.id)
         val notification = Notification.Builder(context, channelId)
             .setContentTitle(display.title)
             .setContentText(display.body)
             .setStyle(styleFor(display, image))
-            .setOnlyAlertOnce(image != null)
+            .setLargeIcon(senderIcon?.let { Icon.createWithBitmap(it) })
+            .setOnlyAlertOnce(silent)
             .setSmallIcon(R.drawable.ic_notification)
             .setAutoCancel(true)
             .applyContentIntent(notificationId, display.id)

@@ -537,11 +537,7 @@ private fun ContextMenu(
  */
 @Composable
 private fun ReceivedContent(payload: Payload, attachments: AttachmentUi?, fullText: FullTextUi?) {
-    Text(
-        text = payload.displayHeader(),
-        fontWeight = FontWeight.SemiBold,
-        style = MaterialTheme.typography.labelLarge,
-    )
+    ReceivedHeader(payload, attachments)
     payload.displayTitle()?.let {
         Text(text = it, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium)
     }
@@ -553,6 +549,33 @@ private fun ReceivedContent(payload: Payload, attachments: AttachmentUi?, fullTe
     }
     if (attachments != null) {
         payload.displayAttachments().forEach { ref -> AttachmentCard(ref, attachments) }
+    }
+}
+
+/**
+ * 受信バブルのヘッダ行（§10.1）。送信者アイコンが届いていればアプリ名の左に丸く並べる（§4.3.1）。
+ * 添付操作を持たない画面（[attachments] が null）ではアイコンを取得できないため名前だけ出す。
+ */
+@Composable
+private fun ReceivedHeader(payload: Payload, attachments: AttachmentUi?) {
+    val header = @Composable {
+        Text(
+            text = payload.displayHeader(),
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelLarge,
+        )
+    }
+    val icon = payload.senderIcon()
+    if (attachments == null || icon == null) {
+        header()
+        return
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        SenderIcon(icon, attachments)
+        header()
     }
 }
 

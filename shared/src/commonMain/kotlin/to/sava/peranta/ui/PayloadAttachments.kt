@@ -18,6 +18,9 @@ internal fun Payload.fullTextAttachment(): AttachmentRef? =
 internal fun Payload.displayAttachments(): List<AttachmentRef> =
     attachmentsOf(this).filterNot { it.kind == AttachmentKind.TEXT }
 
+/** payload に載っている送信者アイコン（§4.3.1）を返す。無ければ null。 */
+internal fun Payload.senderIcon(): AttachmentRef? = (this as? NotificationPayload)?.senderIcon
+
 /**
  * タイムラインアイテムが持つ画像・ファイル添付を返す。
  * ダウンロード状態のプライムなど、アイテム種別を問わず添付を辿りたい箇所で使う。
@@ -27,6 +30,13 @@ internal fun TimelineItem.displayAttachments(): List<AttachmentRef> = when (this
     is ReceivedNotification -> payload.displayAttachments()
     else -> emptyList()
 }
+
+/**
+ * タイムラインアイテムが参照する全ての blob（表示用の添付と送信者アイコン）を返す。
+ * キャッシュ済み状態のプライムのように、表示位置を問わず blob を辿りたい箇所で使う。
+ */
+internal fun TimelineItem.referencedAttachments(): List<AttachmentRef> =
+    displayAttachments() + listOfNotNull((this as? ReceivedNotification)?.payload?.senderIcon())
 
 private fun attachmentsOf(payload: Payload): List<AttachmentRef> = when (payload) {
     is NotificationPayload -> payload.attachments

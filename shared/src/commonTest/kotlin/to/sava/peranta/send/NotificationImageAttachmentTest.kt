@@ -9,6 +9,8 @@ import to.sava.peranta.model.SmsPayload
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** 通知への画像自動添付（§4.3.1）の判定と改版の組み立て。 */
@@ -44,6 +46,12 @@ class NotificationImageAttachmentTest {
         sizeBytes = 2048,
         kind = AttachmentKind.IMAGE,
         enc = BlobEnc(keyId = "k1", saltBase64 = "c2FsdA==", chunkSize = 1024, totalChunks = 1),
+    )
+
+    private fun senderIconRef() = imageRef("blob-icon").copy(
+        fileName = "sender-icon-1000.png",
+        mimeType = "image/png",
+        sizeBytes = 512,
     )
 
     /** トグルが ON でセンシティブでない通知には画像を添付する。 */
@@ -115,7 +123,7 @@ class NotificationImageAttachmentTest {
     /** 改版は画像を末尾に足し、改版番号を 1 つ上げる。id と本文は据え置く。 */
     @Test
     fun revisionAddsImageAndBumpsRevision() {
-        val revised = withImageAttachment(notification(), imageRef())
+        val revised = assertNotNull(withImageAttachments(notification(), image = imageRef()))
 
         assertEquals("id-1", revised.id)
         assertEquals("写真を送りました", revised.text)
@@ -127,8 +135,38 @@ class NotificationImageAttachmentTest {
     @Test
     fun revisionKeepsExistingAttachments()  {
         val fullText = imageRef("blob-text").copy(kind = AttachmentKind.TEXT, mimeType = "text/plain")
-        val revised = withImageAttachment(notification(attachments = listOf(fullText)), imageRef())
+        val revised = assertNotNull(
+            withImageAttachments(notification(attachments = listOf(fullText)), image = imageRef()),
+        )
 
         assertEquals(listOf("blob-text", "blob-1"), revised.attachments.map { it.blobId })
+    }
+
+    /** 送信者アイコンは添付一覧ではなく専用フィールドに載る（添付カードに出さないため）。 */
+    @Test
+    fun revisionPutsSenderIconInItsOwnField() {
+        val revised = assertNotNull(withImageAttachments(notification(), senderIcon = senderIconRef()))
+
+        assertEquals("blob-icon", revised.senderIcon?.blobId)
+        assertEquals(emptyList(), revised.attachments)
+        assertEquals(1, revised.revision)
+    }
+
+    /** 画像とアイコンが揃っても改版は 1 度だけ進め、1 回の差し替えで両方を届ける。 */
+    @Test
+    fun revisionCarriesImageAndSenderIconTogether() {
+        val revised = assertNotNull(
+            withImageAttachments(notification(), image = imageRef(), senderIcon = senderIconRef()),
+        )
+
+        assertEquals(listOf("blob-1"), revised.attachments.map { it.blobId })
+        assertEquals("blob-icon", revised.senderIcon?.blobId)
+        assertEquals(1, revised.revision)
+    }
+
+    /** 画像もアイコンも無ければ改版を組まない（余分な配送を起こさない）。 */
+    @Test
+    fun revisionIsSkippedWithoutAnyImage() {
+        assertNull(withImageAttachments(notification()))
     }
 }
