@@ -53,10 +53,19 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       # jpackage の MSI 生成は WiX 3 の candle/light を PATH から探す（WiX 4 以降は使えない）。
-      - name: Install WiX 3
+      # ランナーに入っている版を使い、無いときだけ入れる。
+      - name: Ensure WiX 3 on PATH
         run: |
-          choco install wixtoolset --version=3.11.2 --no-progress -y
-          Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\WiX Toolset v3.11\bin"
+          $programFiles = ${env:ProgramFiles(x86)}
+          $findWix = { Get-ChildItem $programFiles -Directory -Filter "WiX Toolset v3.*" -ErrorAction SilentlyContinue |
+            Sort-Object Name | Select-Object -Last 1 }
+          $wix = & $findWix
+          if (-not $wix) {
+            choco install wixtoolset --no-progress -y
+            $wix = & $findWix
+          }
+          if (-not $wix) { throw "WiX 3 が見つかりません" }
+          Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $wix.FullName "bin")
 
       - name: Build MSI
         run: >
