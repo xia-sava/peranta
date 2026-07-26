@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -61,6 +62,10 @@ private const val DEFAULT_QR_VISIBLE_MILLIS: Long = 60_000L
 /** 鍵を作り直すと全端末で QR の読み直しが必要になる旨の警告文（§6）。 */
 private const val ROTATE_WARNING_BODY: String =
     "前の鍵は破棄され、全端末で QR の読み直しが必要になります。続けますか？"
+
+/** 更新の適用でアプリが一度終了する旨を断る文（§12）。 */
+private const val APPLY_CONFIRM_BODY: String =
+    "アプリを終了して更新を適用し、そのあと自動で起動し直します。適用のあいだは受信が止まります。"
 
 /** 危険な操作セクションで共有鍵の作り直しの影響を説明する文（§6）。 */
 private const val ROTATE_DANGER_DESCRIPTION: String =
@@ -126,8 +131,7 @@ private const val SECTION_DANGER: String = "危険な操作"
  * 動作チェック項目を取得して集計する（取得中は未確認表示）。[hasReceiveSetup] が真なら受信経路の行も出し、
  * [loadReceiveSetupItems] で受信のセットアップ項目を取得する。[onOpenHealthCheck] / [onOpenReceiveSetup] /
  * [onOpenPairingImport] は各行の導線で、null なら該当行の導線を出さない。
- * [updateController] が非 null のとき「アプリの更新」セクションを出し、ボタン押下時だけ更新確認を実行する（§12）。
- * [currentVersionName] が非 null なら、そのセクションの先頭に動作中の版を表示する。
+ * [update] が非 null のとき「アプリの更新」セクションを出し、ボタン押下時だけ更新確認を実行する（§12）。
  * [autoStart] が非 null のとき「この PC での動作」セクションを出し、ログオン時自動起動の登録を扱う（§3.3）。
  * [showHeader] が false のときは画面見出し行（タイトルと「タイムラインへ」）を出さない。外側のアプリバーが
  * 見出しと戻る導線を持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
@@ -150,10 +154,7 @@ fun SettingsScreen(
     hasReceiveSetup: Boolean = false,
     loadReceiveSetupItems: (suspend () -> List<SetupItemUi>)? = null,
     onOpenReceiveSetup: (() -> Unit)? = null,
-    updateController: UpdateController? = null,
-    currentVersionName: String? = null,
-    updateInstallState: UpdateInstallState? = null,
-    onInstallUpdate: ((UpdateStatus.Available) -> Unit)? = null,
+    update: UpdateUi? = null,
     autoStart: AutoStartUi? = null,
     showHeader: Boolean = true,
 ) {
@@ -398,14 +399,9 @@ fun SettingsScreen(
                     }
                 }
 
-                if (updateController != null) {
+                if (update != null) {
                     SectionHeader(title = SECTION_UPDATE)
-                    UpdateSection(
-                        controller = updateController,
-                        currentVersionName = currentVersionName,
-                        installState = updateInstallState,
-                        onInstall = onInstallUpdate,
-                    )
+                    UpdateSection(update)
                 }
 
                 SectionHeader(title = SECTION_ADD_DEVICE)
@@ -603,21 +599,16 @@ private fun DangerSectionHeader(expanded: Boolean, onToggle: () -> Unit) {
 }
 
 /**
- * 「アプリの更新」セクションの中身。ボタン押下時だけ [controller] で更新確認を実行し、
- * 結果をボタンの下に表示する（§12: 起動時の自動確認は行わない）。
- * [currentVersionName] を渡すと、確認結果と対比できるよう動作中の版を先頭に出す。
- * [installState] は適用の進み具合で、進行中は適用ボタンを押せなくする。
+ * 「アプリの更新」セクションの中身。ボタン押下時だけ更新確認を実行し、結果をボタンの下に
+ * 表示する（§12: 起動時の自動確認は行わない）。ダウンロード中は受信量を進捗として出し、
+ * 適用の確認を持つプラットフォームでは照合の完了後に確認を挟む。
  */
 @Composable
-private fun UpdateSection(
-    controller: UpdateController,
-    currentVersionName: String?,
-    installState: UpdateInstallState?,
-    onInstall: ((UpdateStatus.Available) -> Unit)?,
-) {
-    val status by controller.status.collectAsState()
-    val checking by controller.checking.collectAsState()
-    currentVersionName?.let { version ->
+private fun UpdateSection(update: UpdateUi) {
+    val status by update.controller.status.collectAsState()
+    val checking by update.controller.checking.collectAsState()
+    val installState = update.installState
+    update.currentVersionName?.let { version ->
         Text(
             text = "現在のバージョン $version",
             style = MaterialTheme.typography.bodyMedium,
@@ -625,7 +616,7 @@ private fun UpdateSection(
         )
     }
     OutlinedButton(
-        onClick = { controller.checkNow() },
+        onClick = { update.controller.checkNow() },
         enabled = !checking,
         modifier = Modifier.testTag(TAG_UPDATE_CHECK),
     ) {
@@ -640,6 +631,7 @@ private fun UpdateSection(
         )
     }
     val available = status as? UpdateStatus.Available
+    val onInstall = update.onInstall
     if (available != null && onInstall != null) {
         OutlinedButton(
             onClick = { onInstall(available) },
@@ -661,6 +653,56 @@ private fun UpdateSection(
             modifier = Modifier.testTag(TAG_UPDATE_INSTALL_STATE),
         )
     }
+    if (installState is UpdateInstallState.Downloading) {
+        DownloadProgress(installState)
+    }
+    if (installState == UpdateInstallState.ReadyToApply && update.onApply != null) {
+        ApplyConfirmDialog(onApply = update.onApply, onCancel = update.onCancelApply)
+    }
+}
+
+/** ダウンロードの進み具合。全体長が判らないうちは長さの決まらない表示にする。 */
+@Composable
+private fun DownloadProgress(state: UpdateInstallState.Downloading) {
+    val fraction = state.fraction
+    if (fraction == null) {
+        LinearProgressIndicator(modifier = Modifier.fillMaxWidth().testTag(TAG_UPDATE_PROGRESS))
+    } else {
+        LinearProgressIndicator(
+            progress = { fraction },
+            modifier = Modifier.fillMaxWidth().testTag(TAG_UPDATE_PROGRESS),
+        )
+    }
+}
+
+/**
+ * 適用の確認。適用するとアプリが終了して更新後に起動し直すため、常駐が途切れることを
+ * 断ってから進める。取りやめるとダウンロード済みの配布物は捨てる。
+ */
+@Composable
+private fun ApplyConfirmDialog(onApply: () -> Unit, onCancel: (() -> Unit)?) {
+    AlertDialog(
+        onDismissRequest = { onCancel?.invoke() },
+        title = { Text(text = "更新を適用しますか？") },
+        text = { Text(text = APPLY_CONFIRM_BODY) },
+        confirmButton = {
+            TextButton(
+                onClick = onApply,
+                modifier = Modifier.testTag(TAG_UPDATE_APPLY_CONFIRM),
+            ) {
+                Text(text = "再起動して適用")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = { onCancel?.invoke() },
+                modifier = Modifier.testTag(TAG_UPDATE_APPLY_CANCEL),
+            ) {
+                Text(text = "あとで")
+            }
+        },
+        modifier = Modifier.testTag(TAG_UPDATE_APPLY_DIALOG),
+    )
 }
 
 /** 更新確認結果の表示文。未チェック（null）は結果行を出さない。 */
@@ -674,15 +716,25 @@ private fun updateStatusText(status: UpdateStatus?): String? = when (status) {
 /** 適用の進み具合の表示文。未着手（null）は行を出さない。 */
 private fun updateInstallText(state: UpdateInstallState?): String? = when (state) {
     null -> null
-    UpdateInstallState.Downloading -> "ダウンロード中..."
+    is UpdateInstallState.Downloading -> downloadProgressText(state)
     UpdateInstallState.Verifying -> "照合中..."
+    UpdateInstallState.ReadyToApply -> "更新の準備ができました"
     UpdateInstallState.Launching -> "インストーラを起動しました"
     is UpdateInstallState.Failed -> state.reason
 }
 
+/** ダウンロードの受信量。全体長が判らなければ受信量だけを出す。 */
+private fun downloadProgressText(state: UpdateInstallState.Downloading): String =
+    if (state.totalBytes > 0) {
+        "ダウンロード中... ${formatFileSize(state.receivedBytes)} / ${formatFileSize(state.totalBytes)}"
+    } else {
+        "ダウンロード中... ${formatFileSize(state.receivedBytes)}"
+    }
+
 /** 適用が進行中か。進行中は適用ボタンを押せなくする。 */
 private fun isInstallRunning(state: UpdateInstallState?): Boolean = when (state) {
-    UpdateInstallState.Downloading, UpdateInstallState.Verifying, UpdateInstallState.Launching -> true
+    is UpdateInstallState.Downloading -> true
+    UpdateInstallState.Verifying, UpdateInstallState.ReadyToApply, UpdateInstallState.Launching -> true
     else -> false
 }
 
@@ -711,6 +763,10 @@ const val TAG_UPDATE_CHECK: String = "settings-update-check"
 const val TAG_UPDATE_STATUS: String = "settings-update-status"
 const val TAG_UPDATE_INSTALL: String = "settings-update-install"
 const val TAG_UPDATE_INSTALL_STATE: String = "settings-update-install-state"
+const val TAG_UPDATE_PROGRESS: String = "settings-update-progress"
+const val TAG_UPDATE_APPLY_DIALOG: String = "settings-update-apply-dialog"
+const val TAG_UPDATE_APPLY_CONFIRM: String = "settings-update-apply-confirm"
+const val TAG_UPDATE_APPLY_CANCEL: String = "settings-update-apply-cancel"
 const val TAG_CREATE_KEY: String = "settings-create-key"
 const val TAG_DANGER_TOGGLE: String = "settings-danger-toggle"
 const val TAG_ROTATE: String = "settings-rotate"

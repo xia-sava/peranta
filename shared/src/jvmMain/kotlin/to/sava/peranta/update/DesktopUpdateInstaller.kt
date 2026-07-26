@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.contentLength
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import java.io.File
@@ -79,8 +80,11 @@ class DesktopUpdateInstaller(
     val isSupported: Boolean
         get() = !appPath.isNullOrBlank()
 
-    /** 配布物をダウンロードして一時領域へ置く。 */
-    suspend fun download(url: String): File {
+    /**
+     * 配布物をダウンロードして一時領域へ置く。数十 MB あるため、受信量を [onProgress] へ
+     * 逐次知らせる（全体長が判らなければ 0 を渡す）。
+     */
+    suspend fun download(url: String, onProgress: (received: Long, total: Long) -> Unit = { _, _ -> }): File {
         if (!isBrowsableHttpUrl(url)) {
             throw IOException("update url rejected: not a http(s) url")
         }
@@ -90,11 +94,25 @@ class DesktopUpdateInstaller(
         }
         val dir = File(System.getProperty("java.io.tmpdir"), DOWNLOAD_DIR).apply { mkdirs() }
         val file = File(dir, MSI_FILE_NAME)
+        val total = response.contentLength() ?: 0L
         response.bodyAsChannel().toInputStream().use { input ->
-            file.outputStream().use { output -> input.copyTo(output) }
+            file.outputStream().buffered().use { output ->
+                copyReportingProgress(input, output, total, onProgress)
+            }
         }
         log.i { "update downloaded (${file.length()} bytes)" }
         return file
+    }
+
+    /** 適用スクリプトを配布物と同じ場所へ書き出す。実行ファイルのパスが判らなければ書けない。 */
+    internal fun writeApplyScript(msi: File): File {
+        val launcherPath = appPath
+        if (launcherPath.isNullOrBlank()) {
+            throw IOException("cannot apply update: launcher path is unknown")
+        }
+        val script = File(msi.parentFile, APPLY_SCRIPT_NAME)
+        script.writeText(applyUpdateScript(msi.absolutePath, launcherPath, ownProcessIds()), Charsets.UTF_8)
+        return script
     }
 
     /**
@@ -102,12 +120,7 @@ class DesktopUpdateInstaller(
      * この後にアプリを終了させる。終了しない限りインストールは始まらない。
      */
     fun launchInstaller(msi: File) {
-        val launcherPath = appPath
-        if (launcherPath.isNullOrBlank()) {
-            throw IOException("cannot apply update: launcher path is unknown")
-        }
-        val script = File(msi.parentFile, APPLY_SCRIPT_NAME)
-        script.writeText(applyUpdateScript(msi.absolutePath, launcherPath, ownProcessIds()), Charsets.UTF_8)
+        val script = writeApplyScript(msi)
         ProcessBuilder(
             "powershell",
             "-NoProfile",

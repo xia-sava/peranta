@@ -44,10 +44,12 @@ class AndroidUpdater(
         if (isRunning()) {
             return
         }
-        _installState.value = UpdateInstallState.Downloading
+        _installState.value = UpdateInstallState.Downloading(0, 0)
         scope.launch {
             try {
-                val apk = installer.download(available.url)
+                val apk = installer.download(available.url) { received, total ->
+                    _installState.value = UpdateInstallState.Downloading(received, total)
+                }
                 _installState.value = UpdateInstallState.Verifying
                 installer.verify(apk, available.sha256)
                 installer.launch(apk)
@@ -62,7 +64,8 @@ class AndroidUpdater(
     }
 
     private fun isRunning(): Boolean = when (_installState.value) {
-        UpdateInstallState.Downloading, UpdateInstallState.Verifying, UpdateInstallState.Launching -> true
+        is UpdateInstallState.Downloading -> true
+        UpdateInstallState.Verifying, UpdateInstallState.Launching -> true
         else -> false
     }
 

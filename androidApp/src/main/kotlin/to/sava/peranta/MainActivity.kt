@@ -80,6 +80,7 @@ import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.QrCodeCanvas
 import to.sava.peranta.ui.SettingsScreen
 import to.sava.peranta.ui.ShareScreen
+import to.sava.peranta.ui.UpdateUi
 import to.sava.peranta.ui.setup.ReceiveSetupScreen
 import to.sava.peranta.ui.shell.PerantaShell
 import to.sava.peranta.ui.shell.RosterDropdown
@@ -460,10 +461,12 @@ class MainActivity : ComponentActivity() {
                                     } else {
                                         null
                                     },
-                                    updateController = updater.controller,
-                                    currentVersionName = currentVersionName(),
-                                    updateInstallState = updateInstallState,
-                                    onInstallUpdate = { available -> updater.install(available) },
+                                    update = UpdateUi(
+                                        controller = updater.controller,
+                                        currentVersionName = currentVersionName(),
+                                        installState = updateInstallState,
+                                        onInstall = { available -> updater.install(available) },
+                                    ),
                                     showHeader = false,
                                     onSaved = { rebuildReceivePipeline() },
                                 )

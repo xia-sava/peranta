@@ -44,6 +44,7 @@ import to.sava.peranta.update.UpdateStatus
 import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.test.assertNotNull
 
 @OptIn(ExperimentalTestApi::class)
@@ -797,8 +798,7 @@ class SettingsScreenTest {
             setContent {
                 SettingsScreen(
                     settingsController,
-                    updateController = updateController,
-                    currentVersionName = "0.1.2",
+                    update = UpdateUi(updateController, currentVersionName = "0.1.2"),
                 )
             }
 
@@ -821,7 +821,7 @@ class SettingsScreenTest {
             UpdateController(UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP), scope)
 
         try {
-            setContent { SettingsScreen(settingsController, updateController = updateController) }
+            setContent { SettingsScreen(settingsController, update = UpdateUi(updateController)) }
 
             onNodeWithTag(TAG_CURRENT_VERSION).assertDoesNotExist()
         } finally {
@@ -841,7 +841,7 @@ class SettingsScreenTest {
             UpdateController(UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP), scope)
 
         try {
-            setContent { SettingsScreen(settingsController, updateController = updateController) }
+            setContent { SettingsScreen(settingsController, update = UpdateUi(updateController)) }
 
             onNodeWithTag(TAG_UPDATE_CHECK).performScrollTo().performClick()
             waitUntil(timeoutMillis = 5_000) {
@@ -879,8 +879,10 @@ class SettingsScreenTest {
             setContent {
                 SettingsScreen(
                     settingsController,
-                    updateController = updateController,
-                    onInstallUpdate = { available -> installed = available },
+                    update = UpdateUi(
+                        updateController,
+                        onInstall = { available -> installed = available },
+                    ),
                 )
             }
 
@@ -922,9 +924,11 @@ class SettingsScreenTest {
             setContent {
                 SettingsScreen(
                     settingsController,
-                    updateController = updateController,
-                    updateInstallState = UpdateInstallState.Downloading,
-                    onInstallUpdate = {},
+                    update = UpdateUi(
+                        updateController,
+                        installState = UpdateInstallState.Downloading(32_000_000, 68_000_000),
+                        onInstall = {},
+                    ),
                 )
             }
 
@@ -934,8 +938,106 @@ class SettingsScreenTest {
             }
 
             onNodeWithTag(TAG_UPDATE_INSTALL_STATE).performScrollTo().assertExists()
-            onNodeWithText("ダウンロード中...").assertExists()
+            onNodeWithText("ダウンロード中... 30.5 MB / 64.8 MB").assertExists()
+            onNodeWithTag(TAG_UPDATE_PROGRESS).performScrollTo().assertExists()
             onNodeWithTag(TAG_UPDATE_INSTALL).performScrollTo().assertIsNotEnabled()
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    /** 照合まで済むと適用の確認を出し、承諾すると onApply が呼ばれる。 */
+    @Test
+    fun readyToApplyShowsConfirmDialogAndInvokesOnApply() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val settingsController = SettingsController(repo)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val engine = MockEngine { respond(content = "", status = HttpStatusCode.NotFound) }
+        val updateController =
+            UpdateController(UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP), scope)
+        var applied = false
+
+        try {
+            setContent {
+                SettingsScreen(
+                    settingsController,
+                    update = UpdateUi(
+                        updateController,
+                        installState = UpdateInstallState.ReadyToApply,
+                        onInstall = {},
+                        onApply = { applied = true },
+                    ),
+                )
+            }
+
+            onNodeWithTag(TAG_UPDATE_APPLY_DIALOG).assertExists()
+            onNodeWithTag(TAG_UPDATE_APPLY_CONFIRM).performClick()
+
+            assertTrue(applied)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    /** 適用の確認を取りやめると onCancelApply が呼ばれる（ダウンロード済みの配布物を捨てる）。 */
+    @Test
+    fun readyToApplyCancelInvokesOnCancelApply() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val settingsController = SettingsController(repo)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val engine = MockEngine { respond(content = "", status = HttpStatusCode.NotFound) }
+        val updateController =
+            UpdateController(UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP), scope)
+        var cancelled = false
+
+        try {
+            setContent {
+                SettingsScreen(
+                    settingsController,
+                    update = UpdateUi(
+                        updateController,
+                        installState = UpdateInstallState.ReadyToApply,
+                        onInstall = {},
+                        onApply = {},
+                        onCancelApply = { cancelled = true },
+                    ),
+                )
+            }
+
+            onNodeWithTag(TAG_UPDATE_APPLY_CANCEL).performClick()
+
+            assertTrue(cancelled)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    /** 適用の確認を持たないプラットフォーム（onApply なし）では確認を出さない。 */
+    @Test
+    fun readyToApplyWithoutOnApplyShowsNoDialog() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val settingsController = SettingsController(repo)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val engine = MockEngine { respond(content = "", status = HttpStatusCode.NotFound) }
+        val updateController =
+            UpdateController(UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP), scope)
+
+        try {
+            setContent {
+                SettingsScreen(
+                    settingsController,
+                    update = UpdateUi(
+                        updateController,
+                        installState = UpdateInstallState.ReadyToApply,
+                        onInstall = {},
+                    ),
+                )
+            }
+
+            onNodeWithTag(TAG_UPDATE_APPLY_DIALOG).assertDoesNotExist()
         } finally {
             scope.cancel()
         }

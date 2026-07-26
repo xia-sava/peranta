@@ -60,6 +60,7 @@ import to.sava.peranta.toast.ToastHost
 import to.sava.peranta.toast.WindowsNotificationSound
 import to.sava.peranta.ui.AppFilterScreen
 import to.sava.peranta.ui.AutoStartUi
+import to.sava.peranta.ui.UpdateUi
 import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.MessageComposer
 import to.sava.peranta.ui.PairingScanScreen
@@ -487,14 +488,18 @@ fun main(args: Array<String>) {
                                 loadHealthItems = { DesktopHealthChecker(autoStart, selfTestProvider).check() },
                                 onOpenHealthCheck = { onNavigate(ShellDestination.HealthCheck) },
                                 onOpenPairingImport = { onNavigate(ShellDestination.PairingImport) },
-                                updateController = updater.controller,
-                                currentVersionName = DesktopVersion.versionName,
-                                updateInstallState = updateInstallState,
-                                onInstallUpdate = if (updater.canInstall) {
-                                    { available -> updater.install(available, closeAndExit) }
-                                } else {
-                                    null
-                                },
+                                update = UpdateUi(
+                                    controller = updater.controller,
+                                    currentVersionName = DesktopVersion.versionName,
+                                    installState = updateInstallState,
+                                    onInstall = if (updater.canInstall) {
+                                        { available -> updater.install(available) }
+                                    } else {
+                                        null
+                                    },
+                                    onApply = { updater.applyNow(closeAndExit) },
+                                    onCancelApply = { updater.cancelApply() },
+                                ),
                                 autoStart = autoStartUi,
                                 // 鍵の作成は例外として即時反映する（§10.2）。画面を離れたときの反映は onNavigate が担う。
                                 onSaved = { configGeneration++ },

@@ -7,6 +7,7 @@ import co.touchlab.kermit.Logger
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.contentLength
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import java.io.File
@@ -44,16 +45,22 @@ class AndroidUpdateInstaller(
     private val log: Logger = Logger.withTag("UpdateInstaller"),
 ) {
 
-    /** 配布物をダウンロードしてアプリ専用領域へ置く。 */
-    suspend fun download(url: String): File {
+    /**
+     * 配布物をダウンロードしてアプリ専用領域へ置く。受信量を [onProgress] へ逐次知らせる
+     * （全体長が判らなければ 0 を渡す）。
+     */
+    suspend fun download(url: String, onProgress: (received: Long, total: Long) -> Unit = { _, _ -> }): File {
         val response = httpClient.get(url)
         if (!response.status.isSuccess()) {
             throw IOException("apk download failed: HTTP ${response.status.value}")
         }
         val dir = File(context.cacheDir, DOWNLOAD_DIR).apply { mkdirs() }
         val file = File(dir, APK_FILE_NAME)
+        val total = response.contentLength() ?: 0L
         response.bodyAsChannel().toInputStream().use { input ->
-            file.outputStream().use { output -> input.copyTo(output) }
+            file.outputStream().buffered().use { output ->
+                copyReportingProgress(input, output, total, onProgress)
+            }
         }
         return file
     }
