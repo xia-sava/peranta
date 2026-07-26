@@ -194,4 +194,41 @@ class AttachmentSerializationTest {
         val decoded = decodePayload(json) as SmsPayload
         assertEquals(emptyList(), decoded.attachments)
     }
+
+    /** SMS は対応づいた元通知の key と改版番号を含めてラウンドトリップする（§3.1）。 */
+    @Test
+    fun smsWithNotificationKeyRoundTrip() {
+        val payload = SmsPayload(
+            id = "sms-3",
+            from = "phone",
+            to = BROADCAST_TARGET,
+            sentAtEpochMillis = 1_000,
+            senderNumber = "09000000000",
+            text = "確認コード 987654",
+            postedAtEpochMillis = 900,
+            notificationKey = "0|com.android.messaging|7|null|10",
+            revision = 1,
+        )
+        assertEquals(payload, decodePayload(encodePayload(payload)))
+    }
+
+    /** notificationKey を持たない旧 SMS JSON も、未対応づけとして復元される（後方互換）。 */
+    @Test
+    fun smsWithoutNotificationKeyDefaultsToUnlinked() {
+        val json = """
+            {
+              "type": "sms",
+              "id": "sms-4",
+              "from": "phone",
+              "to": "*",
+              "sentAtEpochMillis": 10,
+              "senderNumber": "09000000000",
+              "text": "確認コード",
+              "postedAtEpochMillis": 9
+            }
+        """.trimIndent()
+        val decoded = decodePayload(json) as SmsPayload
+        assertNull(decoded.notificationKey)
+        assertEquals(0, decoded.revision)
+    }
 }

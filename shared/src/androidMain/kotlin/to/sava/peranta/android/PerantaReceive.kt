@@ -14,8 +14,8 @@ import to.sava.peranta.config.PipelineKey
 import to.sava.peranta.blob.attachmentKindForMimeType
 import to.sava.peranta.config.toPipelineKey
 import to.sava.peranta.model.AttachmentKind
-import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.newPayloadId
+import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.NtfyEvent
@@ -304,7 +304,7 @@ object PerantaReceive {
         commandScope.launch {
             try {
                 AndroidNotificationPresenter(appContext).cancel(item.payload.id)
-                val notificationKey = (item.payload as? NotificationPayload)?.notificationKey ?: run {
+                val notificationKey = item.payload.notificationKeyOrNull() ?: run {
                     log.i { "dismiss ignored (no notification key) payload=${item.payload.id}" }
                     return@launch
                 }

@@ -25,6 +25,7 @@ import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.receive.CommandExecutionException
 import to.sava.peranta.send.NotificationInput
 import to.sava.peranta.send.prepareForwardedNotification
+import to.sava.peranta.send.withSmsNotificationKey
 
 /**
  * 通知を捕捉して送信パイプラインへ渡す NotificationListenerService（§3.1、§5）。
@@ -56,12 +57,38 @@ class PerantaNotificationListenerService : NotificationListenerService() {
      * 致命的エラーにはしない（他端末による削除・ユーザー操作と競合し得るため）。
      */
     fun dismissByKey(key: String) = runNlsAction {
-        if (findActiveNotification(key) == null) {
+        val sbn = findActiveNotification(key) ?: run {
             log.i { "dismiss target not present (already dismissed?) key=$key" }
             return@runNlsAction
         }
+        markAsReadIfSmsApp(sbn)
         cancelNotification(key)
         log.i { "notification dismissed key=$key" }
+    }
+
+    /**
+     * 既定 SMS アプリの通知なら、取り下げる前に「既読にする」アクションを発火する（§3.4）。
+     * 取り下げるだけではステータスバーから消えても SMS アプリの中では未読のまま残るため。
+     * アクションはラベルではなく semanticAction で見分け、言語と SMS アプリに依存させない。
+     * 発火に失敗しても取り下げは続ける（通知が残り続けるほうが困る）。
+     */
+    private fun markAsReadIfSmsApp(sbn: StatusBarNotification) {
+        val defaultSmsPackage = runCatching {
+            Telephony.Sms.getDefaultSmsPackage(applicationContext)
+        }.getOrNull()
+        if (sbn.packageName != defaultSmsPackage) return
+        val action = sbn.notification.actions?.firstOrNull {
+            it.semanticAction == Notification.Action.SEMANTIC_ACTION_MARK_AS_READ
+        } ?: run {
+            log.d { "no mark-as-read action on sms notification key=${sbn.key}" }
+            return
+        }
+        try {
+            action.actionIntent.send()
+            log.i { "sms marked as read key=${sbn.key}" }
+        } catch (e: PendingIntent.CanceledException) {
+            log.w(e) { "mark as read failed key=${sbn.key}" }
+        }
     }
 
     /** 対象通知の [actionIndex] 番のアクションボタンを発火する（§3.4）。 */
@@ -183,15 +210,18 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             text = fields.text,
             at = now,
         )
-        if (shouldSkipNotification(
-                packageName = packageName,
-                defaultSmsPackage = defaultSmsPackage,
-                isSmsDuplicate = smsDuplicate,
-                isOngoing = sbn.isOngoing,
-                isGroupSummary = sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0,
-            )
-        ) {
-            log.d { "skipping notification from $packageName" }
+        val skipReason = notificationSkipReason(
+            packageName = packageName,
+            defaultSmsPackage = defaultSmsPackage,
+            isSmsDuplicate = smsDuplicate,
+            isOngoing = sbn.isOngoing,
+            isGroupSummary = sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0,
+        )
+        if (skipReason != null) {
+            log.d { "skipping notification from $packageName reason=$skipReason" }
+            if (skipReason == NotificationSkipReason.SMS_DUPLICATE) {
+                forwardSmsNotificationKey(sbn.key, fields, now, config.copy(deviceId = deviceId))
+            }
             return
         }
         if (PerantaSend.reposts.isUnchangedRepost(sbn.key, fields.title.orEmpty(), fields.text.orEmpty())) {
@@ -256,6 +286,33 @@ class PerantaNotificationListenerService : NotificationListenerService() {
                 log.d { "notification queued for retry or dropped id=${payload.id}" }
             }
             forwardImages(payload, image, senderIcon, sendConfig)
+        }
+    }
+
+    /**
+     * 直接受信済みの SMS と対応づいた元通知の key を、改版として受信端末へ送る（§3.1）。
+     * これでその SMS アイテムが既読同期（§3.4）の対象になる。あわせて key を転送済みとして覚え、
+     * スマホ側で元通知が消えたときの追随（§3.4）も効くようにする。
+     * 転送内容が未確定（記憶の保持時間切れ・対応づけ済み）なら何もしない。
+     */
+    private fun forwardSmsNotificationKey(
+        notificationKey: String,
+        fields: NotificationFields,
+        now: Long,
+        config: PerantaConfig,
+    ) {
+        val payload = PerantaSend.dedupe.consumeForwardedPayload(fields.title, fields.text, now) ?: run {
+            log.d { "no forwarded sms to link with notification key=$notificationKey" }
+            return
+        }
+        val revised = withSmsNotificationKey(payload, notificationKey)
+        PerantaSend.forwarded.remember(notificationKey)
+        scope.launch {
+            if (PerantaSend.dispatch(applicationContext, revised, config)) {
+                log.i { "sms notification key sent id=${revised.id} revision=${revised.revision}" }
+            } else {
+                log.d { "sms notification key queued for retry or dropped id=${revised.id}" }
+            }
         }
     }
 

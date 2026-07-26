@@ -163,6 +163,13 @@ data class SmsPayload(
     val expiresAtEpochMillis: Long? = null,
     val priority: Priority = Priority.HIGH,
     val attachments: List<AttachmentRef> = emptyList(),
+    /**
+     * 対応する SMS アプリの通知（§3.1）。直接受信した時点では判明しないため、
+     * その通知を重複として落とした時点で [revision] を上げた改版に載せる。
+     * これが入っているアイテムだけが既読同期（§3.4）の対象になる。
+     */
+    val notificationKey: String? = null,
+    val revision: Int = 0,
     override val fromName: String? = null,
 ) : Payload()
 
@@ -207,6 +214,20 @@ data class PresencePayload(
     val capabilities: List<String> = emptyList(),
     val sender: Boolean = false,
 ) : Payload()
+
+/** 既読同期（§3.4）で操作する元通知の key。元通知に紐づかないペイロードでは null。 */
+fun Payload.notificationKeyOrNull(): String? = when (this) {
+    is NotificationPayload -> notificationKey
+    is SmsPayload -> notificationKey
+    else -> null
+}
+
+/** 改版番号（§4.3.1）。改版を持たないペイロードでは 0。 */
+fun Payload.revisionOrZero(): Int = when (this) {
+    is NotificationPayload -> revision
+    is SmsPayload -> revision
+    else -> 0
+}
 
 /** 新しい Payload id 用の UUID 文字列を生成する。 */
 @OptIn(ExperimentalUuidApi::class)

@@ -15,6 +15,7 @@ import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.PresencePayload
+import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.encodeEnvelope
 import to.sava.peranta.net.FakeNtfyClient
 import to.sava.peranta.net.NtfyEvent
@@ -61,6 +62,24 @@ class ReceivePipelineTest {
         notificationKey = "0|com.example.bank|1|null|10",
         postedAtEpochMillis = now - 100,
         expiresAtEpochMillis = expiresAt,
+    )
+
+    /** 直接受信した SMS の元通知 key（対応づいた後にだけ載る、§3.1）。 */
+    private val smsNotificationKey = "0|com.android.messaging|7|null|10"
+
+    private fun sms(
+        notificationKey: String? = null,
+        revision: Int = 0,
+    ): SmsPayload = SmsPayload(
+        id = "s1",
+        from = "phone",
+        to = "*",
+        sentAtEpochMillis = now - 100,
+        senderNumber = "090-1111-2222",
+        text = "確認コード 987654 です",
+        postedAtEpochMillis = now - 100,
+        notificationKey = notificationKey,
+        revision = revision,
     )
 
     /** DISMISS 分岐の実行だけを検証するための no-op executor。 */
@@ -306,6 +325,48 @@ class ReceivePipelineTest {
         val received = p.items.value.single() as ReceivedNotification
         assertEquals("blob-icon", (received.payload as NotificationPayload).senderIcon?.blobId)
         assertEquals(1, updated.size)
+    }
+
+    /** SMS の改版は既存アイテムを差し替え、後から判明した元通知の key を載せる（§3.1）。 */
+    @Test
+    fun smsRevisionAddsNotificationKeyToExistingItem() = runTest {
+        val updated = mutableListOf<TimelineItem>()
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName, now = { now },
+            onItemUpdated = { updated.add(it) },
+        )
+        p.handleEvent(eventFor(sms()))
+        p.handleEvent(eventFor(sms(notificationKey = smsNotificationKey, revision = 1)))
+
+        val received = p.items.value.single() as ReceivedNotification
+        assertEquals(smsNotificationKey, (received.payload as SmsPayload).notificationKey)
+        assertEquals(1, updated.size)
+    }
+
+    /** 元通知に対応づいた SMS アイテムは、dismiss コマンドで元通知消滅の印が付く（§3.4）。 */
+    @Test
+    fun dismissMarksSmsItemLinkedToNotification() = runTest {
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName,
+            commandExecutor = NoOpCommandExecutor(), now = { now },
+        )
+        p.handleEvent(eventFor(sms(notificationKey = smsNotificationKey, revision = 1)))
+        p.handleEvent(eventFor(dismissCommand(targetNotificationKey = smsNotificationKey)))
+
+        assertTrue((p.items.value.single() as ReceivedNotification).sourceDismissed)
+    }
+
+    /** 元通知に対応づいていない SMS アイテムは、dismiss コマンドの対象にならない（§3.4）。 */
+    @Test
+    fun dismissLeavesUnlinkedSmsItemUnmarked() = runTest {
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName,
+            commandExecutor = NoOpCommandExecutor(), now = { now },
+        )
+        p.handleEvent(eventFor(sms()))
+        p.handleEvent(eventFor(dismissCommand(targetNotificationKey = smsNotificationKey)))
+
+        assertFalse((p.items.value.single() as ReceivedNotification).sourceDismissed)
     }
 
     /** 改版は元通知が消えた印を保ったまま payload だけ差し替える。 */

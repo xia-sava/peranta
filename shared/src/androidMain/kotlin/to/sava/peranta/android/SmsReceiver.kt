@@ -73,6 +73,8 @@ class SmsReceiver : BroadcastReceiver() {
             try {
                 // 長文 SMS なら全文を暗号化 blob として添付し、インラインは切り詰めプレビューにする（§4.3）。
                 val sent = PerantaSend.withFullTextAttachment(context, payload, fullText, config)
+                // 転送内容が確定した時点で本文と結びつけ、後から出る SMS アプリの通知と対応づける（§3.1）。
+                PerantaSend.dedupe.recordForwarded(fullText, sent)
                 if (PerantaSend.dispatch(context, sent, config, publishTimeoutMillis = SMS_PUBLISH_TIMEOUT_MILLIS)) {
                     log.i { "sms sent id=${sent.id}" }
                 } else {

@@ -221,6 +221,13 @@ fun buildSmsPayload(
 )
 
 /**
+ * 転送済みの SMS に、後から判明した元通知の key を載せた改版を作る（§3.1）。
+ * 受信側は id と revision の対で差し替えるため、本文や添付は転送時のものをそのまま引き継ぐ。
+ */
+fun withSmsNotificationKey(payload: SmsPayload, notificationKey: String): SmsPayload =
+    payload.copy(notificationKey = notificationKey, revision = payload.revision + 1)
+
+/**
  * 本文が [FULL_TEXT_PREVIEW_BYTES] を超え、かつセンシティブでないとき、全文を blob 添付すべきか判定する（§4.3）。
  * [attachFullTextWhenTruncated] が false（トグル OFF）なら常に false（従来どおり単純切り詰め）。
  * 本文が [MAX_FULL_TEXT_ATTACHMENT_BYTES] を超える場合も添付しない（切り詰めプレビューのみで送る）。

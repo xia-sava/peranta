@@ -145,6 +145,23 @@ class NotificationForwardingTest {
         assertTrue(payload.text.contains("987654"))
     }
 
+    /** 対応づいた元通知の key は改版として載り、id と本文は転送時のまま引き継ぐ（§3.1）。 */
+    @Test
+    fun smsRevisionCarriesNotificationKeyAndKeepsContent() {
+        val payload = buildSmsPayload(
+            senderNumber = "09011112222",
+            text = "確認コード 987654",
+            deviceId = "phone",
+            now = 3000,
+            idGen = { "sms-1" },
+        )
+        val revised = withSmsNotificationKey(payload, "0|com.android.messaging|7|null|10")
+        assertEquals("0|com.android.messaging|7|null|10", revised.notificationKey)
+        assertEquals(1, revised.revision)
+        assertEquals(payload.id, revised.id)
+        assertEquals(payload.text, revised.text)
+    }
+
     /** アクション個数は MAX_FORWARDED_ACTIONS を超えた分を actions・actionDetails 双方同時に切り捨てる（index 対応を崩さない）。 */
     @Test
     fun actionsAndActionDetailsAreClippedToMaxCountTogether() {

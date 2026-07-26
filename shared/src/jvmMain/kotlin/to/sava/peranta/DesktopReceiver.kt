@@ -30,8 +30,8 @@ import to.sava.peranta.config.withDevOverrides
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
-import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
+import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.SelfTestProbe
@@ -315,10 +315,20 @@ class DesktopReceiver(
         return copy(image = image, senderIcon = senderIcon)
     }
 
+    /**
+     * [itemId] のタイムライン上の現在のペイロード。トーストは表示したまま改版で差し替わることが
+     * あるため（§3.1 の SMS の対応づけ等）、ボタン押下は表示時ではなく押された時点の内容で扱う。
+     */
+    private fun currentPayload(itemId: String): Payload? =
+        pipeline.items.value.asSequence()
+            .filterIsInstance<ReceivedNotification>()
+            .firstOrNull { it.id == itemId }
+            ?.payload
+
     private suspend fun showNotificationToast(item: ReceivedNotification) {
         val content = toastContentFor(item)?.withCachedImages(item) ?: return
         when (toaster.show(content)) {
-            ToastResult.ButtonDismiss -> requestDismiss(item.payload)
+            ToastResult.ButtonDismiss -> requestDismiss(currentPayload(item.id) ?: item.payload)
             ToastResult.ButtonOpen -> content.openUrl?.let { openUrlInBrowser(it) }
             ToastResult.Clicked -> {
                 log.i { "toast clicked id=${item.id}" }
@@ -357,10 +367,10 @@ class DesktopReceiver(
      * トーストの「消す」押下時に既読同期（§3.4）の dismiss を全端末へブロードキャストし、
      * 自端末のタイムラインアイテムも sourceDismissed としてマークする（ブロードキャストは
      * 自端末を除外するため、自分での操作は自分で反映する必要がある）。
-     * SMS など notificationKey を持たない通知は取り下げ対象にならないためログのみとする。
+     * 元通知に紐づかない（notificationKey を持たない）アイテムは取り下げ対象にならないためログのみとする。
      */
     private fun requestDismiss(payload: Payload) {
-        val notificationKey = (payload as? NotificationPayload)?.notificationKey ?: run {
+        val notificationKey = payload.notificationKeyOrNull() ?: run {
             log.i { "dismiss ignored (no notification key) payload=${payload.id}" }
             return
         }
@@ -434,7 +444,7 @@ class DesktopReceiver(
     private fun dismissFromTimeline(item: ReceivedNotification) {
         toastScope.launch {
             toaster.close(item.payload.id)
-            val notificationKey = (item.payload as? NotificationPayload)?.notificationKey ?: run {
+            val notificationKey = item.payload.notificationKeyOrNull() ?: run {
                 log.i { "dismiss ignored (no notification key) payload=${item.payload.id}" }
                 return@launch
             }

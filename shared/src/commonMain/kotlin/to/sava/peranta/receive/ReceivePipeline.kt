@@ -19,7 +19,9 @@ import to.sava.peranta.model.Payload
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.decodeEnvelope
 import to.sava.peranta.model.newPayloadId
+import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.model.nowEpochMillis
+import to.sava.peranta.model.revisionOrZero
 import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyEvent
 import to.sava.peranta.timeline.ErrorItem
@@ -231,11 +233,6 @@ class ReceivePipeline(
         log.i { "notification marked source-dismissed key=$notificationKey count=${targets.size}" }
     }
 
-    private fun Payload.notificationKeyOrNull(): String? = when (this) {
-        is NotificationPayload -> notificationKey
-        else -> null
-    }
-
     private fun requireKey(payload: CommandPayload): String =
         payload.targetNotificationKey
             ?: throw CommandExecutionException("${payload.command} コマンドに対象通知キーがありません")
@@ -320,7 +317,7 @@ class ReceivePipeline(
             else -> "${payload.id}#$revision"
         }
 
-    private fun revisionOf(payload: Payload?): Int = (payload as? NotificationPayload)?.revision ?: 0
+    private fun revisionOf(payload: Payload?): Int = payload?.revisionOrZero() ?: 0
 
     /**
      * 受信した画像・ファイル転送（§4.3）をタイムラインへ [ReceivedFile] として追記する。
