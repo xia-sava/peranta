@@ -126,6 +126,7 @@ private const val SECTION_DANGER: String = "危険な操作"
  * [loadReceiveSetupItems] で受信のセットアップ項目を取得する。[onOpenHealthCheck] / [onOpenReceiveSetup] /
  * [onOpenPairingImport] は各行の導線で、null なら該当行の導線を出さない。
  * [updateController] が非 null のとき「アプリの更新」セクションを出し、ボタン押下時だけ更新確認を実行する（§12）。
+ * [currentVersionName] が非 null なら、そのセクションの先頭に動作中の版を表示する。
  * [autoStart] が非 null のとき「この PC での動作」セクションを出し、ログオン時自動起動の登録を扱う（§3.3）。
  * [showHeader] が false のときは画面見出し行（タイトルと「タイムラインへ」）を出さない。外側のアプリバーが
  * 見出しと戻る導線を持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
@@ -149,6 +150,7 @@ fun SettingsScreen(
     loadReceiveSetupItems: (suspend () -> List<SetupItemUi>)? = null,
     onOpenReceiveSetup: (() -> Unit)? = null,
     updateController: UpdateController? = null,
+    currentVersionName: String? = null,
     onInstallUpdate: ((String) -> Unit)? = null,
     autoStart: AutoStartUi? = null,
     showHeader: Boolean = true,
@@ -396,7 +398,11 @@ fun SettingsScreen(
 
                 if (updateController != null) {
                     SectionHeader(title = SECTION_UPDATE)
-                    UpdateSection(controller = updateController, onInstall = onInstallUpdate)
+                    UpdateSection(
+                        controller = updateController,
+                        currentVersionName = currentVersionName,
+                        onInstall = onInstallUpdate,
+                    )
                 }
 
                 SectionHeader(title = SECTION_ADD_DEVICE)
@@ -596,11 +602,23 @@ private fun DangerSectionHeader(expanded: Boolean, onToggle: () -> Unit) {
 /**
  * 「アプリの更新」セクションの中身。ボタン押下時だけ [controller] で更新確認を実行し、
  * 結果をボタンの下に表示する（§12: 起動時の自動確認は行わない）。
+ * [currentVersionName] を渡すと、確認結果と対比できるよう動作中の版を先頭に出す。
  */
 @Composable
-private fun UpdateSection(controller: UpdateController, onInstall: ((String) -> Unit)?) {
+private fun UpdateSection(
+    controller: UpdateController,
+    currentVersionName: String?,
+    onInstall: ((String) -> Unit)?,
+) {
     val status by controller.status.collectAsState()
     val checking by controller.checking.collectAsState()
+    currentVersionName?.let { version ->
+        Text(
+            text = "現在のバージョン $version",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.testTag(TAG_CURRENT_VERSION),
+        )
+    }
     OutlinedButton(
         onClick = { controller.checkNow() },
         enabled = !checking,
@@ -655,6 +673,7 @@ const val TAG_ATTACH_NOTIFICATION_IMAGES: String = "settings-attach-notification
 const val TAG_AUTO_START: String = "settings-auto-start"
 const val TAG_SEND_ENABLED: String = "settings-send-enabled"
 const val TAG_SMS_DIRECT_RECEIVE: String = "settings-sms-direct-receive"
+const val TAG_CURRENT_VERSION: String = "settings-current-version"
 const val TAG_UPDATE_CHECK: String = "settings-update-check"
 const val TAG_UPDATE_STATUS: String = "settings-update-status"
 const val TAG_UPDATE_INSTALL: String = "settings-update-install"

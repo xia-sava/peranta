@@ -458,6 +458,7 @@ class MainActivity : ComponentActivity() {
                                         null
                                     },
                                     updateController = updater.controller,
+                                    currentVersionName = currentVersionName(),
                                     onInstallUpdate = { url -> updater.install(url) },
                                     showHeader = false,
                                     onSaved = { rebuildReceivePipeline() },
@@ -737,4 +738,8 @@ class MainActivity : ComponentActivity() {
     /** インストール済みアプリ自身の versionCode を PackageManager から取得する。 */
     private fun currentVersionCode(): Int =
         packageManager.getPackageInfo(packageName, 0).longVersionCode.toInt()
+
+    /** インストール済みアプリ自身の versionName を PackageManager から取得する。 */
+    private fun currentVersionName(): String? =
+        packageManager.getPackageInfo(packageName, 0).versionName
 }

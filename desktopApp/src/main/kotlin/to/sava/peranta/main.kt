@@ -196,6 +196,10 @@ private val DEFAULT_WINDOW_SIZE = DpSize(800.dp, 600.dp)
 /** ウィンドウの見え方を保存するまでの待ち時間。移動・リサイズの途中経過を書き込まないための間。 */
 private const val WINDOW_GEOMETRY_SAVE_DELAY_MILLIS: Long = 500L
 
+/** ウィンドウタイトル。動作中の版を添え、開発ビルドは配布版と並んでも見分けられるようにする。 */
+private val WINDOW_TITLE: String =
+    "Peranta ${DesktopVersion.versionName}" + if (isDevMode()) " (dev)" else ""
+
 /**
  * ウィンドウの見え方の変化を [store] へ書き戻す（§11）。移動・リサイズ中は値が連続で変わるため、
  * 落ち着いてから保存する。
@@ -406,7 +410,7 @@ fun main(args: Array<String>) {
             state = windowState,
             visible = windowVisible,
             icon = perantaIcon,
-            title = "Peranta",
+            title = WINDOW_TITLE,
         ) {
             LaunchedEffect(window) { mainWindow.set(window) }
             // 覚えていた位置がどの画面にも無い（モニタを外した・解像度を変えた）ときは中央へ戻す。
@@ -480,6 +484,7 @@ fun main(args: Array<String>) {
                                 onOpenHealthCheck = { onNavigate(ShellDestination.HealthCheck) },
                                 onOpenPairingImport = { onNavigate(ShellDestination.PairingImport) },
                                 updateController = updater.controller,
+                                currentVersionName = DesktopVersion.versionName,
                                 onInstallUpdate = { url -> updater.install(url) },
                                 autoStart = autoStartUi,
                                 // 鍵の作成は例外として即時反映する（§10.2）。画面を離れたときの反映は onNavigate が担う。

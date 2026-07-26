@@ -779,6 +779,53 @@ class SettingsScreenTest {
         onNodeWithTag(TAG_UPDATE_CHECK).assertDoesNotExist()
     }
 
+    /** currentVersionName を渡すと「アプリの更新」セクションに動作中の版が出る。 */
+    @Test
+    fun updateSectionShowsCurrentVersionName() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val settingsController = SettingsController(repo)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val engine = MockEngine { respond(content = "", status = HttpStatusCode.NotFound) }
+        val updateController =
+            UpdateController(UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP), scope)
+
+        try {
+            setContent {
+                SettingsScreen(
+                    settingsController,
+                    updateController = updateController,
+                    currentVersionName = "0.1.2",
+                )
+            }
+
+            onNodeWithTag(TAG_CURRENT_VERSION).performScrollTo().assertExists()
+            onNodeWithText("現在のバージョン 0.1.2").assertExists()
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    /** currentVersionName 未指定なら版の行は出さない（版数を解決できない実行経路のため）。 */
+    @Test
+    fun updateSectionHidesVersionWhenNameNotProvided() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val settingsController = SettingsController(repo)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val engine = MockEngine { respond(content = "", status = HttpStatusCode.NotFound) }
+        val updateController =
+            UpdateController(UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP), scope)
+
+        try {
+            setContent { SettingsScreen(settingsController, updateController = updateController) }
+
+            onNodeWithTag(TAG_CURRENT_VERSION).assertDoesNotExist()
+        } finally {
+            scope.cancel()
+        }
+    }
+
     /** ボタン押下で checkNow が実行され、失敗結果はボタンの下に理由付きで表示される。 */
     @Test
     fun updateCheckButtonRunsCheckNowAndShowsFailedReason() = runComposeUiTest {
