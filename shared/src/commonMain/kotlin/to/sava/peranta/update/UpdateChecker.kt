@@ -46,7 +46,7 @@ class UpdateChecker(
             return UpdateStatus.UpToDate
         }
         log.i { "update available: ${release.versionName} (code ${release.versionCode})" }
-        return UpdateStatus.Available(release.versionName, release.url)
+        return UpdateStatus.Available(release.versionName, release.url, release.sha256)
     }
 
     private suspend fun fetch(url: String): HttpResponse? =

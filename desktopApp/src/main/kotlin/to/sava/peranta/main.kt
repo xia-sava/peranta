@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -291,6 +292,9 @@ fun main(args: Array<String>) {
             Unit
         }
 
+        // 更新の適用は自分の終了を待って進むため、引き渡しに成功したらそのままアプリを閉じる（§12）。
+        val updateInstallState by updater.installState.collectAsState()
+
         var windowVisible by remember { mutableStateOf(!startMinimized) }
         // 初回起動（未ペアリング）はウィザードを自動で開始する。ウィザードは画面シェルの外に置く。
         var showWizard by remember { mutableStateOf(!desktopSettings.config.hasSharedKey) }
@@ -485,7 +489,12 @@ fun main(args: Array<String>) {
                                 onOpenPairingImport = { onNavigate(ShellDestination.PairingImport) },
                                 updateController = updater.controller,
                                 currentVersionName = DesktopVersion.versionName,
-                                onInstallUpdate = { url -> updater.install(url) },
+                                updateInstallState = updateInstallState,
+                                onInstallUpdate = if (updater.canInstall) {
+                                    { available -> updater.install(available, closeAndExit) }
+                                } else {
+                                    null
+                                },
                                 autoStart = autoStartUi,
                                 // 鍵の作成は例外として即時反映する（§10.2）。画面を離れたときの反映は onNavigate が担う。
                                 onSaved = { configGeneration++ },

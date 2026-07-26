@@ -52,6 +52,7 @@ import to.sava.peranta.ui.setup.TimelineRetentionDaysField
 import to.sava.peranta.ui.setup.TokenField
 import to.sava.peranta.ui.setup.setupOverview
 import to.sava.peranta.update.UpdateController
+import to.sava.peranta.update.UpdateInstallState
 import to.sava.peranta.update.UpdateStatus
 
 /** QR の自動非表示までの既定時間（§6: 表示は時間制限つき）。 */
@@ -151,7 +152,8 @@ fun SettingsScreen(
     onOpenReceiveSetup: (() -> Unit)? = null,
     updateController: UpdateController? = null,
     currentVersionName: String? = null,
-    onInstallUpdate: ((String) -> Unit)? = null,
+    updateInstallState: UpdateInstallState? = null,
+    onInstallUpdate: ((UpdateStatus.Available) -> Unit)? = null,
     autoStart: AutoStartUi? = null,
     showHeader: Boolean = true,
 ) {
@@ -401,6 +403,7 @@ fun SettingsScreen(
                     UpdateSection(
                         controller = updateController,
                         currentVersionName = currentVersionName,
+                        installState = updateInstallState,
                         onInstall = onInstallUpdate,
                     )
                 }
@@ -603,12 +606,14 @@ private fun DangerSectionHeader(expanded: Boolean, onToggle: () -> Unit) {
  * 「アプリの更新」セクションの中身。ボタン押下時だけ [controller] で更新確認を実行し、
  * 結果をボタンの下に表示する（§12: 起動時の自動確認は行わない）。
  * [currentVersionName] を渡すと、確認結果と対比できるよう動作中の版を先頭に出す。
+ * [installState] は適用の進み具合で、進行中は適用ボタンを押せなくする。
  */
 @Composable
 private fun UpdateSection(
     controller: UpdateController,
     currentVersionName: String?,
-    onInstall: ((String) -> Unit)?,
+    installState: UpdateInstallState?,
+    onInstall: ((UpdateStatus.Available) -> Unit)?,
 ) {
     val status by controller.status.collectAsState()
     val checking by controller.checking.collectAsState()
@@ -637,11 +642,24 @@ private fun UpdateSection(
     val available = status as? UpdateStatus.Available
     if (available != null && onInstall != null) {
         OutlinedButton(
-            onClick = { onInstall(available.url) },
+            onClick = { onInstall(available) },
+            enabled = !isInstallRunning(installState),
             modifier = Modifier.testTag(TAG_UPDATE_INSTALL),
         ) {
-            Text(text = "更新")
+            Text(text = "ダウンロードして更新")
         }
+    }
+    updateInstallText(installState)?.let { text ->
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (installState is UpdateInstallState.Failed) {
+                MaterialTheme.colorScheme.error
+            } else {
+                Color.Unspecified
+            },
+            modifier = Modifier.testTag(TAG_UPDATE_INSTALL_STATE),
+        )
     }
 }
 
@@ -651,6 +669,21 @@ private fun updateStatusText(status: UpdateStatus?): String? = when (status) {
     UpdateStatus.UpToDate -> "最新のバージョンです"
     is UpdateStatus.Available -> "新しいバージョン ${status.versionName}"
     is UpdateStatus.Failed -> "更新確認に失敗しました: ${status.reason}"
+}
+
+/** 適用の進み具合の表示文。未着手（null）は行を出さない。 */
+private fun updateInstallText(state: UpdateInstallState?): String? = when (state) {
+    null -> null
+    UpdateInstallState.Downloading -> "ダウンロード中..."
+    UpdateInstallState.Verifying -> "照合中..."
+    UpdateInstallState.Launching -> "インストーラを起動しました"
+    is UpdateInstallState.Failed -> state.reason
+}
+
+/** 適用が進行中か。進行中は適用ボタンを押せなくする。 */
+private fun isInstallRunning(state: UpdateInstallState?): Boolean = when (state) {
+    UpdateInstallState.Downloading, UpdateInstallState.Verifying, UpdateInstallState.Launching -> true
+    else -> false
 }
 
 const val TAG_AUTOSAVE_NOTE: String = "settings-autosave-note"
@@ -677,6 +710,7 @@ const val TAG_CURRENT_VERSION: String = "settings-current-version"
 const val TAG_UPDATE_CHECK: String = "settings-update-check"
 const val TAG_UPDATE_STATUS: String = "settings-update-status"
 const val TAG_UPDATE_INSTALL: String = "settings-update-install"
+const val TAG_UPDATE_INSTALL_STATE: String = "settings-update-install-state"
 const val TAG_CREATE_KEY: String = "settings-create-key"
 const val TAG_DANGER_TOGGLE: String = "settings-danger-toggle"
 const val TAG_ROTATE: String = "settings-rotate"

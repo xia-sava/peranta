@@ -32,30 +32,20 @@ fun isExpectedApkPackage(actualPackage: String?, expectedPackage: String): Boole
     actualPackage != null && actualPackage == expectedPackage
 
 /**
- * Android の APK 自己更新（§12）。
- * [downloadAndLaunch] は APK をアプリ専用領域へ落とし、FileProvider 経由で
- * インストール確認の Intent を発行する（自動実行はしない。ユーザー操作でインストールされる）。
+ * Android の APK 自己更新（§12）。APK をアプリ専用領域へ落とし、照合してから
+ * FileProvider 経由でインストール確認の Intent を発行する（自動実行はしない。
+ * ユーザー操作でインストールされる）。
  *
- * 外部から落とした APK は、HTTP ステータスと packageName を検証してからインストールへ回す。
+ * 外部から落とした APK は、HTTP ステータス・sha256・packageName を検証してからインストールへ回す。
  */
 class AndroidUpdateInstaller(
     private val context: Context,
     private val httpClient: HttpClient,
     private val log: Logger = Logger.withTag("UpdateInstaller"),
 ) {
-    suspend fun downloadAndLaunch(url: String) {
-        val apk = download(url)
-        verifyPackage(apk)
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}$FILE_PROVIDER_SUFFIX", apk)
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, APK_MIME_TYPE)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-        log.i { "launched installer for downloaded apk" }
-    }
 
-    private suspend fun download(url: String): File {
+    /** 配布物をダウンロードしてアプリ専用領域へ置く。 */
+    suspend fun download(url: String): File {
         val response = httpClient.get(url)
         if (!response.status.isSuccess()) {
             throw IOException("apk download failed: HTTP ${response.status.value}")
@@ -68,12 +58,30 @@ class AndroidUpdateInstaller(
         return file
     }
 
-    /** ダウンロード物が自アプリの APK であることを packageName で確認する。不一致は破棄して中断する。 */
-    private fun verifyPackage(apk: File) {
+    /**
+     * ダウンロード物が配布元の意図した実体で、かつ自アプリの APK であることを確かめる。
+     * どちらかが食い違えば破棄して中断する。
+     */
+    fun verify(apk: File, expectedSha256: String?) {
+        if (!matchesSha256(apk, expectedSha256)) {
+            apk.delete()
+            throw IOException("apk digest mismatch")
+        }
         val packageName = context.packageManager.getPackageArchiveInfo(apk.absolutePath, 0)?.packageName
         if (!isExpectedApkPackage(packageName, context.packageName)) {
             apk.delete()
             throw IOException("apk package mismatch: expected=${context.packageName} actual=$packageName")
         }
+    }
+
+    /** インストール確認の Intent を発行する。実際のインストールはユーザーが承認して進む。 */
+    fun launch(apk: File) {
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}$FILE_PROVIDER_SUFFIX", apk)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, APK_MIME_TYPE)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+        log.i { "launched installer for downloaded apk" }
     }
 }

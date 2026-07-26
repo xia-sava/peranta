@@ -6,6 +6,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasText
@@ -38,6 +39,8 @@ import to.sava.peranta.ui.setup.SMS_DIRECT_RECEIVE_DESCRIPTION
 import to.sava.peranta.update.PLATFORM_DESKTOP
 import to.sava.peranta.update.UpdateChecker
 import to.sava.peranta.update.UpdateController
+import to.sava.peranta.update.UpdateInstallState
+import to.sava.peranta.update.UpdateStatus
 import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -851,9 +854,53 @@ class SettingsScreenTest {
         }
     }
 
-    /** Available のとき「更新」ボタンが出て、押すと onInstallUpdate に配布 URL が渡る。 */
+    /** Available のとき適用ボタンが出て、押すと onInstallUpdate に配布物の情報が渡る。 */
     @Test
     fun updateAvailableShowsInstallButtonAndInvokesOnInstallUpdate() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val settingsController = SettingsController(repo)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val manifestJson = """
+            { "desktop": { "versionCode": 20, "versionName": "2.0.0", "url": "http://h/d.msi", "sha256": "abc" } }
+        """.trimIndent()
+        val engine = MockEngine {
+            respond(
+                content = manifestJson,
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
+            )
+        }
+        val updateController =
+            UpdateController(UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP), scope)
+        var installed: UpdateStatus.Available? = null
+
+        try {
+            setContent {
+                SettingsScreen(
+                    settingsController,
+                    updateController = updateController,
+                    onInstallUpdate = { available -> installed = available },
+                )
+            }
+
+            onNodeWithTag(TAG_UPDATE_CHECK).performScrollTo().performClick()
+            waitUntil(timeoutMillis = 5_000) {
+                onAllNodesWithTag(TAG_UPDATE_INSTALL).fetchSemanticsNodes().isNotEmpty()
+            }
+
+            onNodeWithText("新しいバージョン 2.0.0").assertExists()
+            onNodeWithTag(TAG_UPDATE_INSTALL).performScrollTo().performClick()
+
+            assertEquals(UpdateStatus.Available("2.0.0", "http://h/d.msi", "abc"), installed)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    /** 適用が進行中のあいだは進捗を出し、適用ボタンを押せなくする。 */
+    @Test
+    fun updateInstallStateShowsProgressAndDisablesButton() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
         repo.save(readyConfig())
         val settingsController = SettingsController(repo)
@@ -870,14 +917,14 @@ class SettingsScreenTest {
         }
         val updateController =
             UpdateController(UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP), scope)
-        var installedUrl: String? = null
 
         try {
             setContent {
                 SettingsScreen(
                     settingsController,
                     updateController = updateController,
-                    onInstallUpdate = { url -> installedUrl = url },
+                    updateInstallState = UpdateInstallState.Downloading,
+                    onInstallUpdate = {},
                 )
             }
 
@@ -886,10 +933,9 @@ class SettingsScreenTest {
                 onAllNodesWithTag(TAG_UPDATE_INSTALL).fetchSemanticsNodes().isNotEmpty()
             }
 
-            onNodeWithText("新しいバージョン 2.0.0").assertExists()
-            onNodeWithTag(TAG_UPDATE_INSTALL).performScrollTo().performClick()
-
-            assertEquals("http://h/d.msi", installedUrl)
+            onNodeWithTag(TAG_UPDATE_INSTALL_STATE).performScrollTo().assertExists()
+            onNodeWithText("ダウンロード中...").assertExists()
+            onNodeWithTag(TAG_UPDATE_INSTALL).performScrollTo().assertIsNotEnabled()
         } finally {
             scope.cancel()
         }

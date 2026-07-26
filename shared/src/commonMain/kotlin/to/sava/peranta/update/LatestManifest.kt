@@ -12,6 +12,8 @@ data class PlatformRelease(
     val versionCode: Int,
     val versionName: String,
     val url: String,
+    /** 配布物の SHA-256（16 進）。ダウンロードした実体の照合に使う。欠けていれば照合しない。 */
+    val sha256: String? = null,
 )
 
 /**

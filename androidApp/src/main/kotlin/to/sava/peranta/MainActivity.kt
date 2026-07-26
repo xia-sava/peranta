@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -240,6 +241,8 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
+            // 更新の適用（ダウンロード・照合・インストーラ起動）の進み具合（§12）。
+            val updateInstallState by updater.installState.collectAsState()
             // シェル内の現在地。設定を離れる遷移でも再生成後に生存させるため rememberSaveable で保持する。
             var destination: ShellDestination by rememberSaveable { mutableStateOf(ShellDestination.Timeline) }
             // 設定サブ画面（受信のセットアップ・動作チェック・接続設定と暗号キーの取り込み）へ入ったときの
@@ -459,7 +462,8 @@ class MainActivity : ComponentActivity() {
                                     },
                                     updateController = updater.controller,
                                     currentVersionName = currentVersionName(),
-                                    onInstallUpdate = { url -> updater.install(url) },
+                                    updateInstallState = updateInstallState,
+                                    onInstallUpdate = { available -> updater.install(available) },
                                     showHeader = false,
                                     onSaved = { rebuildReceivePipeline() },
                                 )
