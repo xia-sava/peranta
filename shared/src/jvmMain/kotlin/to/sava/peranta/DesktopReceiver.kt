@@ -70,6 +70,7 @@ import to.sava.peranta.ui.senderIcon
 import to.sava.peranta.ui.MessageComposerUi
 import to.sava.peranta.ui.TimelineActions
 import to.sava.peranta.ui.shell.RosterUi
+import to.sava.peranta.window.WindowGeometryStore
 import java.awt.Desktop
 import java.awt.FileDialog
 import java.awt.Frame
@@ -130,6 +131,9 @@ class DesktopSettings(
 ) {
     /** 設定ストアに紐づくリポジトリ。設定画面・アプリフィルタ画面の永続化で共有する。 */
     val repository: ConfigRepository = desktopConfigRepository(settings, devMode)
+
+    /** ウィンドウの見え方の記憶（§11）。設定と同じストアに保存する。 */
+    val windowGeometry: WindowGeometryStore = WindowGeometryStore(settings)
 
     /** 起動時に一度だけ読み込んだ設定。初期表示の判定に使う。 */
     val config: PerantaConfig = enrichConfig(repository, devMode)

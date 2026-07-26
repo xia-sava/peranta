@@ -24,14 +24,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
+import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -70,8 +78,13 @@ import to.sava.peranta.ui.shell.setupBannerTarget
 import to.sava.peranta.ui.shell.shellNavigate
 import to.sava.peranta.ui.shell.shellReturnDestination
 import to.sava.peranta.update.DesktopUpdater
+import to.sava.peranta.window.WindowGeometry
+import to.sava.peranta.window.WindowGeometryStore
+import to.sava.peranta.window.isOnAnyScreen
 import java.awt.EventQueue
 import java.awt.Frame
+import java.awt.GraphicsEnvironment
+import java.awt.Rectangle
 import java.awt.Toolkit
 import java.awt.Window as AwtWindow
 import java.awt.datatransfer.StringSelection
@@ -175,6 +188,45 @@ private fun bringWindowToFront(window: AwtWindow) {
 /** 終了時に受信機の close（JSONL 書き込みの完了）を待つ上限。 */
 private const val RECEIVER_CLOSE_TIMEOUT_MILLIS: Long = 2_000L
 
+/** 前回の見え方を覚えていないときのウィンドウの大きさ。 */
+private val DEFAULT_WINDOW_SIZE = DpSize(800.dp, 600.dp)
+
+/** ウィンドウの見え方を保存するまでの待ち時間。移動・リサイズの途中経過を書き込まないための間。 */
+private const val WINDOW_GEOMETRY_SAVE_DELAY_MILLIS: Long = 500L
+
+/**
+ * ウィンドウの見え方の変化を [store] へ書き戻す（§11）。移動・リサイズ中は値が連続で変わるため、
+ * 落ち着いてから保存する。
+ */
+@OptIn(FlowPreview::class)
+private suspend fun saveWindowGeometryChanges(state: WindowState, store: WindowGeometryStore) {
+    snapshotFlow { windowGeometryOf(state) }
+        .filterNotNull()
+        .debounce(WINDOW_GEOMETRY_SAVE_DELAY_MILLIS)
+        .collectLatest { store.save(it) }
+}
+
+/** 接続中の全画面の矩形（AWT 座標）。 */
+private fun screenBounds(): List<Rectangle> =
+    GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.map { it.defaultConfiguration.bounds }
+
+/**
+ * 保存できる形の現在の見え方。位置や大きさがまだ確定していない（中央寄せの初期状態）間は null を返し、
+ * 実体の無い座標を書き込まないようにする。
+ */
+private fun windowGeometryOf(state: WindowState): WindowGeometry? {
+    val position = state.position as? WindowPosition.Absolute ?: return null
+    val size = state.size
+    if (!size.isSpecified) return null
+    return WindowGeometry(
+        x = position.x.value.toInt(),
+        y = position.y.value.toInt(),
+        width = size.width.value.toInt(),
+        height = size.height.value.toInt(),
+        maximized = state.placement == WindowPlacement.Maximized,
+    )
+}
+
 fun main(args: Array<String>) {
     initLogging()
     val log = Logger.withTag("Main")
@@ -234,7 +286,23 @@ fun main(args: Array<String>) {
         // 設定サブ画面（受信のセットアップ・動作チェック・接続設定と暗号キーの取り込み）へ入ったときの
         // 遷移元を1段だけ覚え、戻る操作をその画面へ戻す（§10.0）。destination と同じ場所に保持する。
         var subScreenOrigin by remember { mutableStateOf<ShellDestination?>(null) }
-        val windowState = rememberWindowState()
+        // 前回の見え方（位置・大きさ・最大化）で開く。覚えていなければ既定の大きさで中央に出す（§11）。
+        val restoredGeometry = remember { desktopSettings.windowGeometry.load() }
+        val windowState = rememberWindowState(
+            position = restoredGeometry
+                ?.let { WindowPosition(it.x.dp, it.y.dp) }
+                ?: WindowPosition(Alignment.Center),
+            size = restoredGeometry
+                ?.let { DpSize(it.width.dp, it.height.dp) }
+                ?: DEFAULT_WINDOW_SIZE,
+            placement = if (restoredGeometry?.maximized == true) {
+                WindowPlacement.Maximized
+            } else {
+                WindowPlacement.Floating
+            },
+        )
+
+        LaunchedEffect(Unit) { saveWindowGeometryChanges(windowState, desktopSettings.windowGeometry) }
 
         // タイムラインを表示するたびに動作チェックを実行し、対処の要る未達があればタイムライン上部の
         // 警告バナーの誘導先を確定する（§10.5）。取得が済むまで・未達が無いときは null でバナーを出さない。
@@ -332,6 +400,13 @@ fun main(args: Array<String>) {
             title = "Peranta",
         ) {
             LaunchedEffect(window) { mainWindow.set(window) }
+            // 覚えていた位置がどの画面にも無い（モニタを外した・解像度を変えた）ときは中央へ戻す。
+            // 見えない場所に開くと「起動していない」と受け取られるため（§11）。
+            LaunchedEffect(Unit) {
+                if (restoredGeometry != null && !isOnAnyScreen(window.bounds, screenBounds())) {
+                    windowState.position = WindowPosition(Alignment.Center)
+                }
+            }
             val currentReceiver = receiver
             // アプリバー・ドロワーのラベルは config 由来（ネットワーク不要）。受信機があればその設定を、
             // 無ければ起動時設定を使う。
