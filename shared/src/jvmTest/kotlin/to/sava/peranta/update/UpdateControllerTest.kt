@@ -15,14 +15,11 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import to.sava.peranta.config.PerantaConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
 class UpdateControllerTest {
-
-    private val config = PerantaConfig(host = "localhost", useTls = false, port = 8091)
 
     private val manifestJson = """
         { "desktop": { "versionCode": 20, "versionName": "2.0.0", "url": "http://h/d.msi" } }
@@ -37,7 +34,7 @@ class UpdateControllerTest {
     }
 
     private fun controller(scope: CoroutineScope, engine: MockEngine = manifestEngine()): UpdateController {
-        val checker = UpdateChecker(HttpClient(engine), config, 1, PLATFORM_DESKTOP)
+        val checker = UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP)
         return UpdateController(checker, scope)
     }
 

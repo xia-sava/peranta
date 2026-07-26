@@ -630,7 +630,6 @@ private fun UpdateSection(controller: UpdateController, onInstall: ((String) -> 
 /** 更新確認結果の表示文。未チェック（null）は結果行を出さない。 */
 private fun updateStatusText(status: UpdateStatus?): String? = when (status) {
     null -> null
-    UpdateStatus.NotConfigured -> "初期設定が完了すると更新を確認できます"
     UpdateStatus.UpToDate -> "最新のバージョンです"
     is UpdateStatus.Available -> "新しいバージョン ${status.versionName}"
     is UpdateStatus.Failed -> "更新確認に失敗しました: ${status.reason}"

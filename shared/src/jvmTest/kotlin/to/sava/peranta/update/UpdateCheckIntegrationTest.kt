@@ -3,7 +3,6 @@ package to.sava.peranta.update
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assume.assumeTrue
-import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.net.createNtfyHttpClient
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -22,8 +21,12 @@ class UpdateCheckIntegrationTest {
         runBlocking {
             val httpClient = createNtfyHttpClient()
             try {
-                val config = PerantaConfig(host = "localhost", useTls = false, port = 8091)
-                val checker = UpdateChecker(httpClient, config, currentVersionCode = 1, platformKey = PLATFORM_DESKTOP)
+                val checker = UpdateChecker(
+                    httpClient,
+                    currentVersionCode = 1,
+                    platformKey = PLATFORM_DESKTOP,
+                    manifestUrl = "http://localhost:8091/dist/latest.json",
+                )
 
                 val status = withTimeout(10_000) { checker.check() }
 

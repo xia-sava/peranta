@@ -199,7 +199,7 @@ class MainActivity : ComponentActivity() {
         pendingScrollItemId = consumeScrollItemId(intent)
 
         val config = androidConfigRepository().load()
-        val updater = AndroidUpdater(this, config, currentVersionCode()).also { this.updater = it }
+        val updater = AndroidUpdater(this, currentVersionCode()).also { this.updater = it }
 
         val importController = PairingImportController(androidConfigRepository())
         // コマンド受信のための UnifiedPush 登録は役割を問わない（送信ロールのスマホも受け口を持つ、§3.4）。

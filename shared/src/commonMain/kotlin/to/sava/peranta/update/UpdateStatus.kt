@@ -3,9 +3,6 @@ package to.sava.peranta.update
 /** 更新確認の結果。 */
 sealed interface UpdateStatus {
 
-    /** 接続先が未設定（既定のプレースホルダのまま）で、更新確認を実行できない。 */
-    data object NotConfigured : UpdateStatus
-
     /** 自分の versionCode が最新（配布物が自分以下）。 */
     data object UpToDate : UpdateStatus
 

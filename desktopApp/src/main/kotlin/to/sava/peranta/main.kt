@@ -263,7 +263,7 @@ fun main(args: Array<String>) {
         bringToFront()
         scrollToItemRequest.get().invoke(itemId)
     }
-    val updater = DesktopUpdater(desktopSettings.config, DesktopVersion.versionCode)
+    val updater = DesktopUpdater(DesktopVersion.versionCode)
     // トーストは受信機より長生きさせる。設定変更で受信機を作り直しても表示中のものを引き継ぐ。
     val toaster = ComposeToaster(WindowsNotificationSound())
 

@@ -7,7 +7,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.platform.ioDispatcher
 
@@ -17,7 +16,6 @@ import to.sava.peranta.platform.ioDispatcher
  */
 class AndroidUpdater(
     context: Context,
-    config: PerantaConfig,
     currentVersionCode: Int,
     private val log: Logger = Logger.withTag("Updater"),
 ) {
@@ -27,7 +25,7 @@ class AndroidUpdater(
 
     /** UI が購読する更新状態。 */
     val controller: UpdateController =
-        UpdateController(UpdateChecker(httpClient, config, currentVersionCode, PLATFORM_ANDROID), scope)
+        UpdateController(UpdateChecker(httpClient, currentVersionCode, PLATFORM_ANDROID), scope)
 
     /** APK をダウンロードしてインストール確認 Intent を発行する。失敗はログに残す。 */
     fun install(url: String) {

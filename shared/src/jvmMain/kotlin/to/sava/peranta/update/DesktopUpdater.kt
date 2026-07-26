@@ -4,7 +4,6 @@ import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.platform.ioDispatcher
 
@@ -13,7 +12,6 @@ import to.sava.peranta.platform.ioDispatcher
  * UI へは [controller] と [install] だけを公開する（§12）。ktor 型を app モジュールへ漏らさない。
  */
 class DesktopUpdater(
-    config: PerantaConfig,
     currentVersionCode: Int,
     private val log: Logger = Logger.withTag("Updater"),
 ) {
@@ -23,7 +21,7 @@ class DesktopUpdater(
 
     /** UI が購読する更新状態。 */
     val controller: UpdateController =
-        UpdateController(UpdateChecker(httpClient, config, currentVersionCode, PLATFORM_DESKTOP), scope)
+        UpdateController(UpdateChecker(httpClient, currentVersionCode, PLATFORM_DESKTOP), scope)
 
     /** MSI のダウンロードページを既定ブラウザで開く。失敗は UI をクラッシュさせずログに残す。 */
     fun install(url: String) {

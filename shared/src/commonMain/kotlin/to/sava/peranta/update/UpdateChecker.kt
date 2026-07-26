@@ -7,36 +7,33 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
-import to.sava.peranta.config.DEFAULT_HOST
-import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.model.PerantaJson
-import to.sava.peranta.net.httpBaseUrl
 
-/** latest.json の配信パス。ntfy とは別のサーバ直下の静的パス（§12）。 */
-private const val LATEST_MANIFEST_PATH = "dist/latest.json"
+/** 配布物を置くリポジトリと、ビルドのたびに上書きされるリリースのタグ（§12）。 */
+private const val RELEASE_REPOSITORY = "xia-sava/peranta"
+private const val RELEASE_TAG = "latest"
 
-/** config のホスト設定から latest.json の URL を導出する（`https://{host}/dist/latest.json`、§12）。 */
-fun latestManifestUrl(config: PerantaConfig): String =
-    "${config.httpBaseUrl()}/$LATEST_MANIFEST_PATH"
+/** GitHub Releases 上の配布物 URL を組む（§12）。 */
+fun releaseAssetUrl(assetName: String): String =
+    "https://github.com/$RELEASE_REPOSITORY/releases/download/$RELEASE_TAG/$assetName"
+
+/** latest.json の所在（§12）。接続先の設定とは独立に引けるよう固定の配布元を指す。 */
+val LATEST_MANIFEST_URL: String = releaseAssetUrl("latest.json")
 
 /**
- * サーバの latest.json を取得し、自分の [currentVersionCode] と [platformKey] の配布物を比較する。
+ * 配布元の latest.json を取得し、自分の [currentVersionCode] と [platformKey] の配布物を比較する。
  * ネットワーク失敗・JSON 不正・プラットフォームキー欠落はいずれも [UpdateStatus.Failed] とし、
  * 理由を握り潰さない。
  */
 class UpdateChecker(
     private val httpClient: HttpClient,
-    private val config: PerantaConfig,
     private val currentVersionCode: Int,
     private val platformKey: String,
+    private val manifestUrl: String = LATEST_MANIFEST_URL,
     private val log: Logger = Logger.withTag("UpdateChecker"),
 ) {
     suspend fun check(): UpdateStatus {
-        if (config.host.isBlank() || config.host == DEFAULT_HOST) {
-            return UpdateStatus.NotConfigured
-        }
-        val url = latestManifestUrl(config)
-        val response = fetch(url)
+        val response = fetch(manifestUrl)
             ?: return UpdateStatus.Failed("latest.json の取得に失敗しました")
         if (!response.status.isSuccess()) {
             return UpdateStatus.Failed("latest.json の取得に失敗しました (HTTP ${response.status.value})")

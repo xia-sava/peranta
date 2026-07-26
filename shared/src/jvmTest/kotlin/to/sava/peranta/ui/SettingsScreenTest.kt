@@ -788,7 +788,7 @@ class SettingsScreenTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val engine = MockEngine { respond(content = "", status = HttpStatusCode.NotFound) }
         val updateController =
-            UpdateController(UpdateChecker(HttpClient(engine), repo.load(), 1, PLATFORM_DESKTOP), scope)
+            UpdateController(UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP), scope)
 
         try {
             setContent { SettingsScreen(settingsController, updateController = updateController) }
@@ -822,7 +822,7 @@ class SettingsScreenTest {
             )
         }
         val updateController =
-            UpdateController(UpdateChecker(HttpClient(engine), repo.load(), 1, PLATFORM_DESKTOP), scope)
+            UpdateController(UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP), scope)
         var installedUrl: String? = null
 
         try {
