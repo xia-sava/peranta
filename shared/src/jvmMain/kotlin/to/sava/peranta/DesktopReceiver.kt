@@ -3,6 +3,7 @@ package to.sava.peranta
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import co.touchlab.kermit.Logger
+import com.russhwolf.settings.PreferencesSettings
 import com.russhwolf.settings.Settings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -77,6 +78,7 @@ import java.net.URI
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
+import java.util.prefs.Preferences
 import kotlin.io.encoding.Base64
 
 /**
@@ -101,10 +103,20 @@ private fun desktopConfigRepository(settings: Settings, devMode: Boolean): Confi
     ConfigRepository(settings, forceTls = !devMode)
 
 /**
+ * Desktop の設定を置く Preferences ノードのパス（§11）。
+ * `Preferences.userRoot()` 直下はこの JVM で動く全アプリが共有するため、
+ * キー名の衝突を避けて専用ノードに分ける。
+ */
+private const val SETTINGS_NODE_PATH: String = "to/sava/peranta"
+
+/** Desktop の設定ストア。 */
+fun desktopSettings(): Settings = PreferencesSettings(Preferences.userRoot().node(SETTINGS_NODE_PATH))
+
+/**
  * Desktop の設定を settings から読む。[enrichConfig] に委譲する薄いエントリポイント。
  */
 fun loadDesktopConfig(
-    settings: Settings = Settings(),
+    settings: Settings = desktopSettings(),
     devMode: Boolean = isDevMode(),
 ): PerantaConfig = enrichConfig(desktopConfigRepository(settings, devMode), devMode)
 
@@ -113,7 +125,7 @@ fun loadDesktopConfig(
  * これにより desktopApp 側は multiplatform-settings の型に依存せず設定 UI を配線できる。
  */
 class DesktopSettings(
-    settings: Settings = Settings(),
+    settings: Settings = desktopSettings(),
     val devMode: Boolean = isDevMode(),
 ) {
     /** 設定ストアに紐づくリポジトリ。設定画面・アプリフィルタ画面の永続化で共有する。 */
