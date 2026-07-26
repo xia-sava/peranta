@@ -67,6 +67,68 @@ class SettingsScreenTest {
         assertEquals("desktop-2", loaded.deviceName)
     }
 
+    // --- 自動起動（§3.3） ---
+
+    /** 自動起動が渡されないプラットフォームでは項目自体を出さない。 */
+    @Test
+    fun autoStartRowIsAbsentWithoutAutoStartUi() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+
+        setContent { SettingsScreen(SettingsController(repo)) }
+
+        onNodeWithTag(TAG_AUTO_START).assertDoesNotExist()
+    }
+
+    /** 自動起動のトグルは現在の登録状態を初期表示し、操作で登録・解除を呼ぶ。 */
+    @Test
+    fun autoStartToggleReflectsAndUpdatesRegistration() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val changes = mutableListOf<Boolean>()
+
+        setContent {
+            SettingsScreen(
+                SettingsController(repo),
+                autoStart = AutoStartUi(
+                    isEnabled = { true },
+                    editable = true,
+                    onChange = { changes.add(it) },
+                ),
+            )
+        }
+
+        onNodeWithTag(TAG_AUTO_START).performScrollTo().assertIsOn()
+        onNodeWithTag(TAG_AUTO_START).performClick()
+
+        assertEquals(listOf(false), changes)
+    }
+
+    /** 登録できない環境（開発実行）では項目を出したまま操作を受け付けない。 */
+    @Test
+    fun autoStartToggleIsShownButDisabledWhenNotEditable() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val changes = mutableListOf<Boolean>()
+
+        setContent {
+            SettingsScreen(
+                SettingsController(repo),
+                autoStart = AutoStartUi(
+                    isEnabled = { false },
+                    editable = false,
+                    unavailableInDevBuild = true,
+                    onChange = { changes.add(it) },
+                ),
+            )
+        }
+
+        onNodeWithTag(TAG_AUTO_START).performScrollTo().assertExists()
+        onNodeWithTag(TAG_AUTO_START).performClick()
+
+        assertEquals(emptyList(), changes)
+    }
+
     /** 保存済み設定が TLS 無効でも、自動保存時は常に TLS 有効を書き込む。 */
     @Test
     fun autoSaveAlwaysPersistsTlsEnabled() = runComposeUiTest {

@@ -48,6 +48,7 @@ import to.sava.peranta.autostart.AutoStartManager
 import to.sava.peranta.autostart.AutoStartStatus
 import to.sava.peranta.autostart.DesktopHealthChecker
 import to.sava.peranta.autostart.WindowsRunRegistry
+import to.sava.peranta.config.isDevMode
 import to.sava.peranta.pairing.PairingImportController
 import to.sava.peranta.pairing.pairingQrMatrix
 import to.sava.peranta.platform.initLogging
@@ -57,6 +58,7 @@ import to.sava.peranta.toast.ComposeToaster
 import to.sava.peranta.toast.ToastHost
 import to.sava.peranta.toast.WindowsNotificationSound
 import to.sava.peranta.ui.AppFilterScreen
+import to.sava.peranta.ui.AutoStartUi
 import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.MessageComposer
 import to.sava.peranta.ui.PairingScanScreen
@@ -240,6 +242,13 @@ fun main(args: Array<String>) {
     // jpackage.app-path が無い開発実行では自動起動を扱わない（java 起動コマンドの誤登録を防ぐ）。
     val autoStart = AutoStartManager(WindowsRunRegistry(), System.getProperty("jpackage.app-path"))
     autoStart.reconcile()
+    // 開発実行では登録できないが、設定が消えたように見えないよう項目は出して理由を添える（§3.3）。
+    val autoStartUi = AutoStartUi(
+        isEnabled = autoStart::isEnabled,
+        editable = autoStart.isSupported,
+        unavailableInDevBuild = !autoStart.isSupported && isDevMode(),
+        onChange = { enabled -> if (enabled) autoStart.enable() else autoStart.disable() },
+    )
 
     val mainWindow = AtomicReference<AwtWindow?>(null)
     val showWindowRequest = AtomicReference<() -> Unit>({})
@@ -472,6 +481,7 @@ fun main(args: Array<String>) {
                                 onOpenPairingImport = { onNavigate(ShellDestination.PairingImport) },
                                 updateController = updater.controller,
                                 onInstallUpdate = { url -> updater.install(url) },
+                                autoStart = autoStartUi,
                                 // 鍵の作成は例外として即時反映する（§10.2）。画面を離れたときの反映は onNavigate が担う。
                                 onSaved = { configGeneration++ },
                                 showHeader = false,

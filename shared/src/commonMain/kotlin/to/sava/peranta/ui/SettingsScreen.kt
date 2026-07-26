@@ -85,6 +85,15 @@ private const val ATTACH_NOTIFICATION_IMAGES_DESCRIPTION: String =
     "この端末が転送する通知に、通知に付いていた画像と送信者のアイコンを添えます。" +
         "通信量が気になる場合は OFF にしてください。"
 
+/** 自動起動トグルの説明文（§3.3）。 */
+private const val AUTO_START_DESCRIPTION: String =
+    "サインインしたときに Peranta を起動し、タスクトレイに常駐して受信を始めます。" +
+        "ウィンドウは開かないので、見るときはトレイのアイコンから開いてください。"
+
+/** 開発実行では自動起動を登録できない旨の注記（§3.3）。 */
+private const val AUTO_START_DEV_BUILD_NOTE: String =
+    "開発ビルドでは設定できません（配布版のみ）。"
+
 /** 共有鍵・トークン未設定で QR を作れないときの案内文。 */
 private const val PAIRING_PREREQUISITE_NOTICE: String = "先にトークンと共有鍵を設定してください。"
 
@@ -96,6 +105,7 @@ private const val SECTION_SETUP_OVERVIEW: String = "セットアップ状況"
 private const val SECTION_CONNECTION: String = "ntfyサーバー接続設定"
 private const val SECTION_THIS_DEVICE: String = "この端末"
 private const val SECTION_NOTIFICATIONS: String = "通知と履歴"
+private const val SECTION_THIS_PC: String = "この PC での動作"
 private const val SECTION_UPDATE: String = "アプリの更新"
 private const val SECTION_ADD_DEVICE: String = "端末の追加"
 private const val SECTION_DANGER: String = "危険な操作"
@@ -116,6 +126,7 @@ private const val SECTION_DANGER: String = "危険な操作"
  * [loadReceiveSetupItems] で受信のセットアップ項目を取得する。[onOpenHealthCheck] / [onOpenReceiveSetup] /
  * [onOpenPairingImport] は各行の導線で、null なら該当行の導線を出さない。
  * [updateController] が非 null のとき「アプリの更新」セクションを出し、ボタン押下時だけ更新確認を実行する（§12）。
+ * [autoStart] が非 null のとき「この PC での動作」セクションを出し、ログオン時自動起動の登録を扱う（§3.3）。
  * [showHeader] が false のときは画面見出し行（タイトルと「タイムラインへ」）を出さない。外側のアプリバーが
  * 見出しと戻る導線を持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
  */
@@ -139,6 +150,7 @@ fun SettingsScreen(
     onOpenReceiveSetup: (() -> Unit)? = null,
     updateController: UpdateController? = null,
     onInstallUpdate: ((String) -> Unit)? = null,
+    autoStart: AutoStartUi? = null,
     showHeader: Boolean = true,
 ) {
     val initial = remember { controller.load() }
@@ -155,6 +167,7 @@ fun SettingsScreen(
     var autoDisplayImages by remember { mutableStateOf(initial.autoDisplayImages) }
     var sendEnabled by remember { mutableStateOf(initial.sendEnabled) }
     var smsDirectReceive by remember { mutableStateOf(initial.smsDirectReceive) }
+    var autoStartEnabled by remember { mutableStateOf(autoStart?.isEnabled?.invoke() ?: false) }
 
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var showRotateWarning by remember { mutableStateOf(false) }
@@ -357,6 +370,29 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+
+                if (autoStart != null) {
+                    SectionHeader(title = SECTION_THIS_PC)
+                    LabeledCheckbox(
+                        checked = autoStartEnabled,
+                        onCheckedChange = { autoStartEnabled = it; autoStart.onChange(it) },
+                        label = "サインイン時に自動起動する",
+                        tag = TAG_AUTO_START,
+                        enabled = autoStart.editable,
+                    )
+                    Text(
+                        text = AUTO_START_DESCRIPTION,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (autoStart.unavailableInDevBuild) {
+                        Text(
+                            text = AUTO_START_DEV_BUILD_NOTE,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
 
                 if (updateController != null) {
                     SectionHeader(title = SECTION_UPDATE)
@@ -615,6 +651,9 @@ const val TAG_AUTO_DISPLAY_IMAGES: String = "settings-auto-display-images"
 
 /** 通知画像の転送トグルのテストタグ。 */
 const val TAG_ATTACH_NOTIFICATION_IMAGES: String = "settings-attach-notification-images"
+
+/** 自動起動トグルのテストタグ。 */
+const val TAG_AUTO_START: String = "settings-auto-start"
 const val TAG_SEND_ENABLED: String = "settings-send-enabled"
 const val TAG_SMS_DIRECT_RECEIVE: String = "settings-sms-direct-receive"
 const val TAG_UPDATE_CHECK: String = "settings-update-check"
