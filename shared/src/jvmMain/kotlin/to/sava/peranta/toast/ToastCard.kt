@@ -35,8 +35,8 @@ private const val TOAST_SOURCE_NAME = "Peranta"
 /** 「開く」ボタンのラベル。本文から URL が抽出できたときだけ出す（§3.3）。 */
 private const val OPEN_BUTTON_LABEL = "開く"
 
-/** 「消す」ボタンのラベル。押下は発出元の通知を消す既読同期コマンドになる（§3.4）。 */
-private const val DISMISS_BUTTON_LABEL = "消す"
+/** 既読同期ボタンのラベル。押下は発出元の通知を消すコマンドになる（§3.4）。 */
+private const val DISMISS_BUTTON_LABEL = "送信元の通知を消す"
 
 /** 本文に出す最大行数。 */
 private const val BODY_MAX_LINES = 4

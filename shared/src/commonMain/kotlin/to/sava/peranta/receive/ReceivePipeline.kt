@@ -217,7 +217,8 @@ class ReceivePipeline(
      * [notificationKey] に対応する受信通知（未マーク分すべて）を「元通知は消えた」状態にマークし、
      * 伏せ字処理（[persistItemFor]）を通して再記録する（§3.4）。同一 key で複数回再投稿された
      * 通知（Google Messages 等）がタイムラインに積まれていても、全件をマークする。
-     * DISMISS コマンドの受信時のほか、自端末での「消す」操作（プラットフォーム側の配線）からも呼ばれる。
+     * DISMISS コマンドの受信時のほか、自端末での「送信元の通知を消す」操作（プラットフォーム側の
+     * 配線）からも呼ばれる。
      * 対象が見つからない、または全件マーク済みなら何もしない。
      */
     suspend fun markSourceDismissed(notificationKey: String) {

@@ -64,7 +64,7 @@ const val TAG_TIMELINE_ACTION_PREFIX: String = "timeline-action-"
 /** 受信通知バブル右上の × ボタンのタグ。 */
 const val TAG_TIMELINE_DISMISS_BUTTON: String = "timeline-dismiss-button"
 
-/** コンテキストメニューの「消す」項目のタグ。 */
+/** コンテキストメニューの「送信元の通知を消す」項目のタグ。 */
 const val TAG_TIMELINE_MENU_DISMISS: String = "timeline-menu-dismiss"
 
 /** コンテキストメニューの「このアプリからの通知を非表示」項目のタグ。 */
@@ -132,7 +132,7 @@ fun timelineScrollTargetIndex(visible: List<TimelineItem>, targetId: String): In
 /**
  * チャット風タイムライン（§10.1）。受信通知は左寄せ、エラー・送信通知は右寄せに並べる。
  * [actions] が渡されると受信通知にアクションボタン・右上の × ボタン・長押し/右クリックメニューを付ける。
- * 「消す」はブロードキャスト送信と同時に、往復を待たず自端末の表示から即座に取り下げる。
+ * 「送信元の通知を消す」はブロードキャスト送信と同時に、往復を待たず自端末の表示から即座に取り下げる。
  * 並び順は時系列順（古い→新しい、上→下）で最新が最下部。起動時は最下部へジャンプし、
  * 最下部表示中の新着だけ追従する（§10.1）。[listState] を呼び出し側から注入でき、
  * [lazyScrollbarContent] スロットで Desktop 用スクロールバー等を注入できる（`AppFilterScreen` と同型）。
@@ -331,7 +331,7 @@ private fun ReceivedBubble(item: ReceivedNotification, attachments: AttachmentUi
  * 開き、それ以外は押すと送信元へ invokeAction を返送する（§10.1）。
  * 元通知が既に消えている（[ReceivedNotification.sourceDismissed]）アイテムはアクションボタン・
  * 返信入力・コンテキストメニューのアクション項目を出さず、代わりに注記を表示する。
- * × ボタン・「消す」（ローカル非表示）は引き続き行える。
+ * × ボタン・「送信元の通知を消す」（ローカル非表示）は引き続き行える。
  */
 @Composable
 private fun InteractiveReceivedBubble(
@@ -485,7 +485,8 @@ private fun ReplyInput(onSend: (text: String) -> Unit, onCancel: () -> Unit) {
 
 /**
  * 受信通知アイテムのコンテキストメニュー。[showActionItems] が false のとき（元通知が消えた
- * アイテム、§10.1）はアクション項目を出さず、「消す」「このアプリからの通知を非表示」は常に出す。
+ * アイテム、§10.1）はアクション項目を出さず、「送信元の通知を消す」「このアプリからの通知を非表示」は
+ * 常に出す。
  */
 @Composable
 private fun ContextMenu(
@@ -509,7 +510,7 @@ private fun ContextMenu(
             )
         }
         DropdownMenuItem(
-            text = { Text("消す") },
+            text = { Text("送信元の通知を消す") },
             onClick = {
                 onDismissRequest()
                 onDismissNotification()

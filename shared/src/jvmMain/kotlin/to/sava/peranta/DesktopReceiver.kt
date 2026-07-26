@@ -341,7 +341,8 @@ class DesktopReceiver(
 
     /**
      * 受信ファイル・受信メッセージ・エラーのトーストを表示し、クリックのみ前面化＋該当アイテムへの
-     * スクロールへ配線する（§3.3）。「消す」ボタン押下は送るべき既読同期コマンドを持たないため何もしない。
+     * スクロールへ配線する（§3.3）。「送信元の通知を消す」押下は送るべき既読同期コマンドを持たないため
+     * 何もしない。
      */
     private suspend fun showToast(itemId: String, content: ReceivedNotificationToast) {
         if (toaster.show(content) == ToastResult.Clicked) {
@@ -364,7 +365,7 @@ class DesktopReceiver(
     }
 
     /**
-     * トーストの「消す」押下時に既読同期（§3.4）の dismiss を全端末へブロードキャストし、
+     * トーストの「送信元の通知を消す」押下時に既読同期（§3.4）の dismiss を全端末へブロードキャストし、
      * 自端末のタイムラインアイテムも sourceDismissed としてマークする（ブロードキャストは
      * 自端末を除外するため、自分での操作は自分で反映する必要がある）。
      * 元通知に紐づかない（notificationKey を持たない）アイテムは取り下げ対象にならないためログのみとする。
@@ -382,7 +383,7 @@ class DesktopReceiver(
 
     /**
      * タイムライン UI 用の操作束を作る（§10.1）。アクション発火・返信・非表示は送信元へ一点指定、
-     * 「消す」は既読同期のため全端末へブロードキャストしつつ、表示済みトーストも取り下げる。
+     * 「送信元の通知を消す」は既読同期のため全端末へブロードキャストしつつ、表示済みトーストも取り下げる。
      * mute はアプリフィルタ画面（§10.4-1）と同じ経路（[appFilterController]）でローカルミラーへも反映する。
      */
     fun timelineActions(): TimelineActions = TimelineActions(
