@@ -23,6 +23,13 @@ dependencies {
     debugImplementation(libs.compose.uiTooling)
 }
 
+// 版数の単一ソース（gradle プロパティ）。配布時は -Pperanta.versionCode / -Pperanta.versionName で上書きする。
+val perantaVersionCode = providers.gradleProperty("peranta.versionCode").getOrElse("1")
+val perantaVersionName = providers.gradleProperty("peranta.versionName").getOrElse("0.0.0")
+
+// 配布用の署名鍵。設定が無ければ署名なしで組む（手元の release ビルドを鍵無しで通すため）。
+val releaseKeystore = providers.environmentVariable("PERANTA_RELEASE_KEYSTORE").orNull
+
 android {
     namespace = "to.sava.peranta"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -31,8 +38,18 @@ android {
         applicationId = "to.sava.peranta"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = perantaVersionCode.toInt()
+        versionName = perantaVersionName
+    }
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = providers.environmentVariable("PERANTA_RELEASE_KEYSTORE_PASSWORD").orNull
+                keyAlias = providers.environmentVariable("PERANTA_RELEASE_KEY_ALIAS").orNull
+                keyPassword = providers.environmentVariable("PERANTA_RELEASE_KEY_PASSWORD").orNull
+            }
+        }
     }
     packaging {
         resources {
@@ -42,6 +59,7 @@ android {
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     compileOptions {

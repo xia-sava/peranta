@@ -54,7 +54,9 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = perantaPackageName
-            packageVersion = "1.0.0"
+            // 新版の MSI が旧版を置き換える条件は upgradeUuid の一致と版数の増加の両方なので、
+            // インストーラの版数を配布物の versionName に追随させる。
+            packageVersion = perantaVersionName
 
             windows {
                 iconFile.set(project.file("icons/peranta.ico"))
