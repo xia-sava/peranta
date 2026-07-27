@@ -1,0 +1,12 @@
+# リポジトリ内の改行は LF に統一し、チェックアウト時に環境へ合わせる。
+* text=auto
+
+# 実行する環境が決まっているものは改行を固定する。
+gradlew text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
+
+# 内容を変換してはいけないもの。
+*.jar binary
+*.png binary
+*.ico binary
