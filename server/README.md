@@ -81,7 +81,10 @@ docker compose exec ntfy ntfy access peranta "up*" rw
 docker compose exec ntfy ntfy token add peranta
 ```
 
-`auth-default-access: deny-all` なので、トークンを持たないアクセスは一切通らない。
+`auth-default-access: deny-all` なので、トピックの購読と publish はトークンなしには通らない。
+ただし**添付は例外で、URL を知っていれば認証なしに取得できる**（ntfy の仕様）。Peranta は
+添付を端末側で暗号化してから置くため、URL が漏れても中身は読めない。
+
 発行したトークンはリポジトリに含めないこと。
 
 ### 7. クライアントを設定する
