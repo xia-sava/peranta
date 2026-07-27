@@ -3,6 +3,9 @@
 # `peranta-ntfy:80` への振り分けを足す（README.md 参照）。
 #
 # 起動: docker compose -f compose.caddy.yaml up -d
+
+name: caddy
+
 services:
   caddy:
     image: caddy:2-alpine

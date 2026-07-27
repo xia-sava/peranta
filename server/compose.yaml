@@ -7,6 +7,11 @@
 #            docker compose exec ntfy ntfy access peranta "up*" rw
 #            （up* は UnifiedPush 用。ntfy アプリが払い出す upXXXX トピックの購読/配送に必要）
 # トークン:   docker compose exec ntfy ntfy token add peranta
+
+# このディレクトリには compose が複数あるので、プロジェクト名を固定して互いに独立させる。
+# 固定しないと同名のプロジェクトになり、片方を起動したとき他方が orphan として扱われる。
+name: peranta
+
 services:
   ntfy:
     image: binwiederhier/ntfy:v2.11.0

@@ -8,6 +8,9 @@
 #            （up* は UnifiedPush 用。ntfy アプリが払い出す upXXXX トピックの購読/配送に必要）
 # トークン:   docker compose -f compose.dev.yaml exec ntfy ntfy token add peranta
 # 発行したトークン等は server/.local/ に保存する（gitignore 済み）
+
+name: peranta-dev
+
 services:
   ntfy:
     image: binwiederhier/ntfy:v2.11.0
