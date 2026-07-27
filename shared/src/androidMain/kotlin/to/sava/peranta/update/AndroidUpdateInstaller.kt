@@ -5,11 +5,6 @@ import android.content.Intent
 import androidx.core.content.FileProvider
 import co.touchlab.kermit.Logger
 import io.ktor.client.HttpClient
-import io.ktor.client.request.get
-import io.ktor.client.statement.bodyAsChannel
-import io.ktor.http.contentLength
-import io.ktor.http.isSuccess
-import io.ktor.utils.io.jvm.javaio.toInputStream
 import java.io.File
 import java.io.IOException
 
@@ -50,18 +45,9 @@ class AndroidUpdateInstaller(
      * （全体長が判らなければ 0 を渡す）。
      */
     suspend fun download(url: String, onProgress: (received: Long, total: Long) -> Unit = { _, _ -> }): File {
-        val response = httpClient.get(url)
-        if (!response.status.isSuccess()) {
-            throw IOException("apk download failed: HTTP ${response.status.value}")
-        }
         val dir = File(context.cacheDir, DOWNLOAD_DIR).apply { mkdirs() }
         val file = File(dir, APK_FILE_NAME)
-        val total = response.contentLength() ?: 0L
-        response.bodyAsChannel().toInputStream().use { input ->
-            file.outputStream().buffered().use { output ->
-                copyReportingProgress(input, output, total, onProgress)
-            }
-        }
+        httpClient.downloadToFile(url, file, onProgress)
         return file
     }
 

@@ -2,18 +2,8 @@ package to.sava.peranta.update
 
 import co.touchlab.kermit.Logger
 import io.ktor.client.HttpClient
-import io.ktor.client.request.get
-import io.ktor.client.statement.bodyAsChannel
-import io.ktor.http.contentLength
-import io.ktor.http.isSuccess
-import io.ktor.utils.io.jvm.javaio.toInputStream
 import java.io.File
 import java.io.IOException
-import java.net.URI
-import java.net.URISyntaxException
-
-/** 取得を許す URL スキーム。 */
-private val ALLOWED_SCHEMES = setOf("http", "https")
 
 /** 配布物と適用スクリプトを置く一時ディレクトリ名。 */
 private const val DOWNLOAD_DIR = "peranta-update"
@@ -26,19 +16,6 @@ private const val APPLY_SCRIPT_NAME = "peranta-apply-update.ps1"
 
 /** 適用スクリプトが自プロセスの終了を待つ上限（秒）。 */
 private const val EXIT_WAIT_SECONDS = 60
-
-/**
- * [url] が http/https かつホストを持つ、取得してよい形式かを判定する（純粋関数）。
- * latest.json 由来の外部入力を扱う前の検証に使う。
- */
-fun isBrowsableHttpUrl(url: String): Boolean {
-    val uri = try {
-        URI(url)
-    } catch (e: URISyntaxException) {
-        return false
-    }
-    return uri.scheme?.lowercase() in ALLOWED_SCHEMES && !uri.host.isNullOrEmpty()
-}
 
 /** PowerShell のリテラル文字列にする。引用符を含む値でも壊れないようエスケープする。 */
 private fun powerShellLiteral(value: String): String = "'" + value.replace("'", "''") + "'"
@@ -85,21 +62,9 @@ class DesktopUpdateInstaller(
      * 逐次知らせる（全体長が判らなければ 0 を渡す）。
      */
     suspend fun download(url: String, onProgress: (received: Long, total: Long) -> Unit = { _, _ -> }): File {
-        if (!isBrowsableHttpUrl(url)) {
-            throw IOException("update url rejected: not a http(s) url")
-        }
-        val response = httpClient.get(url)
-        if (!response.status.isSuccess()) {
-            throw IOException("msi download failed: HTTP ${response.status.value}")
-        }
         val dir = File(System.getProperty("java.io.tmpdir"), DOWNLOAD_DIR).apply { mkdirs() }
         val file = File(dir, MSI_FILE_NAME)
-        val total = response.contentLength() ?: 0L
-        response.bodyAsChannel().toInputStream().use { input ->
-            file.outputStream().buffered().use { output ->
-                copyReportingProgress(input, output, total, onProgress)
-            }
-        }
+        httpClient.downloadToFile(url, file, onProgress)
         log.i { "update downloaded (${file.length()} bytes)" }
         return file
     }
