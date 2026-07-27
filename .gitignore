@@ -2,6 +2,9 @@
 .kotlin
 .gradle
 server/.local/
+server/.env
+server/data/
+server/cache/
 **/build/
 xcuserdata
 !src/**/build/

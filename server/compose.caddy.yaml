@@ -1,0 +1,30 @@
+# 前段の TLS リバースプロキシ。1 台のサーバで完結させる場合に使う。
+# 既に別のリバースプロキシが動いているなら、これは使わずにそちらへ
+# `peranta-ntfy:80` への振り分けを足す（README.md 参照）。
+#
+# 起動: docker compose -f compose.caddy.yaml up -d
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PERANTA_DOMAIN: "${PERANTA_DOMAIN:?.env に PERANTA_DOMAIN を設定してください（.env.example 参照）}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 取得した証明書。消すと再取得になるので、Let's Encrypt のレート制限を避けるため残す
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - proxy
+    restart: unless-stopped
+
+networks:
+  proxy:
+    external: true
+
+volumes:
+  caddy-data:
+  caddy-config:

@@ -12,6 +12,9 @@ Peranta は自前の ntfy サーバを介して通知・SMS を端末間で転�
 認証必須（匿名アクセス禁止）の ntfy サーバを用意し、Peranta 用のユーザー・ACL・
 トークンを作成する。
 
+サーバをこれから立てるなら、[`server/`](../server/README.md) に設定と Docker Compose の
+一式がある。TLS 終端のリバースプロキシ込みで、ドメインを向けて 3 コマンドで動く。
+
 ```sh
 # ユーザー作成（パスワードは安全な場所に控える）
 ntfy user add peranta
@@ -25,7 +28,7 @@ ntfy access peranta "up*" rw
 ntfy token add peranta
 ```
 
-開発時は `server/docker-compose.yml` でローカルサーバを起動できる（コメント参照）。
+開発時は `docker compose -f server/compose.dev.yaml up -d` でローカルサーバを起動できる。
 
 ## 2. 設定元の端末（初期設定ウィザード）
 

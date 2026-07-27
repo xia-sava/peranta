@@ -1,0 +1,14 @@
+# TLS 終端とドメインごとの振り分け。
+# 証明書は Let's Encrypt から自動で取得・更新する（80 番が外から到達できることが条件）。
+# 公開するドメインは .env の PERANTA_DOMAIN で決まる。
+#
+# 同じサーバで別のサービスも公開するときは、ここへブロックを足す。
+#   app.example.com {
+#       reverse_proxy other-app:3000
+#   }
+# 相手のコンテナも external network `proxy` に参加させておくこと。
+
+{$PERANTA_DOMAIN} {
+	# WebSocket（購読の常時接続）はそのまま透過するので追加の設定は要らない
+	reverse_proxy peranta-ntfy:80
+}

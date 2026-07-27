@@ -1,4 +1,0 @@
-{
-  "android": { "versionCode": 9999, "versionName": "99.0.0", "url": "http://localhost:8091/dist/peranta-99.0.0.apk" },
-  "desktop": { "versionCode": 9999, "versionName": "99.0.0", "url": "http://localhost:8091/dist/peranta-99.0.0.msi" }
-}
