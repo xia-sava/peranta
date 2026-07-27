@@ -136,9 +136,9 @@ class AndroidAttachmentCacheTest {
             writeBody: suspend (io.ktor.utils.io.ByteWriteChannel) -> Unit,
         ) = error("not used")
 
-        override suspend fun download(url: String, blobId: String): ByteReadChannel {
+        override suspend fun download(url: String, blobId: String, consume: suspend (ByteReadChannel) -> Unit) {
             check(url == this.url) { "unexpected url $url" }
-            return ByteReadChannel(body)
+            consume(ByteReadChannel(body))
         }
     }
 }

@@ -2,8 +2,8 @@ package to.sava.peranta.blob
 
 import co.touchlab.kermit.Logger
 import io.ktor.client.HttpClient
-import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.prepareGet
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -72,16 +72,17 @@ class KtorBlobTransport(
         )
     }
 
-    override suspend fun download(url: String, blobId: String): ByteReadChannel {
+    override suspend fun download(url: String, blobId: String, consume: suspend (ByteReadChannel) -> Unit) {
         val downloadUrl = "${config.httpBaseUrl()}${Url(url).encodedPath}"
-        val response: HttpResponse = httpClient.get(downloadUrl) {
+        httpClient.prepareGet(downloadUrl) {
             config.accessToken?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+        }.execute { response ->
+            if (!response.status.isSuccess()) {
+                throw BlobTransportException(response.status.value, "blob download failed: ${response.status}")
+            }
+            log.d { "downloading blob blobId=$blobId" }
+            consume(response.bodyAsChannel())
         }
-        if (!response.status.isSuccess()) {
-            throw BlobTransportException(response.status.value, "blob download failed: ${response.status}")
-        }
-        log.d { "downloading blob blobId=$blobId" }
-        return response.bodyAsChannel()
     }
 
     private fun uploadUrl(topic: String): String = "${config.httpBaseUrl()}/$topic"

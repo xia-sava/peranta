@@ -27,10 +27,11 @@ interface BlobTransport {
     ): UploadedBlob
 
     /**
-     * [url] の blob をダウンロードし、本文チャンネルを返す。呼び出し側は速やかに消費する。
+     * [url] の blob をダウンロードし、本文チャンネルを [consume] へ渡す。
+     * 受け取りながら読ませるため全量をメモリに載せない。応答は [consume] を抜けた時点で閉じる。
      * [blobId] はログ・相関用（URL を出さないため。§16）。取得先の判定には [url] のみを使う。
      */
-    suspend fun download(url: String, blobId: String): ByteReadChannel
+    suspend fun download(url: String, blobId: String, consume: suspend (ByteReadChannel) -> Unit)
 }
 
 /** blob のアップロード/ダウンロードが 2xx 以外で返ったことを示す。 */

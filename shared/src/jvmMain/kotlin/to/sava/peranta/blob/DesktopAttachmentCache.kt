@@ -55,8 +55,9 @@ class DesktopAttachmentCache(
         val target = File(dir, safeFileName(ref))
         val tmp = File(dir, ".${safeFileName(ref)}.part")
         try {
-            val input = transport.download(ref.url, ref.blobId)
-            writeDecrypted(ref, input, tmp, onProgress)
+            transport.download(ref.url, ref.blobId) { input ->
+                writeDecrypted(ref, input, tmp, onProgress)
+            }
             moveIntoPlace(tmp, target)
             target.setLastModified(now())
             log.i { "attachment cached blobId=${ref.blobId} bytes=${ref.sizeBytes}" }
