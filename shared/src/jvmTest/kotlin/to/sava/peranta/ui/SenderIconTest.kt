@@ -27,7 +27,7 @@ class SenderIconTest {
 
     private fun iconRef(expiresAt: Long? = null) = AttachmentRef(
         blobId = blobId,
-        url = "https://peranta.sava.to/file/icon",
+        url = "https://peranta.example.com/file/icon",
         fileName = "sender-icon-1000.png",
         mimeType = "image/png",
         sizeBytes = 512,

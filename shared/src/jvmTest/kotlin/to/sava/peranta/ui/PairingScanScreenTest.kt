@@ -28,7 +28,7 @@ class PairingScanScreenTest {
     private fun validUri(): String =
         PairingUri.encode(
             PairingData(
-                host = "peranta.sava.to",
+                host = "peranta.example.com",
                 token = "tk",
                 keyId = "k2",
                 key = ByteArray(32) { it.toByte() },

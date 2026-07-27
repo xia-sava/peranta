@@ -13,7 +13,7 @@ class AttachmentRefCodecTest {
     fun roundTripsThroughJson() {
         val ref = AttachmentRef(
             blobId = "01234567-89ab-4cde-8fed-0123456789ab",
-            url = "https://peranta.sava.to/file/abcdef",
+            url = "https://peranta.example.com/file/abcdef",
             fileName = "レポート.pdf",
             mimeType = "application/pdf",
             sizeBytes = 12_345_678,

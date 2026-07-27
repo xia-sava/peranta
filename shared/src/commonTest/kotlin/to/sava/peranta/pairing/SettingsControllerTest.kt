@@ -189,7 +189,7 @@ class SettingsControllerTest {
     @Test
     fun buildPairingUriProducesDecodableUri() {
         val (controller, repo) = controllerWith(
-            PerantaConfig(host = "peranta.sava.to", accessToken = "tk", useTls = true, port = 8443),
+            PerantaConfig(host = "peranta.example.com", accessToken = "tk", useTls = true, port = 8443),
         )
         controller.rotateSharedKey()
 
@@ -198,7 +198,7 @@ class SettingsControllerTest {
         assertTrue(uri != null)
         val decoded = PairingUri.decode(uri)
         val success = assertIs<PairingResult.Success>(decoded)
-        assertEquals("peranta.sava.to", success.data.host)
+        assertEquals("peranta.example.com", success.data.host)
         assertEquals("tk", success.data.token)
         assertEquals("1", success.data.keyId)
         assertEquals(8443, success.data.port)

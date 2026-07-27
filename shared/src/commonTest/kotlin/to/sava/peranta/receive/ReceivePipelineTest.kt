@@ -276,7 +276,7 @@ class ReceivePipelineTest {
         attachments = listOf(
             AttachmentRef(
                 blobId = "blob-img",
-                url = "https://peranta.sava.to/file/img",
+                url = "https://peranta.example.com/file/img",
                 fileName = "notification-9900.jpg",
                 mimeType = "image/jpeg",
                 sizeBytes = 2048,
@@ -462,7 +462,7 @@ class ReceivePipelineTest {
         attachments = listOf(
             AttachmentRef(
                 blobId = "blob-1",
-                url = "https://peranta.sava.to/file/abc",
+                url = "https://peranta.example.com/file/abc",
                 fileName = "photo.jpg",
                 mimeType = "image/jpeg",
                 sizeBytes = 2048,

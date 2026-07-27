@@ -16,7 +16,7 @@ class PairingImportControllerTest {
     private fun validUri(): String =
         PairingUri.encode(
             PairingData(
-                host = "peranta.sava.to",
+                host = "peranta.example.com",
                 token = "tk",
                 keyId = "k5",
                 key = key(),
@@ -38,7 +38,7 @@ class PairingImportControllerTest {
         assertEquals("k5", applied.keyId)
 
         val loaded = repo.load()
-        assertEquals("peranta.sava.to", loaded.host)
+        assertEquals("peranta.example.com", loaded.host)
         assertEquals("tk", loaded.accessToken)
         assertEquals("k5", loaded.keyId)
         assertEquals(Base64.encode(key()), loaded.sharedKeyBase64)

@@ -22,7 +22,7 @@ class PresenceTest {
         val presence = buildPresencePayload(
             deviceId = "dev-123",
             deviceName = "xia-desktop",
-            endpoint = "https://peranta.sava.to/UPabc",
+            endpoint = "https://peranta.example.com/UPabc",
             capabilities = listOf(CAPABILITY_DISPLAY, CAPABILITY_COMMAND),
             sender = false,
             now = 5000,
@@ -31,7 +31,7 @@ class PresenceTest {
         assertEquals("dev-123", presence.from)
         assertEquals("xia-desktop", presence.deviceName)
         assertEquals(BROADCAST_TARGET, presence.to)
-        assertEquals("https://peranta.sava.to/UPabc", presence.endpoint)
+        assertEquals("https://peranta.example.com/UPabc", presence.endpoint)
         assertEquals(listOf("display", "command"), presence.capabilities)
         assertEquals(5000, presence.sentAtEpochMillis)
     }

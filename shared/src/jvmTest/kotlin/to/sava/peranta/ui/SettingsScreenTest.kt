@@ -1054,7 +1054,7 @@ class SettingsScreenTest {
             sendEnabled: Boolean = false,
             smsDirectReceive: Boolean = true,
         ): PerantaConfig = PerantaConfig(
-            host = "peranta.sava.to",
+            host = "peranta.example.com",
             accessToken = "tk",
             deviceName = "desktop-1",
             sharedKeyBase64 = Base64.encode(ByteArray(32)),

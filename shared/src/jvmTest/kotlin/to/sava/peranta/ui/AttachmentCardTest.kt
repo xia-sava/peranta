@@ -32,7 +32,7 @@ class AttachmentCardTest {
         kind: AttachmentKind = AttachmentKind.IMAGE,
     ) = AttachmentRef(
         blobId = blobId,
-        url = "https://peranta.sava.to/file/abc",
+        url = "https://peranta.example.com/file/abc",
         fileName = fileName,
         mimeType = mimeType,
         sizeBytes = 2048,

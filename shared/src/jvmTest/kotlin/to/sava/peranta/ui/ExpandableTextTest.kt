@@ -24,7 +24,7 @@ class ExpandableTextTest {
 
     private fun textRef() = AttachmentRef(
         blobId = blobId,
-        url = "https://peranta.sava.to/file/abc",
+        url = "https://peranta.example.com/file/abc",
         fileName = "message.txt",
         mimeType = "text/plain",
         sizeBytes = 2000,

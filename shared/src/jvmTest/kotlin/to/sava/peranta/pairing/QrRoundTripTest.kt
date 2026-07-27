@@ -28,7 +28,7 @@ class QrRoundTripTest {
     @Test
     fun generatedPngDecodesBackToOriginalUri() {
         val data = PairingData(
-            host = "peranta.sava.to",
+            host = "peranta.example.com",
             token = "tk_secret_ABC-123",
             keyId = "k1",
             key = ByteArray(32) { (it * 7 + 1).toByte() },

@@ -20,11 +20,11 @@ class PairingApplierTest {
         repo.save(PerantaConfig(deviceName = "tablet"))
 
         PairingApplier(repo).apply(
-            PairingData(host = "peranta.sava.to", token = "tk", keyId = "k3", key = key(), port = 8443),
+            PairingData(host = "peranta.example.com", token = "tk", keyId = "k3", key = key(), port = 8443),
         )
 
         val loaded = repo.load()
-        assertEquals("peranta.sava.to", loaded.host)
+        assertEquals("peranta.example.com", loaded.host)
         assertEquals("tk", loaded.accessToken)
         assertEquals("k3", loaded.keyId)
         assertEquals(Base64.encode(key()), loaded.sharedKeyBase64)

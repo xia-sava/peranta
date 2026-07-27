@@ -15,7 +15,7 @@ class FileForwardingTest {
 
     private fun ref() = AttachmentRef(
         blobId = "b1",
-        url = "https://peranta.sava.to/file/abc",
+        url = "https://peranta.example.com/file/abc",
         fileName = "photo.jpg",
         mimeType = "image/jpeg",
         sizeBytes = 1024,

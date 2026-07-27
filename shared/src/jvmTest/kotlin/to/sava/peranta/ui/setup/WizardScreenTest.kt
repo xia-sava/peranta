@@ -65,7 +65,7 @@ class WizardScreenTest {
 
     /** hasSharedKey・端末名まで揃った設定。Android の再入で役割ページから始まる。 */
     private fun pairedConfig(): PerantaConfig = PerantaConfig(
-        host = "peranta.sava.to",
+        host = "peranta.example.com",
         accessToken = "tk",
         deviceName = "phone-1",
         sharedKeyBase64 = Base64.encode(ByteArray(32)),

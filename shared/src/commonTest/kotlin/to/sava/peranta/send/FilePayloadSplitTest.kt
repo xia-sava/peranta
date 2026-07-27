@@ -17,7 +17,7 @@ class FilePayloadSplitTest {
 
     private fun ref(index: Int) = AttachmentRef(
         blobId = "01234567-89ab-4cde-8fed-01234567890$index",
-        url = "https://peranta.sava.to/file/${"a".repeat(24)}$index",
+        url = "https://peranta.example.com/file/${"a".repeat(24)}$index",
         fileName = "IMG_2026_07_$index.jpg",
         mimeType = "image/jpeg",
         sizeBytes = 3_145_728,

@@ -73,7 +73,7 @@ class ForwardedEnvelopeSizeTest {
 
     private fun attachmentRef(index: Int) = AttachmentRef(
         blobId = "00000000-0000-0000-0000-00000000000$index",
-        url = "https://peranta.sava.to/file/${"a".repeat(24)}$index",
+        url = "https://peranta.example.com/file/${"a".repeat(24)}$index",
         fileName = "IMG_2026_07_$index.jpg",
         mimeType = "image/jpeg",
         sizeBytes = 3_145_728,
@@ -115,7 +115,7 @@ class ForwardedEnvelopeSizeTest {
      */
     private fun worstCaseAttachmentRef(fileName: String = normalizeAttachmentFileName("あ".repeat(83) + ".jpeg")) = AttachmentRef(
         blobId = "01234567-89ab-4cde-8fed-0123456789ab",
-        url = "https://peranta.sava.to/file/${"a".repeat(24)}",
+        url = "https://peranta.example.com/file/${"a".repeat(24)}",
         fileName = fileName,
         mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         sizeBytes = 1_073_741_824,

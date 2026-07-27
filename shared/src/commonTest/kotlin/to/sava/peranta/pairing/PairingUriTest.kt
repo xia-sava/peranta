@@ -33,7 +33,7 @@ class PairingUriTest {
     @Test
     fun encodeDecodeRoundTripsAllFields() {
         val data = PairingData(
-            host = "peranta.sava.to",
+            host = "peranta.example.com",
             token = "tk_abc123",
             keyId = "k1",
             key = key(),
@@ -268,12 +268,12 @@ class PairingUriTest {
     /** toString は token と鍵を伏せ、host・keyId は残す。 */
     @Test
     fun toStringMasksSecrets() {
-        val data = PairingData("peranta.sava.to", "super-secret-token", "k1", key())
+        val data = PairingData("peranta.example.com", "super-secret-token", "k1", key())
         val text = data.toString()
         assertFalse(text.contains("super-secret-token"))
         assertFalse(text.contains(Base64.UrlSafe.encode(key())))
         assertFalse(text.contains(Base64.encode(key())))
-        assertTrue(text.contains("peranta.sava.to"))
+        assertTrue(text.contains("peranta.example.com"))
         assertTrue(text.contains("k1"))
         assertTrue(text.contains("***"))
     }

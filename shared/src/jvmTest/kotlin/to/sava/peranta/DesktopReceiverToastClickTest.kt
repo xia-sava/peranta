@@ -65,7 +65,7 @@ class DesktopReceiverToastClickTest {
         attachments = listOf(
             AttachmentRef(
                 blobId = "blob-1",
-                url = "https://peranta.sava.to/file/abc",
+                url = "https://peranta.example.com/file/abc",
                 fileName = "photo.jpg",
                 mimeType = "image/jpeg",
                 sizeBytes = 2048,

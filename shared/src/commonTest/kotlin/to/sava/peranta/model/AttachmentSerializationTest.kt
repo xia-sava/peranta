@@ -11,7 +11,7 @@ class AttachmentSerializationTest {
 
     private fun attachment(blobId: String = "blob-1") = AttachmentRef(
         blobId = blobId,
-        url = "https://peranta.sava.to/file/abc123",
+        url = "https://peranta.example.com/file/abc123",
         fileName = "photo.jpg",
         mimeType = "image/jpeg",
         sizeBytes = 3_145_728,

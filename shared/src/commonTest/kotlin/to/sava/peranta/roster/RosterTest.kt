@@ -58,7 +58,7 @@ class RosterTest {
     /** エンドポイント URL から末尾パスセグメントを topic として取り出す。 */
     @Test
     fun topicOfExtractsLastPathSegment() {
-        assertEquals("UPabc123", topicOf("https://peranta.sava.to/UPabc123"))
+        assertEquals("UPabc123", topicOf("https://peranta.example.com/UPabc123"))
         assertEquals("peranta-dev-desk-xyz", topicOf("http://localhost:8090/peranta-dev-desk-xyz"))
         assertEquals("t", topicOf("https://h/t/"))
     }

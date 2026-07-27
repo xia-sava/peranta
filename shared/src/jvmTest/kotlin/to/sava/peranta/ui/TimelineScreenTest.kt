@@ -428,7 +428,7 @@ class TimelineScreenTest {
 
     private fun attachmentRef(fileName: String = "photo.jpg", sizeBytes: Long = 2048) = AttachmentRef(
         blobId = "blob-1",
-        url = "https://peranta.sava.to/file/abc",
+        url = "https://peranta.example.com/file/abc",
         fileName = fileName,
         mimeType = "image/jpeg",
         sizeBytes = sizeBytes,

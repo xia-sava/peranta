@@ -36,7 +36,7 @@ class ConfigRepositoryTest {
             sharedKeyBase64 = key,
             keyId = "k1",
             receiveTopic = "peranta-dev-desk-abc",
-            unifiedPushEndpoint = "https://peranta.sava.to/UPabc123",
+            unifiedPushEndpoint = "https://peranta.example.com/UPabc123",
         )
         repo.save(config)
         assertEquals(config, repo.load())
@@ -82,8 +82,8 @@ class ConfigRepositoryTest {
     fun unifiedPushEndpointRoundTrips() {
         val settings = MapSettings()
         val repo = ConfigRepository(settings, SettingsKeyStore(settings))
-        repo.save(PerantaConfig(unifiedPushEndpoint = "https://peranta.sava.to/UPxyz"))
-        assertEquals("https://peranta.sava.to/UPxyz", repo.load().unifiedPushEndpoint)
+        repo.save(PerantaConfig(unifiedPushEndpoint = "https://peranta.example.com/UPxyz"))
+        assertEquals("https://peranta.example.com/UPxyz", repo.load().unifiedPushEndpoint)
         repo.save(PerantaConfig(unifiedPushEndpoint = null))
         assertNull(repo.load().unifiedPushEndpoint)
     }
