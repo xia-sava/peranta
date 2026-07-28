@@ -178,7 +178,7 @@ class TimelineScreenTest {
         assertEquals(0, invokedIndex)
     }
 
-    /** opensActivity=true に分類されるアクションのボタンラベルには「（スマホで）」が付記される。 */
+    /** opensActivity=true に分類されるアクションには、実行先の接頭辞に加えて画面が開く旨が付記される。 */
     @Test
     fun opensOnSenderActionButtonShowsSuffix() = runComposeUiTest {
         val payload = notification(
@@ -188,12 +188,15 @@ class TimelineScreenTest {
         setContent {
             TimelineScreen(items(payload), actions = TimelineActions())
         }
-        onNodeWithText("地図${ACTION_OPENS_ON_SENDER_SUFFIX}").assertExists()
+        onNodeWithText("${ACTION_RUNS_ON_SENDER_PREFIX}地図$ACTION_OPENS_ON_SENDER_SUFFIX").assertExists()
     }
 
-    /** SENDER_EFFECT・UNKNOWN に分類されるアクションは従来どおりのラベルのまま表示される。 */
+    /**
+     * SENDER_EFFECT・UNKNOWN に分類されるアクションにも実行先の接頭辞が付く。添付を操作する
+     * 同名のボタンと取り違えないようにするため、画面が開くかどうかに依らず区別する。
+     */
     @Test
-    fun senderEffectAndUnknownActionButtonsShowUnchangedLabel() = runComposeUiTest {
+    fun senderEffectAndUnknownActionButtonsShowExecutionPrefix() = runComposeUiTest {
         val payload = notification(
             actions = listOf("アーカイブ", "開く"),
             actionDetails = listOf(
@@ -204,8 +207,8 @@ class TimelineScreenTest {
         setContent {
             TimelineScreen(items(payload), actions = TimelineActions())
         }
-        onNodeWithText("アーカイブ").assertExists()
-        onNodeWithText("開く").assertExists()
+        onNodeWithText("${ACTION_RUNS_ON_SENDER_PREFIX}アーカイブ").assertExists()
+        onNodeWithText("${ACTION_RUNS_ON_SENDER_PREFIX}開く").assertExists()
     }
 
     /** 付記付きボタンを押しても、従来どおり invokeAction が対応する index で送信される。 */
@@ -343,15 +346,18 @@ class TimelineScreenTest {
         assertTrue(!invoked)
     }
 
-    /** actionDetails を持たない payload（旧送信元由来）は全ボタンが従来どおりのラベルで表示される。 */
+    /**
+     * actionDetails を持たない payload（旧送信元由来）でも実行先の接頭辞は付く。
+     * 画面が開くかどうかは判定できないため、そちらの注記だけが落ちる。
+     */
     @Test
-    fun payloadWithoutActionDetailsShowsUnchangedLabels() = runComposeUiTest {
+    fun payloadWithoutActionDetailsStillShowsExecutionPrefix() = runComposeUiTest {
         val payload = notification(actions = listOf("アーカイブ", "地図"), actionDetails = emptyList())
         setContent {
             TimelineScreen(items(payload), actions = TimelineActions())
         }
-        onNodeWithText("アーカイブ").assertExists()
-        onNodeWithText("地図").assertExists()
+        onNodeWithText("${ACTION_RUNS_ON_SENDER_PREFIX}アーカイブ").assertExists()
+        onNodeWithText("${ACTION_RUNS_ON_SENDER_PREFIX}地図").assertExists()
     }
 
     /** actions を渡さない画面（送信ロール・空状態）では操作アフォーダンスを出さない。 */

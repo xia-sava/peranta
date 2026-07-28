@@ -78,8 +78,15 @@ const val TAG_TIMELINE_MENU_ACTION_PREFIX: String = "timeline-menu-action-"
 /** 受信可能な端末でタイムラインが空のときの文言。 */
 const val DEFAULT_EMPTY_TIMELINE_MESSAGE: String = "まだ通知はありません"
 
-/** 発出元で画面が開くアクションのボタンラベルに付ける注記（§10.1）。 */
-const val ACTION_OPENS_ON_SENDER_SUFFIX: String = "（スマホで）"
+/**
+ * 通知アクションのボタンラベルに付ける接頭辞（§10.1）。同じバブルには添付を操作するボタンも
+ * 並ぶが、そちらはこの端末で完結する。通知アクションは送信元の端末で実行されるため、
+ * 名前が同じでも別物であることを示す。
+ */
+const val ACTION_RUNS_ON_SENDER_PREFIX: String = "スマホ: "
+
+/** 発出元で画面が開くアクションのボタンラベルに付ける注記（§10.1）。押しても手元には何も出ない。 */
+const val ACTION_OPENS_ON_SENDER_SUFFIX: String = "（画面が開きます）"
 
 /** 返信入力欄のタグ。 */
 const val TAG_TIMELINE_REPLY_INPUT: String = "timeline-reply-input"
@@ -107,12 +114,15 @@ private val REPLY_LIMIT_WARNING: String =
 private fun exceedsReplyLimit(text: String): Boolean =
     text.encodeToByteArray().size > MAX_REPLY_TEXT_BYTES
 
-/** [payload] の [index] 番アクションの表示ラベル。発出元で開くアクションには注記を付ける。 */
+/**
+ * [payload] の [index] 番アクションの表示ラベル。どれも送信元の端末で実行されるため接頭辞を付け、
+ * さらに画面が開くものには注記を添える。
+ */
 private fun actionLabel(payload: NotificationPayload, index: Int, name: String): String =
     if (payload.actionKindAt(index) == ActionExecutionKind.OPENS_ON_SENDER) {
-        "$name$ACTION_OPENS_ON_SENDER_SUFFIX"
+        "$ACTION_RUNS_ON_SENDER_PREFIX$name$ACTION_OPENS_ON_SENDER_SUFFIX"
     } else {
-        name
+        "$ACTION_RUNS_ON_SENDER_PREFIX$name"
     }
 
 /**

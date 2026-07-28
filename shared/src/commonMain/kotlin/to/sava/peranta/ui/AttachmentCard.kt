@@ -157,6 +157,20 @@ internal fun AttachmentCard(ref: AttachmentRef, ui: AttachmentUi) {
     }
 }
 
+/**
+ * 添付を開くボタンのラベル。同じバブルには送信元アプリの通知アクションも並ぶため、何が開くのかを
+ * ラベルに含めて取り違えを防ぐ（§10.1）。
+ */
+private fun openLabelFor(ref: AttachmentRef): String =
+    if (attachmentCategoryFor(ref.mimeType, ref.fileName) == AttachmentCategory.IMAGE) {
+        "画像を開く"
+    } else {
+        "ファイルを開く"
+    }
+
+/** 添付を保存するボタンのラベル。開くボタンと同じ理由で、対象を含める。 */
+private const val ATTACHMENT_SAVE_LABEL: String = "ファイルに保存"
+
 @Composable
 private fun AttachmentControls(
     ref: AttachmentRef,
@@ -170,11 +184,11 @@ private fun AttachmentControls(
             TextButton(
                 onClick = { ui.onOpen(ref.blobId) },
                 modifier = Modifier.testTag("$TAG_ATTACHMENT_OPEN_PREFIX${ref.blobId}"),
-            ) { Text("開く") }
+            ) { Text(openLabelFor(ref)) }
             TextButton(
                 onClick = { ui.onSave(ref.blobId) },
                 modifier = Modifier.testTag("$TAG_ATTACHMENT_SAVE_PREFIX${ref.blobId}"),
-            ) { Text("保存") }
+            ) { Text(ATTACHMENT_SAVE_LABEL) }
             if (ui.canShare) {
                 TextButton(
                     onClick = { ui.onShare(ref.blobId) },
