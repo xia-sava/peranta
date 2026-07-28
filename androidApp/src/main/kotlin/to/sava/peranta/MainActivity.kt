@@ -744,12 +744,13 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    /** 読み取り中に画面が回ると狙いが定まらないため、開いたときの向きに固定してスキャナを起動する。 */
     private fun launchScanner() {
         val options = ScanOptions()
             .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
             .setPrompt("ペアリング QR を枠内に合わせてください")
             .setBeepEnabled(false)
-            .setOrientationLocked(false)
+            .setOrientationLocked(true)
         scanLauncher.launch(options)
     }
 

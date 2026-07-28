@@ -34,9 +34,9 @@
             android:roundIcon="@mipmap/ic_launcher_round"
             android:supportsRtl="true"
             android:theme="@android:style/Theme.Material.Light.NoActionBar">
-        <!-- QR スキャナ（ZXing の CaptureActivity）が sensorLandscape で画面を回すため、端末の自動回転を
-             切っていてもスキャンのたびに構成変更が起きる。作り直すと進行中のウィザードもスキャン結果の
-             受け取り先も失われるので、画面まわりの構成変更は Compose の再コンポーズで受ける。 -->
+        <!-- 画面まわりの構成変更では作り直さず、Compose の再コンポーズで受ける。進行中のウィザードの
+             位置とスキャン結果の受け取り先は Activity のインスタンスに紐づくため、作り直すと
+             QR の読み取りが最初からやり直しになる。 -->
         <activity
                 android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
                 android:exported="true"
@@ -56,6 +56,14 @@
                 <data android:mimeType="*/*"/>
             </intent-filter>
         </activity>
+
+        <!-- QR スキャナ（ZXing）のライブラリ側の宣言は sensorLandscape で、端末の自動回転を切って
+             いても横向きを強制する。読み取りは短時間なので、開いたときの向きのまま使えるよう
+             システムの設定に委ねる。 -->
+        <activity
+                android:name="com.journeyapps.barcodescanner.CaptureActivity"
+                android:screenOrientation="unspecified"
+                tools:replace="android:screenOrientation"/>
 
         <service
                 android:name="to.sava.peranta.android.AttachmentTransferService"
