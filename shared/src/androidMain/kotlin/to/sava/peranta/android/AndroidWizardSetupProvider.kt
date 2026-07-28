@@ -8,7 +8,8 @@ import to.sava.peranta.ui.setup.permissionSetupItem
 
 /** 権限系項目の案内文（機能で説明する。手段の詳細は各設定画面へ委ねる）。 */
 private const val NLS_DESCRIPTION: String =
-    "この端末の通知を他の端末へ送るために、通知へのアクセスを許可します。"
+    "この端末の通知を他の端末へ送るために、通知へのアクセスを許可します。" +
+        AndroidSetupProbe.RESTRICTED_SETTINGS_GUIDANCE
 private const val SELF_BATTERY_DESCRIPTION: String =
     "バックグラウンドでも通知を取りこぼさないよう、この端末を最適化から除外します。"
 private const val POST_NOTIFICATIONS_DESCRIPTION: String =

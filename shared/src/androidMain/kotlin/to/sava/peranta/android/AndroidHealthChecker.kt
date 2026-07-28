@@ -58,7 +58,12 @@ class AndroidHealthChecker(
             id = "nls",
             label = "通知へのアクセス",
             state = if (granted) HealthCheckState.PASS else HealthCheckState.FAILING,
-            detail = if (granted) null else "通知を捕捉して転送するには通知へのアクセスを許可してください。",
+            detail = if (granted) {
+                null
+            } else {
+                "通知を捕捉して転送するには通知へのアクセスを許可してください。" +
+                    AndroidSetupProbe.RESTRICTED_SETTINGS_GUIDANCE
+            },
             fixLabel = if (granted) null else "権限を許可",
             onFix = if (granted) null else probe::openNls,
         )
