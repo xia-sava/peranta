@@ -60,6 +60,18 @@ class NotificationDisplayTest {
         assertEquals("Peranta", displayFor(received(notification(title = "", appName = "")))!!.title)
     }
 
+    /** 発信元には転送元の端末名とアプリ名を並べる（タイトルがアプリ名とは限らないため）。 */
+    @Test
+    fun notificationSourceJoinsDeviceAndAppName() {
+        assertEquals("phone ・ Bank", displayFor(received(notification()))!!.source)
+    }
+
+    /** アプリ名が空なら発信元は端末名だけになる。 */
+    @Test
+    fun notificationSourceOmitsBlankAppName() {
+        assertEquals("phone", displayFor(received(notification(appName = "")))!!.source)
+    }
+
     /** 本文が空なら固定の代替本文になる。 */
     @Test
     fun blankBodyFallsBackToConstant() {
@@ -108,6 +120,7 @@ class NotificationDisplayTest {
         assertEquals("銀行", display.title)
         assertEquals("コードは 999999 です", display.body)
         assertEquals(Priority.HIGH, display.priority)
+        assertEquals("phone ・ SMS", display.source)
     }
 
     /** SMS は本文の URL を openUrl に写す。 */
@@ -175,6 +188,7 @@ class NotificationDisplayTest {
         val display = displayFor(message(fromName = "xia-phone"))
         assertEquals("xia-phone", display.title)
         assertEquals("会議は 15 時からです", display.body)
+        assertNull(display.source)
     }
 
     /** fromName が無ければ from（deviceId）をタイトルにする。 */

@@ -98,6 +98,7 @@ class AndroidNotificationPresenter(
         val notification = Notification.Builder(context, channelId)
             .setContentTitle(display.title)
             .setContentText(display.body)
+            .setSubText(display.source)
             .setStyle(styleFor(display, image))
             .setLargeIcon(senderIcon?.let { Icon.createWithBitmap(it) })
             .setOnlyAlertOnce(silent)

@@ -7,6 +7,8 @@ data class ReceivedNotificationToast(
     val id: String,
     val title: String,
     val body: String,
+    /** 発信元の表示名（§3.3）。タイトルだけでは何の通知か分からないためヘッダに添える。 */
+    val source: String? = null,
     /** 本文から抽出した先頭 URL。あれば「開く」ボタンを追加する（§3.3）。 */
     val openUrl: String? = null,
     /** 通知に付いていた画像。本文より遅れて届くため、表示中に差し込まれることがある（§4.3.1）。 */

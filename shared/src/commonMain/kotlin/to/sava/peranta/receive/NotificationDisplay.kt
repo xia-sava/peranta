@@ -1,6 +1,7 @@
 package to.sava.peranta.receive
 
 import to.sava.peranta.model.NotificationPayload
+import to.sava.peranta.model.Payload
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.timeline.ReceivedMessage
@@ -12,6 +13,12 @@ private const val TITLE_FALLBACK = "Peranta"
 
 /** 本文が空のときの代替表示。 */
 private const val BODY_FALLBACK = "（本文なし）"
+
+/** 発信元表示の区切り。 */
+private const val SOURCE_SEPARATOR = " ・ "
+
+/** 直接受信した SMS を発信元表示で名乗る名前（元のアプリが無いため）。 */
+private const val SMS_SOURCE_NAME = "SMS"
 
 /**
  * 受信通知を OS 通知として表示するための、プラットフォーム非依存の表示内容。
@@ -27,7 +34,25 @@ data class NotificationDisplay(
     val expiresAtEpochMillis: Long?,
     /** 本文から抽出した先頭 URL。あれば「開く」アクションを追加する（§3.2）。 */
     val openUrl: String? = null,
+    /** 発信元の表示名（§3.2）。タイトルだけでは何の通知か分からないため添える。 */
+    val source: String? = null,
 )
+
+/**
+ * 発信元の表示名（§3.2）。転送元の端末名と、その端末で通知を出したアプリ名をつなぐ。
+ * タイトルはアプリごとに意味が異なる（送信者名だったりする）ため、これとは別に持つ。
+ */
+fun sourceLabelFor(payload: Payload): String? {
+    val device = (payload.fromName ?: payload.from).ifBlank { null }
+    val app = when (payload) {
+        is NotificationPayload -> payload.appName.ifBlank { null }
+        is SmsPayload -> SMS_SOURCE_NAME
+        else -> null
+    }
+    return listOfNotNull(device, app)
+        .takeIf { it.isNotEmpty() }
+        ?.joinToString(SOURCE_SEPARATOR)
+}
 
 /**
  * 受信通知アイテムを [NotificationDisplay] へ変換する。
@@ -42,6 +67,7 @@ fun displayFor(item: ReceivedNotification): NotificationDisplay? =
             priority = payload.priority,
             expiresAtEpochMillis = payload.expiresAtEpochMillis,
             openUrl = firstUrl("${payload.title} ${payload.text}"),
+            source = sourceLabelFor(payload),
         )
 
         is SmsPayload -> NotificationDisplay(
@@ -51,12 +77,13 @@ fun displayFor(item: ReceivedNotification): NotificationDisplay? =
             priority = payload.priority,
             expiresAtEpochMillis = payload.expiresAtEpochMillis,
             openUrl = firstUrl(payload.text),
+            source = sourceLabelFor(payload),
         )
 
         else -> null
     }
 
-/** 受信メッセージを OS 通知の表示内容へ変換する。タイトルは送信元端末名。 */
+/** 受信メッセージを OS 通知の表示内容へ変換する。タイトルが送信元端末名なので発信元は添えない。 */
 fun displayFor(item: ReceivedMessage): NotificationDisplay = NotificationDisplay(
     id = item.payload.id,
     title = (item.payload.fromName ?: item.payload.from).ifBlank { TITLE_FALLBACK },

@@ -29,8 +29,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** トーストの発信元として添える名前。 */
-private const val TOAST_SOURCE_NAME = "Peranta"
+/** トーストを出しているアプリの名前。発信元が判れば「・」でつないで並べる。 */
+private const val TOAST_APP_NAME = "Peranta"
+
+/** アプリ名と発信元の区切り。 */
+private const val TOAST_CAPTION_SEPARATOR = " ・ "
 
 /** 「開く」ボタンのラベル。本文から URL が抽出できたときだけ出す（§3.3）。 */
 private const val OPEN_BUTTON_LABEL = "開く"
@@ -71,9 +74,11 @@ internal fun ToastCard(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = TOAST_SOURCE_NAME,
+                text = item.source?.let { TOAST_APP_NAME + TOAST_CAPTION_SEPARATOR + it } ?: TOAST_APP_NAME,
                 color = palette.caption,
                 fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
             CloseGlyph(palette.caption) { onResult(ToastResult.Dismissed) }

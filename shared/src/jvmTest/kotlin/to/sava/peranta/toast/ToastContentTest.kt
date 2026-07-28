@@ -45,7 +45,17 @@ class ToastContentTest {
     @Test
     fun notificationMapsTitleAndBody() {
         val content = toastContentFor(notification())
-        assertEquals(ReceivedNotificationToast(id = "n1", title = "認証コード", body = "123456"), content)
+        assertEquals(
+            ReceivedNotificationToast(id = "n1", title = "認証コード", body = "123456", source = "phone ・ Bank"),
+            content,
+        )
+    }
+
+    /** 発信元には転送元の端末名とアプリ名を並べる（タイトルだけでは何の通知か分からないため）。 */
+    @Test
+    fun notificationCarriesDeviceAndAppNameAsSource() {
+        val content = toastContentFor(notification(appName = "Gmail"))
+        assertEquals("phone ・ Gmail", content?.source)
     }
 
     /** タイトルが空なら appName にフォールバックする。 */
@@ -137,7 +147,12 @@ class ToastContentTest {
             ),
         )
         assertEquals(
-            ReceivedNotificationToast(id = "s1", title = "銀行", body = "コードは 987654 です"),
+            ReceivedNotificationToast(
+                id = "s1",
+                title = "銀行",
+                body = "コードは 987654 です",
+                source = "phone ・ SMS",
+            ),
             toastContentFor(item),
         )
     }
@@ -206,7 +221,12 @@ class ToastContentTest {
     @Test
     fun receivedFileShowsFileName() {
         assertEquals(
-            ReceivedNotificationToast(id = "rf1", title = "ファイルを受信しました", body = "photo.jpg"),
+            ReceivedNotificationToast(
+                id = "rf1",
+                title = "ファイルを受信しました",
+                body = "photo.jpg",
+                source = "phone",
+            ),
             toastContentFor(receivedFile("photo.jpg")),
         )
     }
