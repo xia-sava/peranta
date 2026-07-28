@@ -100,6 +100,10 @@ private const val AUTO_START_DESCRIPTION: String =
 private const val AUTO_START_DEV_BUILD_NOTE: String =
     "開発ビルドでは設定できません（配布版のみ）。"
 
+/** 開発ビルドでは更新を適用できない旨の注記（§12）。 */
+private const val UPDATE_DEV_BUILD_NOTE: String =
+    "開発ビルドでは更新できません（配布版のみ）。"
+
 /** 共有鍵・トークン未設定で QR を作れないときの案内文。 */
 private const val PAIRING_PREREQUISITE_NOTICE: String = "先にトークンと共有鍵を設定してください。"
 
@@ -617,10 +621,18 @@ private fun UpdateSection(update: UpdateUi) {
     }
     OutlinedButton(
         onClick = { update.controller.checkNow() },
-        enabled = !checking,
+        enabled = !checking && update.canUpdate,
         modifier = Modifier.testTag(TAG_UPDATE_CHECK),
     ) {
         Text(text = if (checking) "確認中..." else "アプリ更新チェック")
+    }
+    if (!update.canUpdate) {
+        Text(
+            text = UPDATE_DEV_BUILD_NOTE,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag(TAG_UPDATE_DEV_BUILD_NOTE),
+        )
     }
     updateStatusText(status)?.let { text ->
         Text(
@@ -760,6 +772,7 @@ const val TAG_SEND_ENABLED: String = "settings-send-enabled"
 const val TAG_SMS_DIRECT_RECEIVE: String = "settings-sms-direct-receive"
 const val TAG_CURRENT_VERSION: String = "settings-current-version"
 const val TAG_UPDATE_CHECK: String = "settings-update-check"
+const val TAG_UPDATE_DEV_BUILD_NOTE: String = "settings-update-dev-build-note"
 const val TAG_UPDATE_STATUS: String = "settings-update-status"
 const val TAG_UPDATE_INSTALL: String = "settings-update-install"
 const val TAG_UPDATE_INSTALL_STATE: String = "settings-update-install-state"

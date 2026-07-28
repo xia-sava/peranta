@@ -14,6 +14,11 @@ import to.sava.peranta.update.UpdateStatus
 class UpdateUi(
     /** 更新確認の実行状態と結果。 */
     val controller: UpdateController,
+    /**
+     * 配布物として動いていて更新を適用できるか。開発ビルドでは偽で、確認しても掴めるのは配布版
+     * （常に自分より新しい）だけになり、適用しても署名やインストール形態の食い違いで必ず失敗する。
+     */
+    val canUpdate: Boolean = true,
     /** 動作中の版。解決できない実行経路では null。 */
     val currentVersionName: String? = null,
     /** 適用の進み具合。未着手は null。 */

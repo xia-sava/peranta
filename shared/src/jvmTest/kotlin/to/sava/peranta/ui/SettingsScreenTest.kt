@@ -809,6 +809,29 @@ class SettingsScreenTest {
         }
     }
 
+    /** 配布物として動いていなければ更新確認は行えず、配布版のみである旨の注記が出る。 */
+    @Test
+    fun updateCheckDisabledWithNoteWhenNotDistributed() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val settingsController = SettingsController(repo)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val engine = MockEngine { respond(content = "", status = HttpStatusCode.NotFound) }
+        val updateController =
+            UpdateController(UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP), scope)
+
+        try {
+            setContent {
+                SettingsScreen(settingsController, update = UpdateUi(updateController, canUpdate = false))
+            }
+
+            onNodeWithTag(TAG_UPDATE_CHECK).performScrollTo().assertIsNotEnabled()
+            onNodeWithTag(TAG_UPDATE_DEV_BUILD_NOTE).assertExists()
+        } finally {
+            scope.cancel()
+        }
+    }
+
     /** currentVersionName 未指定なら版の行は出さない（版数を解決できない実行経路のため）。 */
     @Test
     fun updateSectionHidesVersionWhenNameNotProvided() = runComposeUiTest {

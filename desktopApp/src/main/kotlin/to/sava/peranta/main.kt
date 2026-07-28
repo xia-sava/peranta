@@ -490,13 +490,10 @@ fun main(args: Array<String>) {
                                 onOpenPairingImport = { onNavigate(ShellDestination.PairingImport) },
                                 update = UpdateUi(
                                     controller = updater.controller,
+                                    canUpdate = updater.canInstall,
                                     currentVersionName = DesktopVersion.versionName,
                                     installState = updateInstallState,
-                                    onInstall = if (updater.canInstall) {
-                                        { available -> updater.install(available) }
-                                    } else {
-                                        null
-                                    },
+                                    onInstall = { available -> updater.install(available) },
                                     onApply = { updater.applyNow(closeAndExit) },
                                     onCancelApply = { updater.cancelApply() },
                                 ),

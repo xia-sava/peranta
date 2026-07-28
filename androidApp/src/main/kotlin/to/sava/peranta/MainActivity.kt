@@ -9,6 +9,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -463,6 +464,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                     update = UpdateUi(
                                         controller = updater.controller,
+                                        canUpdate = !isDebugBuild(),
                                         currentVersionName = currentVersionName(),
                                         installState = updateInstallState,
                                         onInstall = { available -> updater.install(available) },
@@ -749,4 +751,11 @@ class MainActivity : ComponentActivity() {
     /** インストール済みアプリ自身の versionName を PackageManager から取得する。 */
     private fun currentVersionName(): String? =
         packageManager.getPackageInfo(packageName, 0).versionName
+
+    /**
+     * 開発ビルドか（§12）。配布版とは署名が異なり上書き更新できないため、更新の導線を閉じる判断に使う。
+     * 判定は debuggable フラグで行う（debug ビルドだけが立てる）。
+     */
+    private fun isDebugBuild(): Boolean =
+        applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 }
