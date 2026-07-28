@@ -32,6 +32,7 @@ import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.SemanticActionKind
+import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.send.MAX_REPLY_TEXT_BYTES
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
@@ -45,6 +46,9 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class TimelineScreenTest {
+
+    /** 画面と同じ規則で整形した時刻表記。テストのアイテムは当日ではないので日付つきになる。 */
+    private fun stamp(epochMillis: Long): String = formatTimestamp(epochMillis, nowEpochMillis())
 
     private fun notification(
         actions: List<String> = listOf("アーカイブ", "返信"),
@@ -476,7 +480,7 @@ class TimelineScreenTest {
             )
         }
         onNodeWithText("会議は 15 時からです").assertExists()
-        onNodeWithText("xia-phone・${formatTimeOfDay(1000L)}").assertExists()
+        onNodeWithText("xia-phone・${stamp(1000L)}").assertExists()
     }
 
     /** URL を含むメッセージ本文はリンク化されても、テキスト全体はそのまま表示される。 */
@@ -510,7 +514,7 @@ class TimelineScreenTest {
         setContent {
             TimelineScreen(MutableStateFlow(listOf(ReceivedNotification(id = "n1", timestampEpochMillis = 1000L, payload = payload))))
         }
-        onNodeWithText("xia-phone・${formatTimeOfDay(1000L)}").assertExists()
+        onNodeWithText("xia-phone・${stamp(1000L)}").assertExists()
     }
 
     /** fromName が無ければ from（deviceId）を時刻行に表示する（旧バージョン発のアイテム互換）。 */
@@ -519,7 +523,7 @@ class TimelineScreenTest {
         setContent {
             TimelineScreen(items(notification(from = "phone")))
         }
-        onNodeWithText("phone・${formatTimeOfDay(1000L)}").assertExists()
+        onNodeWithText("phone・${stamp(1000L)}").assertExists()
     }
 
     /** ErrorItem は payload を持たないため、時刻行に発言者名を出さず時刻のみ表示する（§3.2）。 */
@@ -532,7 +536,20 @@ class TimelineScreenTest {
                 ),
             )
         }
-        onNodeWithText(formatTimeOfDay(1000L)).assertExists()
+        onNodeWithText(stamp(1000L)).assertExists()
+    }
+
+    /** 日をまたいだアイテムの時刻行には日付を添える（過去の記録が今のことに見えないように）。 */
+    @Test
+    fun timeRowShowsDateForItemsFromAnotherDay() = runComposeUiTest {
+        setContent {
+            TimelineScreen(
+                MutableStateFlow(
+                    listOf(ErrorItem(id = "e1", timestampEpochMillis = 1000L, message = "送信に失敗しました", kind = ErrorKind.OTHER)),
+                ),
+            )
+        }
+        onNodeWithText(formatTimestamp(1000L, 1000L)).assertDoesNotExist()
     }
 
     /** 初期表示ではアニメーション無しで最下部へジャンプし、最新アイテムが見え最古アイテムは見えない（§10.1）。 */

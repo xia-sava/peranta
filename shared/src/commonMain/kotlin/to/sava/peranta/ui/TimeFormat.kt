@@ -1,7 +1,10 @@
 package to.sava.peranta.ui
 
-/** エポックミリ秒をローカルの時:分表記へ整形する。 */
-expect fun formatTimeOfDay(epochMillis: Long): String
+/**
+ * エポックミリ秒をローカルの時刻表記へ整形する。[nowEpochMillis] と同じ暦日なら「時:分」、
+ * 別の日なら「月/日 時:分」。日をまたいだアイテムが今のことに見えないよう日付を添える。
+ */
+expect fun formatTimestamp(epochMillis: Long, nowEpochMillis: Long): String
 
 private const val MILLIS_PER_MINUTE: Long = 60 * 1000L
 private const val MILLIS_PER_HOUR: Long = 60 * MILLIS_PER_MINUTE

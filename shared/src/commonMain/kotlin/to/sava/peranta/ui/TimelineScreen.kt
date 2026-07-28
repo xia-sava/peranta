@@ -1,5 +1,6 @@
 package to.sava.peranta.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,6 +48,7 @@ import to.sava.peranta.model.Payload
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.actionKindAt
+import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.send.MAX_REPLY_TEXT_BYTES
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ReceivedFile
@@ -93,6 +95,9 @@ const val TAG_TIMELINE_SOURCE_DISMISSED_NOTE: String = "timeline-source-dismisse
 
 /** 元通知が消えた受信アイテムに出す注記（§10.1）。 */
 const val SOURCE_DISMISSED_NOTE: String = "元の通知は消えています"
+
+/** 輪郭線で示す吹き出しの線幅。 */
+private val BUBBLE_BORDER_WIDTH = 1.dp
 
 /** 返信本文が上限バイト数を超えているときに出す警告文言。 */
 private val REPLY_LIMIT_WARNING: String =
@@ -609,12 +614,18 @@ private fun SentBubble(item: SentNotification) {
     }
 }
 
+/**
+ * エラーの吹き出し（§10.1）。起きた出来事の記録として残るものなので、面を塗らず輪郭線で示す。
+ * 塗り潰すと解決済みのエラーも現在の異常のように読めてしまう（今まさに対処の要る未達は
+ * タイムライン上部の警告バナーが担う、§10.5）。
+ */
 @Composable
 private fun ErrorBubble(item: ErrorItem) {
     Bubble(
         alignment = Alignment.CenterEnd,
-        containerColor = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        borderColor = MaterialTheme.colorScheme.error,
         speaker = null,
         time = item.timestampEpochMillis,
     ) {
@@ -629,6 +640,7 @@ private fun Bubble(
     contentColor: androidx.compose.ui.graphics.Color,
     speaker: String?,
     time: Long,
+    borderColor: androidx.compose.ui.graphics.Color? = null,
     content: @Composable () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
@@ -636,6 +648,7 @@ private fun Bubble(
             color = containerColor,
             contentColor = contentColor,
             shape = MaterialTheme.shapes.medium,
+            border = borderColor?.let { BorderStroke(BUBBLE_BORDER_WIDTH, it) },
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 content()
@@ -648,7 +661,8 @@ private fun Bubble(
 /** 時刻行（§3.2）。発言者名があれば「{名前}・{時刻}」、無ければ（ErrorItem 等）時刻のみ表示する。 */
 @Composable
 private fun SpeakerTimeRow(speaker: String?, time: Long) {
-    val text = if (speaker != null) "$speaker・${formatTimeOfDay(time)}" else formatTimeOfDay(time)
+    val stamp = formatTimestamp(time, nowEpochMillis())
+    val text = if (speaker != null) "$speaker・$stamp" else stamp
     Text(
         text = text,
         style = MaterialTheme.typography.labelSmall,
