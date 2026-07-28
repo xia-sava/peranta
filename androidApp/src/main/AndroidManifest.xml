@@ -34,7 +34,11 @@
             android:roundIcon="@mipmap/ic_launcher_round"
             android:supportsRtl="true"
             android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <!-- QR スキャナ（ZXing の CaptureActivity）が sensorLandscape で画面を回すため、端末の自動回転を
+             切っていてもスキャンのたびに構成変更が起きる。作り直すと進行中のウィザードもスキャン結果の
+             受け取り先も失われるので、画面まわりの構成変更は Compose の再コンポーズで受ける。 -->
         <activity
+                android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
                 android:exported="true"
                 android:launchMode="singleTop"
                 android:name=".MainActivity">

@@ -25,6 +25,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +52,27 @@ private const val DEFAULT_QR_VISIBLE_MILLIS: Long = 60_000L
 /** 操作直後に反映を追いかける自動再チェックの回数と間隔（[ReceiveSetupScreen] と同じ型）。 */
 private const val RECHECK_COUNT: Int = 3
 private const val RECHECK_INTERVAL_MILLIS: Long = 2_000L
+
+/** [WizardAnswers] の保存表現の区切り。選択肢の名前にも真偽値にも現れない文字を使う。 */
+private const val WIZARD_ANSWERS_SEPARATOR: String = "/"
+
+/**
+ * ウィザードの回答を再生成越しに保つ Saver。保存先が確実に扱える文字列へ写す（未回答は空文字）。
+ * 回答を失うとページ列の算出が初期状態へ戻り、進行位置だけ残っても辻褄が合わなくなる。
+ */
+internal val WIZARD_ANSWERS_SAVER: Saver<WizardAnswers, String> = Saver(
+    save = { answers ->
+        listOf(answers.source?.name.orEmpty(), answers.forward?.toString().orEmpty())
+            .joinToString(WIZARD_ANSWERS_SEPARATOR)
+    },
+    restore = { saved ->
+        val fields = saved.split(WIZARD_ANSWERS_SEPARATOR)
+        WizardAnswers(
+            source = fields.getOrNull(0)?.takeIf { it.isNotEmpty() }?.let(WizardSourceChoice::valueOf),
+            forward = fields.getOrNull(1)?.takeIf { it.isNotEmpty() }?.toBooleanStrictOrNull(),
+        )
+    },
+)
 
 /** 鍵を作り直すと全端末で QR の読み直しが必要になる旨の警告文。 */
 private const val ROTATE_WARNING_BODY: String =
@@ -85,7 +108,7 @@ fun WizardScreen(
     onClose: (() -> Unit)? = null,
     onSaved: (() -> Unit)? = null,
 ) {
-    var answers by remember { mutableStateOf(WizardAnswers()) }
+    var answers by rememberSaveable(stateSaver = WIZARD_ANSWERS_SAVER) { mutableStateOf(WizardAnswers()) }
     var config by remember { mutableStateOf(controller.load()) }
     var host by remember { mutableStateOf(config.host) }
     var accessToken by remember { mutableStateOf(config.accessToken.orEmpty()) }
@@ -96,10 +119,13 @@ fun WizardScreen(
     var manualRefresh by remember { mutableStateOf(0) }
     var followUpRechecks by remember { mutableStateOf(0) }
 
-    var currentIndex by remember { mutableStateOf(0) }
-    var didInit by remember { mutableStateOf(false) }
+    // 進行位置は再生成越しに保つ。QR 取り込みページでスキャナを開くと構成変更が起きるため、
+    // 失うと未完了ページへの着地判定（didInit）ごと巻き戻って最初からやり直しになる。
+    var currentIndex by rememberSaveable { mutableStateOf(0) }
+    var didInit by rememberSaveable { mutableStateOf(false) }
     var dirty by remember { mutableStateOf(false) }
 
+    // ペアリング URI は共有鍵とトークンを含むため保存しない（再生成後は「QR を表示する」で出し直す）。
     var pairingUri by remember { mutableStateOf<String?>(null) }
     var showRotateWarning by remember { mutableStateOf(false) }
     var skipConfirm by remember { mutableStateOf<WizardPage?>(null) }

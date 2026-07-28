@@ -34,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -130,6 +131,35 @@ private sealed interface Overlay {
     data object PairingLanding : Overlay
     data class Share(val files: List<Uri>, val text: String?) : Overlay
 }
+
+/** [Overlay] の保存表現。どのタスクを開いていたかだけを識別する。 */
+private const val OVERLAY_NONE = "none"
+private const val OVERLAY_WIZARD = "wizard"
+private const val OVERLAY_PAIRING_LANDING = "pairingLanding"
+private const val OVERLAY_SHARE = "share"
+
+/**
+ * 開いているモーダルなタスクを Activity 再生成越しに保つ Saver。共有のファイル一覧は起動 Intent から
+ * 作り直せるため、保存するのはどのタスクかだけにして [share] で復元する。
+ */
+private fun overlaySaver(share: Overlay.Share?): Saver<Overlay?, String> = Saver(
+    save = { overlay ->
+        when (overlay) {
+            Overlay.Wizard -> OVERLAY_WIZARD
+            Overlay.PairingLanding -> OVERLAY_PAIRING_LANDING
+            is Overlay.Share -> OVERLAY_SHARE
+            null -> OVERLAY_NONE
+        }
+    },
+    restore = { saved ->
+        when (saved) {
+            OVERLAY_WIZARD -> Overlay.Wizard
+            OVERLAY_PAIRING_LANDING -> Overlay.PairingLanding
+            OVERLAY_SHARE -> share
+            else -> null
+        }
+    },
+)
 
 class MainActivity : ComponentActivity() {
 
@@ -253,11 +283,16 @@ class MainActivity : ComponentActivity() {
             // シェル外のモーダルなタスク。未ペアリングはウィザードから始め、共有はファイル送信へ入る。
             // ただし取り込み画面への遷移が再生成をまたいで復元されたときは、未ペアリングでも
             // ウィザードを被せず取り込み画面をそのまま出す（明示的な取り込み操作を優先する）。
-            var overlay: Overlay? by remember {
+            // 開いているタスクは destination と同じく再生成後も生存させる（ウィザードの途中で
+            // QR スキャナを開くと構成変更が起きるため、失うと最初からやり直しになる）。
+            val share = remember {
+                Overlay.Share(sharedFiles, sharedText)
+                    .takeIf { sharedFiles.isNotEmpty() || sharedText != null }
+            }
+            var overlay: Overlay? by rememberSaveable(stateSaver = overlaySaver(share)) {
                 mutableStateOf(
                     when {
-                        (sharedFiles.isNotEmpty() || sharedText != null) && config.hasSharedKey ->
-                            Overlay.Share(sharedFiles, sharedText)
+                        share != null && config.hasSharedKey -> share
                         config.hasSharedKey -> null
                         destination == ShellDestination.PairingImport -> null
                         else -> Overlay.Wizard
