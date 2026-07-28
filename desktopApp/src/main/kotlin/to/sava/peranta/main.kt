@@ -65,8 +65,8 @@ import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.MessageComposer
 import to.sava.peranta.ui.PairingScanScreen
 import to.sava.peranta.ui.PerantaTheme
-import to.sava.peranta.ui.QrCodeCanvas
 import to.sava.peranta.ui.SettingsScreen
+import to.sava.peranta.ui.ZoomableQrCode
 import to.sava.peranta.ui.failingHealthCheckIds
 import to.sava.peranta.ui.setup.SetupAction
 import to.sava.peranta.ui.setup.SetupItemUi
@@ -105,7 +105,7 @@ private val perantaIcon: Painter =
 @Composable
 private fun DesktopQrCode(uri: String, modifier: Modifier = Modifier) {
     val matrix = remember(uri) { pairingQrMatrix(uri) }
-    QrCodeCanvas(matrix, modifier = modifier.size(240.dp))
+    ZoomableQrCode(matrix, modifier = modifier.size(240.dp))
 }
 
 /** ダーク/ライト両テーマで視認できるよう、onSurface 由来の色で明示したスクロールバー配色。 */

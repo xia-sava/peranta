@@ -77,10 +77,10 @@ import to.sava.peranta.ui.MessageComposer
 import to.sava.peranta.ui.MessageComposerUi
 import to.sava.peranta.ui.PairingScanScreen
 import to.sava.peranta.ui.PerantaTheme
-import to.sava.peranta.ui.QrCodeCanvas
 import to.sava.peranta.ui.SettingsScreen
 import to.sava.peranta.ui.ShareScreen
 import to.sava.peranta.ui.UpdateUi
+import to.sava.peranta.ui.ZoomableQrCode
 import to.sava.peranta.ui.setup.ReceiveSetupScreen
 import to.sava.peranta.ui.shell.PerantaShell
 import to.sava.peranta.ui.shell.RosterDropdown
@@ -346,7 +346,7 @@ class MainActivity : ComponentActivity() {
                             healthChecker = healthChecker,
                             importController = importController,
                             qrContent = { uri ->
-                                QrCodeCanvas(pairingQrMatrix(uri), modifier = Modifier.size(240.dp))
+                                ZoomableQrCode(pairingQrMatrix(uri), modifier = Modifier.size(240.dp))
                             },
                             onCopyPairingUri = { text -> copyPairingUri(text) },
                             onCopyText = { text, sensitive -> copyText(text, sensitive) },
@@ -442,7 +442,7 @@ class MainActivity : ComponentActivity() {
                                 ShellDestination.Settings -> SettingsScreen(
                                     controller = SettingsController(androidConfigRepository()),
                                     qrContent = { uri ->
-                                        QrCodeCanvas(pairingQrMatrix(uri), modifier = Modifier.size(240.dp))
+                                        ZoomableQrCode(pairingQrMatrix(uri), modifier = Modifier.size(240.dp))
                                     },
                                     onCopyPairingUri = { text -> copyPairingUri(text) },
                                     showSendRoleOptions = true,
