@@ -42,6 +42,7 @@ import to.sava.peranta.ui.setup.HostField
 import to.sava.peranta.ui.setup.KeyStatusText
 import to.sava.peranta.ui.setup.LabeledCheckbox
 import to.sava.peranta.ui.setup.PairingQrSection
+import to.sava.peranta.ui.setup.PORT_DESCRIPTION
 import to.sava.peranta.ui.setup.PortField
 import to.sava.peranta.ui.setup.SMS_DIRECT_RECEIVE_DESCRIPTION
 import to.sava.peranta.ui.setup.SetupItemUi
@@ -299,6 +300,11 @@ fun SettingsScreen(
                 HostField(value = host, onValueChange = { host = it; persistConnection() })
                 TokenField(value = accessToken, onValueChange = { accessToken = it; persistConnection() })
                 PortField(value = port, onValueChange = { port = it; persistConnection() })
+                Text(
+                    text = PORT_DESCRIPTION,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
                 SectionHeader(title = SECTION_THIS_DEVICE)
                 DeviceNameField(value = deviceName, onValueChange = { deviceName = it; persistConnection() })

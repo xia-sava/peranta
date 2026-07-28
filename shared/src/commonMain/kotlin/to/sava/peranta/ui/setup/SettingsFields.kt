@@ -71,6 +71,9 @@ internal fun DeviceNameField(value: String, onValueChange: (String) -> Unit, tag
     )
 }
 
+/** 「ポート（任意）」欄の下に添える説明文（§11）。 */
+internal const val PORT_DESCRIPTION: String = "空欄なら標準のポート（443）を使います。"
+
 @Composable
 internal fun PortField(value: String, onValueChange: (String) -> Unit, tag: String = TAG_PORT) {
     OutlinedTextField(

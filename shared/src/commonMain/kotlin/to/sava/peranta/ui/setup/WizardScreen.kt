@@ -430,6 +430,11 @@ private fun ConnectionBody(
     HostField(value = host, onValueChange = onHostChange, tag = wizardTag(TAG_HOST))
     TokenField(value = accessToken, onValueChange = onTokenChange, tag = wizardTag(TAG_TOKEN))
     PortField(value = port, onValueChange = onPortChange, tag = wizardTag(TAG_PORT))
+    Text(
+        text = PORT_DESCRIPTION,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
