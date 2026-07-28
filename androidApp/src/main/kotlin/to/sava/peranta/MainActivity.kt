@@ -92,6 +92,7 @@ import to.sava.peranta.ui.shell.shellNavigate
 import to.sava.peranta.ui.shell.shellReturnDestination
 import to.sava.peranta.ui.setup.WizardScreen
 import to.sava.peranta.update.AndroidUpdater
+import to.sava.peranta.update.devVersionName
 
 /** 通知権限が拒否されたときにタイムラインへ出す文言（§10.5）。 */
 private const val NOTIFICATIONS_DENIED_MESSAGE =
@@ -499,7 +500,7 @@ class MainActivity : ComponentActivity() {
                                     update = UpdateUi(
                                         controller = updater.controller,
                                         canUpdate = !isDebugBuild(),
-                                        currentVersionName = currentVersionName(),
+                                        currentVersionName = displayVersionName(),
                                         installState = updateInstallState,
                                         onInstall = { available -> updater.install(available) },
                                     ),
@@ -782,9 +783,15 @@ class MainActivity : ComponentActivity() {
     private fun currentVersionCode(): Int =
         packageManager.getPackageInfo(packageName, 0).longVersionCode.toInt()
 
-    /** インストール済みアプリ自身の versionName を PackageManager から取得する。 */
-    private fun currentVersionName(): String? =
-        packageManager.getPackageInfo(packageName, 0).versionName
+    /**
+     * 画面に出す版数（§12）。開発ビルドは版数が既定値のまま動かないため、インストール時刻を
+     * 添えて入れ替え前のビルドと見分けられるようにする。
+     */
+    private fun displayVersionName(): String? {
+        val versionName = packageManager.getPackageInfo(packageName, 0).versionName ?: return null
+        if (!isDebugBuild()) return versionName
+        return devVersionName(versionName, packageManager.getPackageInfo(packageName, 0).lastUpdateTime)
+    }
 
     /**
      * 開発ビルドか（§12）。配布版とは署名が異なり上書き更新できないため、更新の導線を閉じる判断に使う。

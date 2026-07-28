@@ -1,5 +1,7 @@
 package to.sava.peranta
 
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.Properties
 
 /** ビルド時に生成される版数リソースのクラスパス名。 */
@@ -29,4 +31,13 @@ object DesktopVersion {
         properties.getProperty("versionName")
             ?: System.getProperty("peranta.versionName")
             ?: FALLBACK_VERSION_NAME
+
+    /**
+     * 自分を含む成果物（jar またはクラス出力）の更新時刻。開発ビルドの見分けに使う（§12）。
+     * 実行経路によっては解決できないため null を返しうる。
+     */
+    val buildEpochMillis: Long? = runCatching {
+        val location = DesktopVersion::class.java.protectionDomain?.codeSource?.location ?: return@runCatching null
+        Files.getLastModifiedTime(Path.of(location.toURI())).toMillis()
+    }.getOrNull()
 }

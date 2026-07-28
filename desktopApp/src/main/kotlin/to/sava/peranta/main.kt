@@ -81,6 +81,7 @@ import to.sava.peranta.ui.shell.setupBannerTarget
 import to.sava.peranta.ui.shell.shellNavigate
 import to.sava.peranta.ui.shell.shellReturnDestination
 import to.sava.peranta.update.DesktopUpdater
+import to.sava.peranta.update.devVersionName
 import to.sava.peranta.window.WindowGeometry
 import to.sava.peranta.window.WindowGeometryStore
 import to.sava.peranta.window.isOnAnyScreen
@@ -197,9 +198,19 @@ private val DEFAULT_WINDOW_SIZE = DpSize(800.dp, 600.dp)
 /** ウィンドウの見え方を保存するまでの待ち時間。移動・リサイズの途中経過を書き込まないための間。 */
 private const val WINDOW_GEOMETRY_SAVE_DELAY_MILLIS: Long = 500L
 
+/**
+ * 画面に出す版数（§12）。開発実行は版数が既定値のまま動かないため、ビルド時刻を添えて
+ * 配布版とも入れ替え前のビルドとも見分けられるようにする。
+ */
+private val DISPLAY_VERSION_NAME: String =
+    if (isDevMode()) {
+        devVersionName(DesktopVersion.versionName, DesktopVersion.buildEpochMillis)
+    } else {
+        DesktopVersion.versionName
+    }
+
 /** ウィンドウタイトル。動作中の版を添え、開発ビルドは配布版と並んでも見分けられるようにする。 */
-private val WINDOW_TITLE: String =
-    "Peranta ${DesktopVersion.versionName}" + if (isDevMode()) " (dev)" else ""
+private val WINDOW_TITLE: String = "Peranta $DISPLAY_VERSION_NAME"
 
 /**
  * ウィンドウの見え方の変化を [store] へ書き戻す（§11）。移動・リサイズ中は値が連続で変わるため、
@@ -490,7 +501,7 @@ fun main(args: Array<String>) {
                                 update = UpdateUi(
                                     controller = updater.controller,
                                     canUpdate = updater.canInstall,
-                                    currentVersionName = DesktopVersion.versionName,
+                                    currentVersionName = DISPLAY_VERSION_NAME,
                                     installState = updateInstallState,
                                     onInstall = { available -> updater.install(available) },
                                     onApply = { updater.applyNow(closeAndExit) },
