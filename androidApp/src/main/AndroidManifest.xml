@@ -58,11 +58,12 @@
         </activity>
 
         <!-- QR スキャナ（ZXing）のライブラリ側の宣言は sensorLandscape で、端末の自動回転を切って
-             いても横向きを強制する。読み取りは短時間なので、開いたときの向きのまま使えるよう
-             システムの設定に委ねる。 -->
+             いても横向きを強制する。読み取りは短時間なので、利用者が選んでいる向きのまま
+             使えるようにする。unspecified では向きの決定が端末側の判断に委ねられ、
+             自動回転を切っていても横向きが選ばれうる。 -->
         <activity
                 android:name="com.journeyapps.barcodescanner.CaptureActivity"
-                android:screenOrientation="unspecified"
+                android:screenOrientation="user"
                 tools:replace="android:screenOrientation"/>
 
         <service
