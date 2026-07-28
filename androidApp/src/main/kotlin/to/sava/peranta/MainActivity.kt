@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -382,7 +381,7 @@ class MainActivity : ComponentActivity() {
                             healthChecker = healthChecker,
                             importController = importController,
                             qrContent = { uri ->
-                                ZoomableQrCode(pairingQrMatrix(uri), modifier = Modifier.size(240.dp))
+                                ZoomableQrCode(pairingQrMatrix(uri))
                             },
                             onCopyPairingUri = { text -> copyPairingUri(text) },
                             onCopyText = { text, sensitive -> copyText(text, sensitive) },
@@ -478,7 +477,7 @@ class MainActivity : ComponentActivity() {
                                 ShellDestination.Settings -> SettingsScreen(
                                     controller = SettingsController(androidConfigRepository()),
                                     qrContent = { uri ->
-                                        ZoomableQrCode(pairingQrMatrix(uri), modifier = Modifier.size(240.dp))
+                                        ZoomableQrCode(pairingQrMatrix(uri))
                                     },
                                     onCopyPairingUri = { text -> copyPairingUri(text) },
                                     showSendRoleOptions = true,

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material3.MaterialTheme
@@ -105,7 +104,7 @@ private val perantaIcon: Painter =
 @Composable
 private fun DesktopQrCode(uri: String, modifier: Modifier = Modifier) {
     val matrix = remember(uri) { pairingQrMatrix(uri) }
-    ZoomableQrCode(matrix, modifier = modifier.size(240.dp))
+    ZoomableQrCode(matrix, modifier = modifier)
 }
 
 /** ダーク/ライト両テーマで視認できるよう、onSurface 由来の色で明示したスクロールバー配色。 */
