@@ -76,6 +76,16 @@ private const val ROTATE_DANGER_DESCRIPTION: String =
 private const val ROTATE_DISTRIBUTE_MESSAGE: String =
     "新しい鍵を作成しました。下の QR を各端末で読み取ってください。"
 
+/** 危険な操作セクションで全消去の影響を説明する文（§11）。 */
+private const val RESET_DANGER_DESCRIPTION: String =
+    "接続設定・共有鍵・端末名・受信した履歴を全て消し、インストール直後の状態に戻します。"
+
+/** 全消去の確認で、消える対象とその後の手順を断る文（§11）。 */
+private const val RESET_WARNING_BODY: String =
+    "接続設定・共有鍵・端末名・受信した履歴と添付が全て消えます。取り消せません。" +
+        "消したあとアプリを終了するので、次に起動すると初期設定から始まります。" +
+        "他の端末とつなぎ直すには QR の読み取りが改めて必要です。"
+
 /** フラット画面で変更が自動保存される旨を伝える説明文。 */
 private const val AUTOSAVE_NOTE: String = "変更は自動的に保存され、この画面を離れたときに反映されます。"
 
@@ -162,6 +172,7 @@ fun SettingsScreen(
     update: UpdateUi? = null,
     autoStart: AutoStartUi? = null,
     showHeader: Boolean = true,
+    onResetAll: (() -> Unit)? = null,
 ) {
     val initial = remember { controller.load() }
     var host by remember { mutableStateOf(initial.host) }
@@ -181,6 +192,7 @@ fun SettingsScreen(
 
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var showRotateWarning by remember { mutableStateOf(false) }
+    var showResetWarning by remember { mutableStateOf(false) }
     var pairingUri by remember { mutableStateOf<String?>(null) }
     var dirty by remember { mutableStateOf(false) }
     var dangerExpanded by rememberSaveable { mutableStateOf(false) }
@@ -451,12 +463,12 @@ fun SettingsScreen(
                     )
                 }
 
-                if (hasKey) {
+                if (hasKey || onResetAll != null) {
                     DangerSectionHeader(
                         expanded = dangerExpanded,
                         onToggle = { dangerExpanded = !dangerExpanded },
                     )
-                    if (dangerExpanded) {
+                    if (dangerExpanded && hasKey) {
                         Text(
                             text = ROTATE_DANGER_DESCRIPTION,
                             style = MaterialTheme.typography.bodySmall,
@@ -467,6 +479,19 @@ fun SettingsScreen(
                             modifier = Modifier.testTag(TAG_ROTATE),
                         ) {
                             Text(text = "共有鍵を作り直す")
+                        }
+                    }
+                    if (dangerExpanded && onResetAll != null) {
+                        Text(
+                            text = RESET_DANGER_DESCRIPTION,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        OutlinedButton(
+                            onClick = { showResetWarning = true },
+                            modifier = Modifier.testTag(TAG_RESET),
+                        ) {
+                            Text(text = "すべての情報を消去する")
                         }
                     }
                 }
@@ -493,6 +518,30 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showRotateWarning = false }) {
+                    Text(text = "やめる")
+                }
+            },
+        )
+    }
+
+    if (showResetWarning && onResetAll != null) {
+        AlertDialog(
+            onDismissRequest = { showResetWarning = false },
+            title = { Text(text = "すべての情報を消去しますか？") },
+            text = { Text(text = RESET_WARNING_BODY) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showResetWarning = false
+                        onResetAll()
+                    },
+                    modifier = Modifier.testTag(TAG_RESET_CONFIRM),
+                ) {
+                    Text(text = "消去して終了")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetWarning = false }) {
                     Text(text = "やめる")
                 }
             },
@@ -790,6 +839,8 @@ const val TAG_CREATE_KEY: String = "settings-create-key"
 const val TAG_DANGER_TOGGLE: String = "settings-danger-toggle"
 const val TAG_ROTATE: String = "settings-rotate"
 const val TAG_ROTATE_CONFIRM: String = "settings-rotate-confirm"
+const val TAG_RESET: String = "settings-reset"
+const val TAG_RESET_CONFIRM: String = "settings-reset-confirm"
 const val TAG_ADD_DEVICE: String = "settings-add-device"
 const val TAG_HIDE_QR: String = "settings-hide-qr"
 const val TAG_COPY_PAIRING_URI: String = "settings-copy-pairing-uri"

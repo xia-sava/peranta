@@ -43,6 +43,45 @@ class ConfigRepositoryTest {
         assertTrue(repo.load().isReadyForReceive)
     }
 
+    /** clear は保存済みの設定と共有鍵を消し、load が初期値を返す状態に戻す（§11）。 */
+    @Test
+    fun clearRemovesEverySettingAndSharedKey() {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings, SettingsKeyStore(settings), forceTls = false)
+        repo.save(
+            PerantaConfig(
+                host = "peranta.example.com",
+                accessToken = "tok",
+                deviceName = "desk",
+                sharedKeyBase64 = Base64.encode(generateKey()),
+                keyId = "k1",
+            ),
+        )
+
+        repo.clear()
+
+        val cleared = repo.load()
+        assertNull(cleared.accessToken)
+        assertNull(cleared.deviceName)
+        assertNull(cleared.sharedKeyBase64)
+        assertNull(cleared.keyId)
+        assertFalse(cleared.hasSharedKey)
+        assertEquals(PerantaConfig().host, cleared.host)
+    }
+
+    /** 鍵の保管先が settings の外にある実装でも、clear は KeyStore へ消去を伝える（§11）。 */
+    @Test
+    fun clearAlsoClearsKeyStoreOutsideSettings() {
+        val settings = MapSettings()
+        val keyStore = SettingsKeyStore(MapSettings())
+        val repo = ConfigRepository(settings, keyStore, forceTls = false)
+        repo.save(PerantaConfig(sharedKeyBase64 = Base64.encode(generateKey()), keyId = "k1"))
+
+        repo.clear()
+
+        assertNull(keyStore.loadKey())
+    }
+
     /** リリース相当（forceTls）では TLS を常に有効として読み出し、保存値も書かない（§16）。 */
     @Test
     fun forceTlsAlwaysLoadsTrueAndSkipsPersisting() {

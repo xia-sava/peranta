@@ -67,6 +67,7 @@ import to.sava.peranta.pairing.SettingsController
 import to.sava.peranta.pairing.pairingQrMatrix
 import to.sava.peranta.send.MESSAGE_SEND_FAILED_MESSAGE
 import to.sava.peranta.send.sharedStreamItems
+import to.sava.peranta.timeline.defaultTimelineFile
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.AppFilterScreen
@@ -93,6 +94,7 @@ import to.sava.peranta.ui.shell.shellReturnDestination
 import to.sava.peranta.ui.setup.WizardScreen
 import to.sava.peranta.update.AndroidUpdater
 import to.sava.peranta.update.devVersionName
+import kotlin.system.exitProcess
 
 /** 通知権限が拒否されたときにタイムラインへ出す文言（§10.5）。 */
 private const val NOTIFICATIONS_DENIED_MESSAGE =
@@ -506,6 +508,7 @@ class MainActivity : ComponentActivity() {
                                     ),
                                     showHeader = false,
                                     onSaved = { rebuildReceivePipeline() },
+                                    onResetAll = { resetAllAndExit() },
                                 )
 
                                 // 捕捉端末（送信）はインストール済みアプリ一覧から転送フィルタを編集し、
@@ -800,4 +803,16 @@ class MainActivity : ComponentActivity() {
      */
     private fun isDebugBuild(): Boolean =
         applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+
+    /**
+     * 端末に残る情報を全て消してアプリを終了する（§11）。次の起動は初期設定から始まる。
+     * 通知リスナーはアプリの終了後もシステムが再びつなぎうるが、共有鍵を失った状態では何も送らない。
+     */
+    private fun resetAllAndExit() {
+        androidConfigRepository().clear()
+        defaultTimelineFile().overwrite(emptyList())
+        AndroidAttachmentReceive.attachmentsDir(this).deleteRecursively()
+        finishAffinity()
+        exitProcess(0)
+    }
 }

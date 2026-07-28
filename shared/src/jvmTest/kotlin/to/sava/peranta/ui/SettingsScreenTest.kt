@@ -657,6 +657,56 @@ class SettingsScreenTest {
         assertEquals(1, savedCount)
     }
 
+    // --- 危険な操作: すべての情報の消去 ---
+
+    /** onResetAll を渡さないプラットフォームでは消去ボタンを出さない。 */
+    @Test
+    fun resetButtonHiddenWhenCallbackAbsent() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_DANGER_TOGGLE).performScrollTo().performClick()
+
+        onNodeWithTag(TAG_RESET).assertDoesNotExist()
+    }
+
+    /** 鍵が無くても消去はできるため、onResetAll があれば危険な操作の見出しごと出る。 */
+    @Test
+    fun resetButtonShownWithoutKeyWhenCallbackPresent() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(PerantaConfig(host = "h", accessToken = "tk", deviceName = "d"))
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller, onResetAll = {}) }
+
+        onNodeWithTag(TAG_DANGER_TOGGLE).performScrollTo().performClick()
+
+        onNodeWithTag(TAG_RESET).performScrollTo().assertIsDisplayed()
+        onNodeWithTag(TAG_ROTATE).assertDoesNotExist()
+    }
+
+    /** 消去ボタンは確認を挟み、承認して初めて onResetAll を呼ぶ。 */
+    @Test
+    fun resetRunsOnlyAfterConfirmation() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+        var resetCount = 0
+
+        setContent { SettingsScreen(controller, onResetAll = { resetCount++ }) }
+
+        onNodeWithTag(TAG_DANGER_TOGGLE).performScrollTo().performClick()
+        onNodeWithTag(TAG_RESET).performScrollTo().performClick()
+        assertEquals(0, resetCount)
+
+        onNodeWithTag(TAG_RESET_CONFIRM).performClick()
+
+        assertEquals(1, resetCount)
+    }
+
     // --- 保存契機（onSaved） ---
 
     /** 入力欄・チェックボックスを編集しただけでは onSaved は呼ばれない。 */

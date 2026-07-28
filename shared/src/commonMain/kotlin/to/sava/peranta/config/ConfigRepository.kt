@@ -102,6 +102,17 @@ class ConfigRepository(
     }
 
     /**
+     * 端末に保存した設定を全て消す（§11）。共有鍵も破棄するため、以後は初期設定からやり直しになる。
+     * 鍵の保管先は settings の外にある実装もあるため、settings の消去とは別に [KeyStore] へも消去を求める。
+     */
+    fun clear(): Unit = runBlocking {
+        configMutex.withLock {
+            keyStore.clearKey()
+            settings.clear()
+        }
+    }
+
+    /**
      * フィルタルールだけを排他的に読み書き更新する（§7 のアプリフィルタ操作向け）。
      * [save] と違い共有鍵の再保存など他項目には触れないため、チェックボックス操作のたびに呼んでも軽い。
      * [transform] が入力と同じインスタンスを返したときは変化なしとみなし、書き込みを省く。

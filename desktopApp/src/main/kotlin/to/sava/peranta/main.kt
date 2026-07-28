@@ -51,6 +51,7 @@ import to.sava.peranta.autostart.WindowsRunRegistry
 import to.sava.peranta.config.isDevMode
 import to.sava.peranta.pairing.PairingImportController
 import to.sava.peranta.pairing.pairingQrMatrix
+import to.sava.peranta.platform.JvmPaths
 import to.sava.peranta.platform.initLogging
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.platform.platformCapabilities
@@ -303,6 +304,20 @@ fun main(args: Array<String>) {
             Unit
         }
 
+        // 端末に残る情報を全て消して終了する（§11）。受信機を先に閉じるのは、稼働したままだと
+        // 消したあとの履歴が JSONL へ書き戻されるため。
+        val resetAllAndExit = {
+            appScope.launch {
+                receiver?.let { withTimeoutOrNull(RECEIVER_CLOSE_TIMEOUT_MILLIS) { it.close() } }
+                updater.close()
+                desktopSettings.repository.clear()
+                JvmPaths.timelineFile.delete()
+                JvmPaths.attachmentsDir.deleteRecursively()
+                exitApplication()
+            }
+            Unit
+        }
+
         // 更新の適用は自分の終了を待って進むため、引き渡しに成功したらそのままアプリを閉じる（§12）。
         val updateInstallState by updater.installState.collectAsState()
 
@@ -511,6 +526,7 @@ fun main(args: Array<String>) {
                                 // 鍵の作成は例外として即時反映する（§10.2）。画面を離れたときの反映は onNavigate が担う。
                                 onSaved = { configGeneration++ },
                                 showHeader = false,
+                                onResetAll = resetAllAndExit,
                             )
 
                             ShellDestination.AppFilter -> when {
