@@ -427,14 +427,15 @@ private fun ConnectionBody(
     onPortChange: (String) -> Unit,
 ) {
     Text(text = "接続先のサーバとアクセストークンを入力します。", style = MaterialTheme.typography.bodyMedium)
-    HostField(value = host, onValueChange = onHostChange, tag = wizardTag(TAG_HOST))
-    TokenField(value = accessToken, onValueChange = onTokenChange, tag = wizardTag(TAG_TOKEN))
-    PortField(value = port, onValueChange = onPortChange, tag = wizardTag(TAG_PORT))
-    Text(
-        text = PORT_DESCRIPTION,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    HostPortFields(
+        host = host,
+        port = port,
+        onHostChange = onHostChange,
+        onPortChange = onPortChange,
+        hostTag = wizardTag(TAG_HOST),
+        portTag = wizardTag(TAG_PORT),
     )
+    TokenField(value = accessToken, onValueChange = onTokenChange, tag = wizardTag(TAG_TOKEN))
 }
 
 @Composable

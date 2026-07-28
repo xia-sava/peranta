@@ -38,12 +38,10 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import to.sava.peranta.pairing.SettingsController
 import to.sava.peranta.ui.setup.DeviceNameField
-import to.sava.peranta.ui.setup.HostField
+import to.sava.peranta.ui.setup.HostPortFields
 import to.sava.peranta.ui.setup.KeyStatusText
 import to.sava.peranta.ui.setup.LabeledCheckbox
 import to.sava.peranta.ui.setup.PairingQrSection
-import to.sava.peranta.ui.setup.PORT_DESCRIPTION
-import to.sava.peranta.ui.setup.PortField
 import to.sava.peranta.ui.setup.SMS_DIRECT_RECEIVE_DESCRIPTION
 import to.sava.peranta.ui.setup.SetupItemUi
 import to.sava.peranta.ui.setup.SetupOverviewRow
@@ -309,14 +307,13 @@ fun SettingsScreen(
                 }
 
                 SectionHeader(title = SECTION_CONNECTION)
-                HostField(value = host, onValueChange = { host = it; persistConnection() })
-                TokenField(value = accessToken, onValueChange = { accessToken = it; persistConnection() })
-                PortField(value = port, onValueChange = { port = it; persistConnection() })
-                Text(
-                    text = PORT_DESCRIPTION,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                HostPortFields(
+                    host = host,
+                    port = port,
+                    onHostChange = { host = it; persistConnection() },
+                    onPortChange = { port = it; persistConnection() },
                 )
+                TokenField(value = accessToken, onValueChange = { accessToken = it; persistConnection() })
 
                 SectionHeader(title = SECTION_THIS_DEVICE)
                 DeviceNameField(value = deviceName, onValueChange = { deviceName = it; persistConnection() })

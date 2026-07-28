@@ -1,8 +1,10 @@
 package to.sava.peranta.ui.setup
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
@@ -17,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import to.sava.peranta.ui.TAG_COPY_PAIRING_URI
 import to.sava.peranta.ui.TAG_DEVICE_NAME
 import to.sava.peranta.ui.TAG_HIDE_QR
@@ -38,15 +41,46 @@ internal const val SMS_DIRECT_RECEIVE_DESCRIPTION: String =
     "ON にすると SMS を直接受信し、本文を全文確実に転送します。" +
         "OFF だと SMS アプリの通知経由になり、本文が省略されたり既読の SMS は転送されないことがあります。"
 
+/** ポート欄の幅。5 桁の数字とラベルが収まるだけを取り、残りをホスト名へ回す。 */
+private val PORT_FIELD_WIDTH = 112.dp
+
+/** ホスト名とポートの間隔。 */
+private val HOST_PORT_SPACING = 8.dp
+
+/** ポート欄が空のときに薄く示す既定値。標準のポートを使うことが一目でわかる。 */
+private const val PORT_PLACEHOLDER: String = "443"
+
+/**
+ * サーバのホスト名とポートの入力欄（§11）。ポートは標準のままで足りることが大半のため、
+ * 独立した行を与えず幅を詰めて横に並べる。
+ */
 @Composable
-internal fun HostField(value: String, onValueChange: (String) -> Unit, tag: String = TAG_HOST) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text("サーバホスト名") },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth().testTag(tag),
-    )
+internal fun HostPortFields(
+    host: String,
+    port: String,
+    onHostChange: (String) -> Unit,
+    onPortChange: (String) -> Unit,
+    hostTag: String = TAG_HOST,
+    portTag: String = TAG_PORT,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(HOST_PORT_SPACING)) {
+        OutlinedTextField(
+            value = host,
+            onValueChange = onHostChange,
+            label = { Text("サーバホスト名") },
+            singleLine = true,
+            modifier = Modifier.weight(1f).testTag(hostTag),
+        )
+        OutlinedTextField(
+            value = port,
+            onValueChange = { input -> onPortChange(input.filter { it.isDigit() }) },
+            label = { Text("ポート") },
+            placeholder = { Text(PORT_PLACEHOLDER) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.width(PORT_FIELD_WIDTH).testTag(portTag),
+        )
+    }
 }
 
 @Composable
@@ -67,21 +101,6 @@ internal fun DeviceNameField(value: String, onValueChange: (String) -> Unit, tag
         onValueChange = onValueChange,
         label = { Text("端末名") },
         singleLine = true,
-        modifier = Modifier.fillMaxWidth().testTag(tag),
-    )
-}
-
-/** 「ポート（任意）」欄の下に添える説明文（§11）。 */
-internal const val PORT_DESCRIPTION: String = "空欄なら標準のポート（443）を使います。"
-
-@Composable
-internal fun PortField(value: String, onValueChange: (String) -> Unit, tag: String = TAG_PORT) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { input -> onValueChange(input.filter { it.isDigit() }) },
-        label = { Text("ポート（任意）") },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = Modifier.fillMaxWidth().testTag(tag),
     )
 }
