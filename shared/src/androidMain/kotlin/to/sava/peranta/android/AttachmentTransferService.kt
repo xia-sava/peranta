@@ -12,7 +12,6 @@ import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
-import android.provider.OpenableColumns
 import co.touchlab.kermit.Logger
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.jvm.javaio.toByteReadChannel
@@ -260,7 +259,7 @@ class AttachmentTransferService : Service() {
     ): AttachmentRef? = coroutineScope {
         val spool = spool(transferId, uri) ?: return@coroutineScope null
         try {
-            val meta = attachmentMeta(transferId, uri, spool)
+            val meta = attachmentMeta(uri, spool)
             val transferred = AtomicLong(0)
             val pollJob = launch {
                 while (isActive) {
@@ -308,27 +307,11 @@ class AttachmentTransferService : Service() {
             null
         }
 
-    private fun attachmentMeta(transferId: String, uri: Uri, spool: File): AttachmentMeta {
-        val displayName = queryDisplayName(transferId, uri) ?: uri.lastPathSegment ?: "image"
-        val mimeType = contentResolver.getType(uri) ?: DEFAULT_IMAGE_MIME
-        return AttachmentMeta(fileName = displayName, mimeType = mimeType, sizeBytes = spool.length())
-    }
-
-    private fun queryDisplayName(transferId: String, uri: Uri): String? =
-        try {
-            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                        .takeIf { it >= 0 }
-                        ?.let { cursor.getString(it) }
-                } else {
-                    null
-                }
-            }
-        } catch (error: Exception) {
-            log.w(error) { "failed to query display name transferId=$transferId" }
-            null
-        }
+    private fun attachmentMeta(uri: Uri, spool: File): AttachmentMeta = AttachmentMeta(
+        fileName = sharedStreamDisplayName(uri),
+        mimeType = contentResolver.getType(uri) ?: DEFAULT_IMAGE_MIME,
+        sizeBytes = spool.length(),
+    )
 
     /** カウント付き入力ストリームから blob 本体のチャンネルを開く。読み取りバイト数を [transferred] に反映する。 */
     private fun countingChannel(spool: File, transferred: AtomicLong): ByteReadChannel {

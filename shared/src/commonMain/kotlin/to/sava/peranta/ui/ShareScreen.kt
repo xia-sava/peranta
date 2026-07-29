@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -20,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /** 共有画面の送信ボタンのタグ。 */
@@ -28,16 +31,20 @@ const val TAG_SHARE_SEND: String = "share-send"
 /** 共有画面のキャプション入力のタグ。 */
 const val TAG_SHARE_CAPTION: String = "share-caption"
 
+/** 共有画面の送信対象ファイル一覧のタグ。 */
+const val TAG_SHARE_FILES: String = "share-files"
+
 /**
  * 共有シートから渡されたファイル（画像を含む）を転送する前に、キャプションを入力して送信する小さな画面（§4.3）。
- * 宛先はペアリング済みの全端末（`to: "*"`）で、[itemCount] 件のファイルをまとめて送る。
- * [itemCount] が 0 のとき（テキストのみの共有）はメッセージ送信の文言・挙動に切り替わる（§7.2）。
+ * 宛先はペアリング済みの全端末（`to: "*"`）で、[fileNames] のファイルをまとめて送る。
+ * **送るファイルの名前を必ず並べて出す。** 共有元は任意のアプリで、件数だけでは何を送るのか判断できない。
+ * [fileNames] が空のとき（テキストのみの共有）はメッセージ送信の文言・挙動に切り替わる（§7.2）。
  * [initialText] は入力欄の初期値（ファイル共有に添えられた説明文、またはメッセージ本文）、
  * [sending] が真の間は送信ボタンを無効化する。
  */
 @Composable
 fun ShareScreen(
-    itemCount: Int,
+    fileNames: List<String>,
     onSend: (caption: String?) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
@@ -45,7 +52,7 @@ fun ShareScreen(
     sending: Boolean = false,
 ) {
     var caption by remember { mutableStateOf(initialText.orEmpty()) }
-    val isMessageMode = itemCount == 0
+    val isMessageMode = fileNames.isEmpty()
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -59,11 +66,29 @@ fun ShareScreen(
                 text = if (isMessageMode) {
                     "ペアリング済みの端末へメッセージを送ります。"
                 } else {
-                    "$itemCount 件のファイルをペアリング済みの端末へ送ります。"
+                    "${fileNames.size} 件のファイルをペアリング済みの端末へ送ります。"
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (!isMessageMode) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .testTag(TAG_SHARE_FILES),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    fileNames.forEach { fileName ->
+                        Text(
+                            text = fileName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
             OutlinedTextField(
                 value = caption,
                 onValueChange = { caption = it },

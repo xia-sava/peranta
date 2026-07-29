@@ -19,7 +19,7 @@ class ShareScreenTest {
     fun sendPassesCaption() = runComposeUiTest {
         var sent: String? = "unset"
         setContent {
-            ShareScreen(itemCount = 2, onSend = { sent = it }, onCancel = {})
+            ShareScreen(fileNames = listOf("旅行.jpg", "領収書.pdf"), onSend = { sent = it }, onCancel = {})
         }
         onNodeWithTag(TAG_SHARE_CAPTION).performTextInput("旅行")
         onNodeWithTag(TAG_SHARE_SEND).performClick()
@@ -31,28 +31,42 @@ class ShareScreenTest {
     fun blankCaptionSendsNull() = runComposeUiTest {
         var sent: String? = "unset"
         setContent {
-            ShareScreen(itemCount = 1, onSend = { sent = it }, onCancel = {})
+            ShareScreen(fileNames = listOf("旅行.jpg"), onSend = { sent = it }, onCancel = {})
         }
         onNodeWithTag(TAG_SHARE_SEND).performClick()
         assertEquals(null, sent)
     }
 
-    /** itemCount=0（テキストのみ共有）のときメッセージ送信の文言に切り替わる。 */
+    /** 共有シートからのファイル送信は、件数だけでなく送るファイル名を全件並べて出す。 */
+    @Test
+    fun listsEveryFileName() = runComposeUiTest {
+        setContent {
+            ShareScreen(fileNames = listOf("旅行.jpg", "領収書.pdf", "memo.txt"), onSend = {}, onCancel = {})
+        }
+        onNodeWithText("3 件のファイルをペアリング済みの端末へ送ります。").assertExists()
+        onNodeWithTag(TAG_SHARE_FILES).assertExists()
+        onNodeWithText("旅行.jpg").assertExists()
+        onNodeWithText("領収書.pdf").assertExists()
+        onNodeWithText("memo.txt").assertExists()
+    }
+
+    /** ファイルが無い（テキストのみ共有）ときメッセージ送信の文言へ切り替わり、一覧は出さない。 */
     @Test
     fun messageModeShowsMessageWording() = runComposeUiTest {
         setContent {
-            ShareScreen(itemCount = 0, onSend = {}, onCancel = {})
+            ShareScreen(fileNames = emptyList(), onSend = {}, onCancel = {})
         }
         onNodeWithText("メッセージを送信").assertExists()
         onNodeWithText("ペアリング済みの端末へメッセージを送ります。").assertExists()
         onNodeWithText("メッセージ").assertExists()
+        onNodeWithTag(TAG_SHARE_FILES).assertDoesNotExist()
     }
 
-    /** itemCount=0 で本文が空白のとき送信ボタンは無効。 */
+    /** ファイルが無く本文が空白のとき送信ボタンは無効。 */
     @Test
     fun messageModeDisablesSendWhenBlank() = runComposeUiTest {
         setContent {
-            ShareScreen(itemCount = 0, onSend = {}, onCancel = {})
+            ShareScreen(fileNames = emptyList(), onSend = {}, onCancel = {})
         }
         onNodeWithTag(TAG_SHARE_SEND).assertIsNotEnabled()
     }
@@ -61,7 +75,7 @@ class ShareScreenTest {
     @Test
     fun initialTextPrefillsInput() = runComposeUiTest {
         setContent {
-            ShareScreen(itemCount = 0, onSend = {}, onCancel = {}, initialText = "こんにちは")
+            ShareScreen(fileNames = emptyList(), onSend = {}, onCancel = {}, initialText = "こんにちは")
         }
         onNodeWithTag(TAG_SHARE_CAPTION).assertTextContains("こんにちは")
     }
@@ -70,7 +84,7 @@ class ShareScreenTest {
     @Test
     fun sendingDisablesSendButton() = runComposeUiTest {
         setContent {
-            ShareScreen(itemCount = 2, onSend = {}, onCancel = {}, sending = true)
+            ShareScreen(fileNames = listOf("旅行.jpg", "領収書.pdf"), onSend = {}, onCancel = {}, sending = true)
         }
         onNodeWithTag(TAG_SHARE_SEND).assertIsNotEnabled()
     }

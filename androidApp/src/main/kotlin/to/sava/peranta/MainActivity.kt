@@ -56,10 +56,12 @@ import to.sava.peranta.android.EXTRA_SCROLL_ITEM_ID
 import to.sava.peranta.android.PerantaReceive
 import to.sava.peranta.android.PerantaSend
 import to.sava.peranta.android.PerantaUnifiedPush
+import to.sava.peranta.android.acceptedSharedStreams
 import to.sava.peranta.android.androidConfigRepository
 import to.sava.peranta.android.eraseCachedAppData
 import to.sava.peranta.android.eraseSendRetryQueue
 import to.sava.peranta.android.normalizeScrollItemId
+import to.sava.peranta.android.sharedStreamDisplayName
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.platform.ioDispatcher
@@ -133,7 +135,7 @@ private const val KEY_PENDING_SAVE_BLOB_ID = "pendingSaveBlobId"
 private sealed interface Overlay {
     data object Wizard : Overlay
     data object PairingLanding : Overlay
-    data class Share(val files: List<Uri>, val text: String?) : Overlay
+    data class Share(val files: List<Uri>, val fileNames: List<String>, val text: String?) : Overlay
 }
 
 /** [Overlay] の保存表現。どのタスクを開いていたかだけを識別する。 */
@@ -266,6 +268,7 @@ class MainActivity : ComponentActivity() {
         val receiveSetupAvailable =
             config.isReadyForUnifiedPushReceive || AndroidSetupProbe(this).unifiedPushRegistered()
         val sharedFiles = extractSharedFiles(intent)
+        val sharedFileNames = sharedFiles.map { sharedStreamDisplayName(it) }
         val sharedText = extractSharedText(intent)
         val rosterUi = PerantaReceive.rosterUi(this)
         // composer は送信設定が揃っていれば端末の役割を問わず出す（deviceId は PerantaSend.sendMessage が
@@ -290,7 +293,7 @@ class MainActivity : ComponentActivity() {
             // 開いているタスクは destination と同じく再生成後も生存させる（ウィザードの途中で
             // QR スキャナを開くと構成変更が起きるため、失うと最初からやり直しになる）。
             val share = remember {
-                Overlay.Share(sharedFiles, sharedText)
+                Overlay.Share(sharedFiles, sharedFileNames, sharedText)
                     .takeIf { sharedFiles.isNotEmpty() || sharedText != null }
             }
             var overlay: Overlay? by rememberSaveable(stateSaver = overlaySaver(share)) {
@@ -418,7 +421,7 @@ class MainActivity : ComponentActivity() {
                             val files = current.files
                             var sending by remember { mutableStateOf(false) }
                             ShareScreen(
-                                itemCount = files.size,
+                                fileNames = current.fileNames,
                                 initialText = current.text,
                                 sending = sending,
                                 onSend = { caption ->
@@ -587,7 +590,11 @@ class MainActivity : ComponentActivity() {
         return itemId
     }
 
-    /** 共有シート（ACTION_SEND / ACTION_SEND_MULTIPLE）で渡されたファイル Uri を取り出す。単数/複数の両方に対応する。 */
+    /**
+     * 共有シート（ACTION_SEND / ACTION_SEND_MULTIPLE）で渡されたファイル Uri を取り出す。単数/複数の両方に対応する。
+     * この Activity は exported で共有元を名乗る任意のアプリが直接起動できるため、
+     * 取り出した Uri は読み出してよいものだけに絞る（§4.3）。
+     */
     private fun extractSharedFiles(intent: Intent?): List<Uri> {
         if (intent?.action != Intent.ACTION_SEND && intent?.action != Intent.ACTION_SEND_MULTIPLE) return emptyList()
         val single = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -602,7 +609,7 @@ class MainActivity : ComponentActivity() {
             @Suppress("DEPRECATION")
             intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
         }
-        return sharedStreamItems(single, multiple)
+        return acceptedSharedStreams(sharedStreamItems(single, multiple))
     }
 
     /** 共有シート（ACTION_SEND / ACTION_SEND_MULTIPLE）で渡されたテキスト（EXTRA_TEXT）を取り出す。 */
