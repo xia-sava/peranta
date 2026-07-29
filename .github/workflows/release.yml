@@ -5,8 +5,8 @@ on:
     branches: [master]
   workflow_dispatch: {}
 
-permissions:
-  contents: write
+# 既定では GITHUB_TOKEN に何の権限も与えない。必要なジョブが必要な分だけ宣言する。
+permissions: {}
 
 # 連続 push で古いビルドが後勝ちしないよう、同時実行を1本に絞る。
 concurrency:
@@ -15,15 +15,21 @@ concurrency:
 
 env:
   JAVA_VERSION: "23"
+  # jpackage が使えるのは WiX 3 系のみ。ランナーに無いときに入れる版を固定する。
+  WIX_VERSION: "3.14.1"
 
 jobs:
   version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       code: ${{ steps.compute.outputs.code }}
       name: ${{ steps.compute.outputs.name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # versionCode は単調増加する run number、versionName は gradle.properties の
       # major.minor に run number を patch として付ける（版を上げる時はそちらを書き換える）。
@@ -42,8 +48,12 @@ jobs:
   # 配布物を作る前にテストとカバレッジ検証を通す。ここが落ちればリリースまで進まない。
   check:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@v4
         with:
@@ -64,8 +74,12 @@ jobs:
   desktop:
     needs: [version, check]
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@v4
         with:
@@ -75,7 +89,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       # jpackage の MSI 生成は WiX 3 の candle/light を PATH から探す（WiX 4 以降は使えない）。
-      # ランナーに入っている版を使い、無いときだけ入れる。
+      # ランナーに入っている版を使い、無いときだけ WIX_VERSION の版を入れる。
       - name: Ensure WiX 3 on PATH
         run: |
           $programFiles = ${env:ProgramFiles(x86)}
@@ -83,10 +97,11 @@ jobs:
             Sort-Object Name | Select-Object -Last 1 }
           $wix = & $findWix
           if (-not $wix) {
-            choco install wixtoolset --no-progress -y
+            choco install wixtoolset "--version=$env:WIX_VERSION" --require-checksums --no-progress -y
             $wix = & $findWix
           }
           if (-not $wix) { throw "WiX 3 が見つかりません" }
+          Write-Host "WiX toolset: $($wix.FullName)"
           Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $wix.FullName "bin")
 
       - name: Build MSI
@@ -112,8 +127,12 @@ jobs:
   android:
     needs: [version, check]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@v4
         with:
@@ -165,23 +184,27 @@ jobs:
           path: artifacts/peranta.apk
           if-no-files-found: error
 
-  release:
+  # 配布物の照合値からマニフェストを組む。公開の権限は持たず、成果物として release へ渡す。
+  manifest:
     needs: [version, desktop, android]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
 
-      # アプリが引く latest.json。配布物の URL はタグ配下の固定名を指す（毎ビルド上書きされる）。
+      # アプリが引く latest.json。url は配布済みの旧版が取得先として読むため載せ続ける。
       - name: Write latest.json
         env:
           VERSION_CODE: ${{ needs.version.outputs.code }}
           VERSION_NAME: ${{ needs.version.outputs.name }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          base="https://github.com/${{ github.repository }}/releases/download/latest"
+          base="https://github.com/${REPOSITORY}/releases/download/latest"
           apk_sha=$(sha256sum artifacts/peranta.apk | cut -d' ' -f1)
           msi_sha=$(sha256sum artifacts/peranta.msi | cut -d' ' -f1)
           jq -n \
@@ -193,6 +216,24 @@ jobs:
               android: { versionCode: $versionCode, versionName: $versionName, url: $apkUrl, sha256: $apkSha },
               desktop: { versionCode: $versionCode, versionName: $versionName, url: $msiUrl, sha256: $msiSha }
             }' > artifacts/latest.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: manifest
+          path: artifacts/latest.json
+          if-no-files-found: error
+
+  # 成果物を公開するだけのジョブ。contents: write を持つのはここだけ。
+  release:
+    needs: [desktop, android, manifest]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
 
       - name: Publish latest release
         uses: softprops/action-gh-release@v2
