@@ -15,6 +15,7 @@ import to.sava.peranta.model.MAX_SOURCE_LABEL_BYTES
 import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
+import to.sava.peranta.model.PresencePayload
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.truncateToUtf8Bytes
 
@@ -51,8 +52,8 @@ private val BLANK_RUN = Regex(" {2,}")
  * 片方だけ抜ける。表示面ごとではなく受信の 1 箇所で当てる。
  *
  * 識別子（`id` / `from` / `to` / `packageName` / `notificationKey` / 添付の `blobId`・`url`）は
- * 表示ではなく突き合わせに使う値なので触らない。表示に出ない payload（command / presence）も
- * そのまま返す。
+ * 表示ではなく突き合わせに使う値なので触らない。表示に出ない payload（command）もそのまま返す。
+ * presence は端末名だけが端末一覧（§3.5）へ出るため、そこだけ正規化する。
  */
 fun normalizeReceivedPayload(payload: Payload): Payload = when (payload) {
     is NotificationPayload -> payload.copy(
@@ -85,6 +86,10 @@ fun normalizeReceivedPayload(payload: Payload): Payload = when (payload) {
     is MessagePayload -> payload.copy(
         text = normalizeDisplayText(payload.text, MAX_MESSAGE_TEXT_BYTES),
         fromName = payload.fromName?.let { normalizeDisplayLine(it, MAX_SOURCE_LABEL_BYTES) },
+    )
+
+    is PresencePayload -> payload.copy(
+        deviceName = normalizeDisplayLine(payload.deviceName, MAX_SOURCE_LABEL_BYTES),
     )
 
     else -> payload

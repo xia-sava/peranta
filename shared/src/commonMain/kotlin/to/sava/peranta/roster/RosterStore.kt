@@ -8,6 +8,7 @@ import to.sava.peranta.model.PresencePayload
 import to.sava.peranta.model.decodeEnvelope
 import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyEvent
+import to.sava.peranta.receive.normalizeReceivedPayload
 
 /** control topic 履歴取得の打ち切り時間枠（ミリ秒）。即時送信を長時間ブロックしないための上限。 */
 const val ROSTER_FETCH_TIMEOUT_MILLIS: Long = 8_000L
@@ -76,11 +77,16 @@ class RosterStore(
             null
         }
 
-    /** 1 件の履歴イベントを復号し、presence なら取り出す。それ以外・失敗は null。 */
+    /**
+     * 1 件の履歴イベントを復号し、presence なら取り出す。それ以外・失敗は null。
+     * ロスターは control topic の履歴を直接読むため受信パイプラインの関門を通らない。
+     * 端末名は一覧へそのまま出るので、ここで同じ関門（[normalizeReceivedPayload]）を当てる（§4.4）。
+     */
     private suspend fun presenceOrNull(event: NtfyEvent): PresencePayload? =
         try {
             decodeEnvelope(event.message)
                 .let { cipher.open(it) }
+                .let(::normalizeReceivedPayload)
                 .let { it as? PresencePayload }
         } catch (cancellation: CancellationException) {
             throw cancellation

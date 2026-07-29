@@ -19,12 +19,17 @@ class RosterStoreTest {
     private val cipher = MessageCipher(keyBytes, "k1")
     private val controlTopic = "peranta-control-xyz"
 
-    private fun presence(deviceId: String, endpoint: String, sentAt: Long) = PresencePayload(
+    private fun presence(
+        deviceId: String,
+        endpoint: String,
+        sentAt: Long,
+        deviceName: String = deviceId,
+    ) = PresencePayload(
         id = "p-$deviceId",
         from = deviceId,
         to = BROADCAST_TARGET,
         sentAtEpochMillis = sentAt,
-        deviceName = deviceId,
+        deviceName = deviceName,
         endpoint = endpoint,
         capabilities = listOf(CAPABILITY_DISPLAY),
     )
@@ -82,6 +87,18 @@ class RosterStoreTest {
         )
         val store = RosterStore(ntfy, cipher, controlTopic, fetchTimeoutMillis = 100)
         assertEquals(RosterFetchResult.FetchFailed, store.fetch())
+    }
+
+    /** 一覧へ出る端末名は受信の関門を通した値になる（制御文字・改行が表示へ素通りしない）。 */
+    @Test
+    fun fetchNormalizesDeviceNameForDisplay() = runTest {
+        val ntfy = RecordingControlNtfy(
+            history = listOf(
+                event(presence("dev-a", "https://h/a", sentAt = 100, deviceName = "居間の${Char(0x202E)} PC\nxia-phone")),
+            ),
+        )
+        val roster = (RosterStore(ntfy, cipher, controlTopic).fetch() as RosterFetchResult.Fetched).entries
+        assertEquals("居間の PC xia-phone", roster.single().deviceName)
     }
 
     /** 履歴が本当に空（presence が 1 件もない）なら、取得失敗ではなく 0 件のロスターとして返す。 */

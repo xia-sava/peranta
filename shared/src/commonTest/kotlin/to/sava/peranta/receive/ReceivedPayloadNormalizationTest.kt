@@ -13,6 +13,7 @@ import to.sava.peranta.model.MAX_FORWARDED_TITLE_BYTES
 import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.NotificationPayload
+import to.sava.peranta.model.PresencePayload
 import to.sava.peranta.model.SemanticActionKind
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.ui.firstUrl
@@ -250,6 +251,27 @@ class ReceivedPayloadNormalizationTest {
         )
 
         assertSame(command, normalizeReceivedPayload(command))
+    }
+
+    /** presence は端末一覧へ出る端末名だけを 1 行へ正規化し、突き合わせに使う値は触らない。 */
+    @Test
+    fun presenceDeviceNameIsNormalizedButIdentifiersAreUntouched() {
+        val presence = PresencePayload(
+            id = "p1",
+            from = "desk",
+            to = "*",
+            sentAtEpochMillis = 1,
+            deviceName = "居間の$RTL_OVERRIDE PC\nxia-phone",
+            endpoint = "https://example.com/updDkoE3wG",
+            capabilities = listOf("display"),
+        )
+
+        val normalized = normalizeReceivedPayload(presence) as PresencePayload
+
+        assertEquals("居間の PC xia-phone", normalized.deviceName)
+        assertEquals(presence.from, normalized.from)
+        assertEquals(presence.endpoint, normalized.endpoint)
+        assertEquals(presence.capabilities, normalized.capabilities)
     }
 
     /** 全文添付から取り出した本文は行数では切らない（全文を読むためのものなので）。 */
