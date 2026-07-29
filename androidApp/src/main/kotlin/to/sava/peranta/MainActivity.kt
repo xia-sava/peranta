@@ -331,6 +331,12 @@ class MainActivity : ComponentActivity() {
                 if (nav.reflectSettings) resetReceiveAndRecreate()
             }
 
+            // ミラー通知のタップで届いたスクロール要求は、設定など別の画面を開いていても
+            // タイムラインへ移ってから受ける。
+            LaunchedEffect(pendingScrollItemId) {
+                if (pendingScrollItemId != null) onNavigate(ShellDestination.Timeline)
+            }
+
             // 一連の設定・ペアリング作業を終えてタイムラインへ戻る後処理。遷移先をタイムラインに確定してから
             // 再生成し、最新設定を反映する。
             val onReturnToTimeline: () -> Unit = {

@@ -376,7 +376,14 @@ fun main(args: Array<String>) {
         // トースト本体クリックで届いたスクロール先アイテム id。タイムライン表示中に消費されると null に戻り、
         // 同じアイテムを続けてクリックしてもスクロールし直せる。
         var pendingScrollItemId by remember { mutableStateOf<String?>(null) }
-        LaunchedEffect(Unit) { scrollToItemRequest.set { itemId -> pendingScrollItemId = itemId } }
+        // 設定など別の画面を開いていてもクリックしたアイテムを見せるため、タイムラインへ移ってから
+        // スクロールさせる。設定を離れる遷移になるため、他の導線と同じく [onNavigate] を通す（§10.2）。
+        LaunchedEffect(Unit) {
+            scrollToItemRequest.set { itemId ->
+                onNavigate(ShellDestination.Timeline)
+                pendingScrollItemId = itemId
+            }
+        }
 
         // 最小化はタスクバーでなくトレイへ格納する。復帰時に備えて最小化フラグは戻しておく。
         LaunchedEffect(Unit) {
