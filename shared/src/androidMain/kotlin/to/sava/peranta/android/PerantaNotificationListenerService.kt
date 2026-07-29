@@ -242,6 +242,9 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         )
         val isCrossProfile = sbn.user != Process.myUserHandle()
         forward(input, deviceId, config, isCrossProfile, sbn.notification)
+        // 転送を続けているだけでは presence を出す機会が無く、control topic 上の presence が
+        // 保持期間を過ぎて消えるとコマンドの宛先として引けなくなる（§3.5）。
+        requestPresenceReannounce(this)
     }
 
     private fun forward(
