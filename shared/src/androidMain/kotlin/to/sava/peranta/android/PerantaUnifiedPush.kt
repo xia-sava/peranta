@@ -12,16 +12,54 @@ import to.sava.peranta.platform.ioDispatcher
 /** ディストリビュータ UI に表示され、この登録を識別する文言。 */
 private const val DISTRIBUTOR_MESSAGE = "Peranta"
 
-/** ntfy アプリのパッケージ名。複数ディストリビュータがあるときに優先して選ぶ。 */
+/** ntfy アプリのパッケージ名。自動で採用するディストリビュータはこれだけとする。 */
 private const val NTFY_PACKAGE = "io.heckel.ntfy"
 
 /** ディストリビュータ不在をタイムラインで知らせる文言（§10.5）。 */
 private const val NO_DISTRIBUTOR_MESSAGE =
     "UnifiedPush ディストリビュータが見つかりません。ntfy アプリを導入して既定に設定してください"
 
+/** ntfy 以外のディストリビュータしか無いことをタイムラインで知らせる文言（§10.5）。 */
+private const val NO_NTFY_DISTRIBUTOR_MESSAGE =
+    "UnifiedPush ディストリビュータに ntfy アプリが見つかりません。" +
+        "他のディストリビュータは自動では選ばないため、ntfy アプリを導入して既定に設定してください"
+
 /** 登録失敗をタイムラインで知らせる文言（§10.5）。 */
 private const val REGISTRATION_FAILED_MESSAGE =
     "UnifiedPush の登録に失敗しました。ntfy アプリの設定を確認してください"
+
+/** ディストリビュータの採否（[distributorSelection] の判定結果）。 */
+internal sealed interface DistributorSelection {
+
+    /** 保存済みのディストリビュータが現存するので、それをそのまま使う。 */
+    data object KeepSaved : DistributorSelection
+
+    /** [packageName] を採用して保存する。 */
+    data class Adopt(val packageName: String) : DistributorSelection
+
+    /** ディストリビュータが 1 つも無い。 */
+    data object NoCandidate : DistributorSelection
+
+    /** ntfy が候補に無い。他のディストリビュータは採用しない。 */
+    data object NoNtfy : DistributorSelection
+}
+
+/**
+ * 保存済み（[saved]）と現存する候補（[distributors]）から、採用するディストリビュータを決める。
+ * 保存済みが現存すればそれを使い、無ければ ntfy だけを自動で採る。
+ *
+ * ntfy が候補に無いときは何も採用しない。ディストリビュータは intent-filter を宣言するだけで
+ * 名乗れるうえ、Peranta は払い出されたエンドポイントの topic へ**自端末の設定サーバ**を宛先に
+ * publish する（`net/KtorNtfyClient`）ので、自分の ntfy サーバを購読しないディストリビュータでは
+ * 配信がそもそも成立しない。
+ */
+internal fun distributorSelection(distributors: List<String>, saved: String?): DistributorSelection =
+    when {
+        distributors.isEmpty() -> DistributorSelection.NoCandidate
+        saved != null && saved in distributors -> DistributorSelection.KeepSaved
+        NTFY_PACKAGE in distributors -> DistributorSelection.Adopt(NTFY_PACKAGE)
+        else -> DistributorSelection.NoNtfy
+    }
 
 /**
  * UnifiedPush 登録の起点（§3.2）。受信設定が揃っているときに、ディストリビュータ（ntfy アプリ）へ
@@ -34,8 +72,8 @@ object PerantaUnifiedPush {
 
     /**
      * 受信ロールが有効なら UnifiedPush に登録する。
-     * ディストリビュータが 1 つも無い場合は登録できないため、ログとタイムラインのエラーで知らせる。
-     * 保存済みディストリビュータが現存しない（アンインストール等）ときは決定的に選び直す。
+     * 採用するディストリビュータは [distributorSelection] が決める。登録できない状態
+     * （候補なし・ntfy 以外しか無い）は、ログとタイムラインのエラーで知らせて登録へ進まない。
      */
     fun register(context: Context) {
         val appContext = context.applicationContext
@@ -45,16 +83,23 @@ object PerantaUnifiedPush {
             return
         }
         val distributors = UnifiedPush.getDistributors(appContext)
-        if (distributors.isEmpty()) {
-            log.w { "no unifiedpush distributor available; cannot register" }
-            reportError(appContext, NO_DISTRIBUTOR_MESSAGE)
-            return
-        }
         val saved = UnifiedPush.getSavedDistributor(appContext)
-        if (saved == null || saved !in distributors) {
-            val chosen = chooseDistributor(distributors)
-            log.i { "saving unifiedpush distributor: $chosen" }
-            UnifiedPush.saveDistributor(appContext, chosen)
+        when (val selection = distributorSelection(distributors, saved)) {
+            DistributorSelection.NoCandidate -> {
+                log.w { "no unifiedpush distributor available; cannot register" }
+                reportError(appContext, NO_DISTRIBUTOR_MESSAGE)
+                return
+            }
+            DistributorSelection.NoNtfy -> {
+                log.w { "ntfy distributor not available; not adopting another one" }
+                reportError(appContext, NO_NTFY_DISTRIBUTOR_MESSAGE)
+                return
+            }
+            is DistributorSelection.Adopt -> {
+                log.i { "saving unifiedpush distributor: ${selection.packageName}" }
+                UnifiedPush.saveDistributor(appContext, selection.packageName)
+            }
+            DistributorSelection.KeepSaved -> Unit
         }
         log.i { "registering with unifiedpush distributor" }
         UnifiedPush.register(appContext, messageForDistributor = DISTRIBUTOR_MESSAGE)
@@ -70,10 +115,6 @@ object PerantaUnifiedPush {
         unregister(context)
         register(context)
     }
-
-    /** ntfy を優先し、無ければ先頭を選ぶ。同じ端末構成なら常に同じ選択になる。 */
-    private fun chooseDistributor(distributors: List<String>): String =
-        distributors.firstOrNull { it == NTFY_PACKAGE } ?: distributors.first()
 
     /** 登録失敗をタイムラインへ反映する。ディストリビュータ不在の文言と整合させる。 */
     internal fun reportRegistrationFailed(context: Context) {

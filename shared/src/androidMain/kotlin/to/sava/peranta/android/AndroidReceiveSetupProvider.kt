@@ -19,6 +19,7 @@ class AndroidReceiveSetupProvider(context: Context) : SetupItemsProvider {
         val config = androidConfigRepository(appContext).load()
         return receiveSetupItems(
             ntfyInstalled = probe.ntfyInstalled(),
+            otherDistributors = probe.otherDistributors(),
             endpointMatch = probe.endpointMatch(config),
             upRegistered = probe.upRegistered(config),
             ntfyBatteryIgnored = probe.ntfyBatteryIgnored(),

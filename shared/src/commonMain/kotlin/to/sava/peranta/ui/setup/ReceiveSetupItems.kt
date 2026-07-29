@@ -18,6 +18,7 @@ private const val SERVER_CONFIG_MISMATCH_DETAIL: String =
  */
 fun receiveSetupItems(
     ntfyInstalled: Boolean,
+    otherDistributors: List<String>,
     endpointMatch: EndpointServerMatch?,
     upRegistered: Boolean,
     ntfyBatteryIgnored: Boolean,
@@ -32,7 +33,8 @@ fun receiveSetupItems(
 ): List<SetupItemUi> =
     ReceiveSetupSteps.orderedIds.map { id ->
         when (id) {
-            ReceiveSetupSteps.NTFY_INSTALLED_ID -> ntfyInstalledItem(id, ntfyInstalled, onInstallNtfy)
+            ReceiveSetupSteps.NTFY_INSTALLED_ID ->
+                ntfyInstalledItem(id, ntfyInstalled, otherDistributors, onInstallNtfy)
             ReceiveSetupSteps.SERVER_CONFIG_ID -> serverConfigItem(id, endpointMatch, ntfyServerAids)
             ReceiveSetupSteps.UNIFIED_PUSH_ID ->
                 unifiedPushItem(id, upRegistered, endpointMatch, onRegister, onReregister)
@@ -44,16 +46,33 @@ fun receiveSetupItems(
         }
     }
 
-/** 手順1: ntfy 導入。導入済みでもストア導線を常設する。 */
-private fun ntfyInstalledItem(id: String, installed: Boolean, onInstallNtfy: () -> Unit): SetupItemUi =
+/**
+ * 手順1: ntfy 導入。導入済みでもストア導線を常設する。
+ * ntfy が無く他のディストリビュータだけが居るときは、それを採用しない旨を事実として添える。
+ */
+private fun ntfyInstalledItem(
+    id: String,
+    installed: Boolean,
+    otherDistributors: List<String>,
+    onInstallNtfy: () -> Unit,
+): SetupItemUi =
     SetupItemUi(
         id = id,
         title = ReceiveSetupSteps.titleOf(id),
         description = ReceiveSetupSteps.descriptionOf(id),
         status = if (installed) SetupStatus.DONE else SetupStatus.TODO,
-        statusDetail = null,
+        statusDetail = if (installed || otherDistributors.isEmpty()) {
+            null
+        } else {
+            otherDistributorsDetail(otherDistributors)
+        },
         action = SetupAction(label = if (installed) "ストアで開く" else "インストール", run = onInstallNtfy),
     )
+
+/** ntfy 以外のディストリビュータだけが居る状態の事実記述。 */
+private fun otherDistributorsDetail(otherDistributors: List<String>): String =
+    "ntfy 以外のディストリビュータ（${otherDistributors.joinToString("・")}）が導入されていますが、" +
+        "自動では選びません。配信は自分の ntfy サーバを購読する ntfy アプリでのみ成立します。"
 
 /** 手順2: サーバ設定。手順3の照合から三値で状態を出し、貼り付け値は常設する。 */
 private fun serverConfigItem(id: String, match: EndpointServerMatch?, ntfyServerAids: List<FixAid>): SetupItemUi =

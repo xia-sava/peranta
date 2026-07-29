@@ -14,6 +14,7 @@ class ReceiveSetupItemsTest {
 
     private fun build(
         ntfyInstalled: Boolean = true,
+        otherDistributors: List<String> = emptyList(),
         endpointMatch: EndpointServerMatch? = EndpointServerMatch.Match,
         upRegistered: Boolean = true,
         ntfyBatteryIgnored: Boolean = true,
@@ -22,6 +23,7 @@ class ReceiveSetupItemsTest {
         ntfyServerAids: List<FixAid> = listOf(FixAid.Copy(label = "サーバーURL", value = "https://example.com")),
     ): List<SetupItemUi> = receiveSetupItems(
         ntfyInstalled = ntfyInstalled,
+        otherDistributors = otherDistributors,
         endpointMatch = endpointMatch,
         upRegistered = upRegistered,
         ntfyBatteryIgnored = ntfyBatteryIgnored,
@@ -111,6 +113,24 @@ class ReceiveSetupItemsTest {
         assertEquals(SetupStatus.TODO, unregistered.status)
         assertEquals("登録する", unregistered.action?.label)
         assertNull(unregistered.statusDetail)
+    }
+
+    /** 手順1は ntfy 未導入かつ他のディストリビュータが居るときだけ、採用しない旨を事実として添える。 */
+    @Test
+    fun ntfyInstalledDetailMentionsOtherDistributorsOnlyWhenNtfyMissing() {
+        val withOthers = build(ntfyInstalled = false, otherDistributors = listOf("Sunup", "NextPush"))
+            .byId(ReceiveSetupSteps.NTFY_INSTALLED_ID)
+        assertEquals(SetupStatus.TODO, withOthers.status)
+        assertTrue(withOthers.statusDetail!!.contains("Sunup"))
+        assertTrue(withOthers.statusDetail!!.contains("NextPush"))
+
+        val onlyOthersMissing = build(ntfyInstalled = false).byId(ReceiveSetupSteps.NTFY_INSTALLED_ID)
+        assertNull(onlyOthersMissing.statusDetail)
+
+        val installed = build(ntfyInstalled = true, otherDistributors = listOf("Sunup"))
+            .byId(ReceiveSetupSteps.NTFY_INSTALLED_ID)
+        assertEquals(SetupStatus.DONE, installed.status)
+        assertNull(installed.statusDetail)
     }
 
     /** 手順4は ntfy 未導入なら前提未達（BLOCKED）にし、手順1を参照させる。 */

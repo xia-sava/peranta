@@ -37,6 +37,15 @@ class AndroidSetupProbe(context: Context) {
     fun ntfyInstalled(): Boolean =
         UnifiedPush.getDistributors(appContext).contains(NTFY_PACKAGE)
 
+    /**
+     * ntfy 以外に導入されているディストリビュータの表示名。
+     * これらは自動で採用しないため（[distributorSelection]）、居ることを手順1の事実として示す。
+     */
+    fun otherDistributors(): List<String> =
+        UnifiedPush.getDistributors(appContext)
+            .filterNot { it == NTFY_PACKAGE }
+            .map(::applicationLabelOf)
+
     /** UnifiedPush へ登録済みで受信エンドポイントの払い出しを受けているか。 */
     fun upRegistered(config: PerantaConfig): Boolean =
         UnifiedPush.getAckDistributor(appContext) != null && config.unifiedPushEndpoint != null
@@ -152,6 +161,17 @@ class AndroidSetupProbe(context: Context) {
     /** このアプリのアプリ情報画面を開く（権限変更へ誘導）。 */
     fun openAppDetailsSettings() {
         startFirstResolvable(appDetailsIntent(), genericSettingsIntent())
+    }
+
+    /** インストール済みパッケージの表示名。解決できなければパッケージ名のまま示す。 */
+    private fun applicationLabelOf(packageName: String): String {
+        val packageManager = appContext.packageManager
+        return try {
+            packageManager.getApplicationLabel(packageManager.getApplicationInfo(packageName, 0)).toString()
+        } catch (error: PackageManager.NameNotFoundException) {
+            log.w(error) { "application label not resolvable: $packageName" }
+            packageName
+        }
     }
 
     private fun appDetailsIntent(): Intent =
