@@ -4,14 +4,13 @@ import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.Envelope
 import to.sava.peranta.model.FilePayload
+import to.sava.peranta.model.MAX_CAPTION_BYTES
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.encodeEnvelope
 import to.sava.peranta.model.encodePayload
 import to.sava.peranta.model.newPayloadId
-
-/** 共有された画像・ファイルのキャプションに載せる UTF-8 バイト予算（本文と同じ配分に倣う）。 */
-const val MAX_CAPTION_BYTES: Int = MAX_FORWARDED_TEXT_BYTES
+import to.sava.peranta.model.truncateToUtf8Bytes
 
 /**
  * UnifiedPush が配送元に保証する最小メッセージサイズ（bytes、§4.3）。
@@ -64,7 +63,7 @@ fun buildFilePayload(
 ): FilePayload {
     require(attachments.isNotEmpty()) { "FilePayload requires at least one attachment" }
     val trimmedCaption = caption
-        ?.let { truncateForForwarding(it, MAX_CAPTION_BYTES) }
+        ?.let { truncateToUtf8Bytes(it, MAX_CAPTION_BYTES) }
         ?.takeIf { it.isNotBlank() }
     return FilePayload(
         id = idGen(),
@@ -100,7 +99,7 @@ fun buildFilePayloads(
 ): List<FilePayload> {
     require(attachments.isNotEmpty()) { "FilePayload requires at least one attachment" }
     val cappedCaption = caption
-        ?.let { truncateForForwarding(it, MAX_CAPTION_BYTES) }
+        ?.let { truncateToUtf8Bytes(it, MAX_CAPTION_BYTES) }
         ?.takeIf { it.isNotBlank() }
     // キャプションは JSON エスケープで最大約 2 倍に膨らむため、封緘後サイズで先頭バッチが予算に収まるよう追加で切り詰める。
     val budgetedCaption = cappedCaption?.let {
@@ -151,7 +150,7 @@ private fun fitCaptionWithinBudget(
     var best: String? = null
     while (low <= high) {
         val mid = (low + high) / 2
-        val candidate = truncateForForwarding(caption, mid).takeIf { it.isNotBlank() }
+        val candidate = truncateToUtf8Bytes(caption, mid).takeIf { it.isNotBlank() }
         if (envelopeSizeWith(candidate) <= maxEnvelopeBytes) {
             best = candidate
             low = mid + 1

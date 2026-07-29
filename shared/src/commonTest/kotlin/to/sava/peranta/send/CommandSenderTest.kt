@@ -7,6 +7,7 @@ import to.sava.peranta.crypto.generateKey
 import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
+import to.sava.peranta.model.MAX_REPLY_TEXT_BYTES
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.PresencePayload
 import to.sava.peranta.model.decodeEnvelope

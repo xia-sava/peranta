@@ -68,26 +68,44 @@ data class SentNotification(
     override val expiresAtEpochMillis: Long? = null,
 ) : TimelineItem()
 
+/**
+ * エラーを誘発できる主体（§10.5）。発生回数を誰が握っているかで抑止の単位が変わるため、
+ * 種別ごとの性質を [ErrorKind] の定義側に持たせる。
+ */
+enum class ErrorOrigin {
+    /**
+     * 復号より前の外部入力から生じる。鍵を持たない第三者でも、トピックへ publish するだけで
+     * 任意回数発生させられる。種別ごとに窓 1 件へ抑える対象。
+     */
+    UNTRUSTED_INPUT,
+
+    /**
+     * 自端末の操作、または復号を通った入力（＝共有鍵を持つ自分の端末）から生じる。
+     * 発生回数は利用者の操作に律速されるため、同一文言の連続だけを抑え、別々の失敗はそれぞれ見せる。
+     */
+    LOCAL_OPERATION,
+}
+
 /** エラーの発生種別。 */
 @Serializable
-enum class ErrorKind {
+enum class ErrorKind(val origin: ErrorOrigin) {
     @SerialName("envelopeDecode")
-    ENVELOPE_DECODE,
+    ENVELOPE_DECODE(ErrorOrigin.UNTRUSTED_INPUT),
 
     @SerialName("keyIdMismatch")
-    KEY_ID_MISMATCH,
+    KEY_ID_MISMATCH(ErrorOrigin.UNTRUSTED_INPUT),
 
     @SerialName("decryption")
-    DECRYPTION,
+    DECRYPTION(ErrorOrigin.UNTRUSTED_INPUT),
 
     @SerialName("unknownType")
-    UNKNOWN_TYPE,
+    UNKNOWN_TYPE(ErrorOrigin.UNTRUSTED_INPUT),
 
     @SerialName("commandExecution")
-    COMMAND_EXECUTION,
+    COMMAND_EXECUTION(ErrorOrigin.LOCAL_OPERATION),
 
     @SerialName("other")
-    OTHER,
+    OTHER(ErrorOrigin.LOCAL_OPERATION),
 }
 
 /** 送信失敗・復号失敗等のエラー（自分側の吹き出しとしてエラー文言を表示）。 */

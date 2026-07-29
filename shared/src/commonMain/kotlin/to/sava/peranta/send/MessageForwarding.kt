@@ -5,13 +5,12 @@ import kotlinx.coroutines.CancellationException
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.model.BROADCAST_TARGET
+import to.sava.peranta.model.MAX_MESSAGE_TEXT_BYTES
 import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.model.nowEpochMillis
+import to.sava.peranta.model.truncateToUtf8Bytes
 import to.sava.peranta.net.NtfyClient
-
-/** メッセージ本文の UTF-8 バイト予算。通知本文と同じ配分（§4.1）。 */
-const val MAX_MESSAGE_TEXT_BYTES: Int = MAX_FORWARDED_TEXT_BYTES
 
 /** メッセージ送信に失敗したときにタイムラインへ出す文言。 */
 const val MESSAGE_SEND_FAILED_MESSAGE: String = "メッセージの送信に失敗しました"
@@ -28,7 +27,7 @@ fun buildMessagePayload(
     from = deviceId,
     to = BROADCAST_TARGET,
     sentAtEpochMillis = now,
-    text = truncateForForwarding(text, MAX_MESSAGE_TEXT_BYTES),
+    text = truncateToUtf8Bytes(text, MAX_MESSAGE_TEXT_BYTES),
     fromName = deviceName,
 )
 

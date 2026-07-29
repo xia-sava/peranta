@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import kotlinx.coroutines.CancellationException
 import to.sava.peranta.model.AttachmentRef
+import to.sava.peranta.receive.normalizeFullText
 
 /** 自動展開する本文のタグ接頭辞（末尾に blobId を付ける）。 */
 const val TAG_FULL_TEXT_PREFIX: String = "full-text-"
@@ -27,6 +28,8 @@ class FullTextUi(
 /**
  * 切り詰めプレビュー [preview] を表示し、表示された時点で [ref] の全文添付を自動取得して差し替える（§4.3）。
  * ボタンは無く、コンポーズされると取得が始まる。取得中・取得失敗はプレビューのまま据え置く。
+ * 取得した全文はインライン本文と同じく [normalizeFullText] を通す。blob は payload とは別経路で届くため、
+ * 受信の関門（`normalizeReceivedPayload`）を通っていない。
  */
 @Composable
 internal fun ExpandableText(
@@ -38,7 +41,7 @@ internal fun ExpandableText(
     var expanded by remember(ref.blobId) { mutableStateOf<String?>(null) }
     LaunchedEffect(ref.blobId) {
         expanded = try {
-            fullText.fetchFullText(ref)
+            fullText.fetchFullText(ref)?.let(::normalizeFullText)
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {

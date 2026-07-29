@@ -10,6 +10,7 @@ import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.crypto.generateKey
 import to.sava.peranta.model.BROADCAST_TARGET
+import to.sava.peranta.model.MAX_MESSAGE_TEXT_BYTES
 import to.sava.peranta.net.FakeNtfyClient
 import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyConnectionState

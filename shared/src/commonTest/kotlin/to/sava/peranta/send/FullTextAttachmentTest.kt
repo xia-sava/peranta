@@ -10,6 +10,8 @@ import to.sava.peranta.filter.FilterMode
 import io.ktor.utils.io.ByteReadChannel
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
+import to.sava.peranta.model.FULL_TEXT_PREVIEW_BYTES
+import to.sava.peranta.model.MAX_FORWARDED_TEXT_BYTES
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload

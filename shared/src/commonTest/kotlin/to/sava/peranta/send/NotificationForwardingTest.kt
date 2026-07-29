@@ -3,6 +3,8 @@ package to.sava.peranta.send
 import to.sava.peranta.filter.FilterMode
 import to.sava.peranta.filter.FilterRule
 import to.sava.peranta.filter.RuleAction
+import to.sava.peranta.model.MAX_ACTION_LABEL_BYTES
+import to.sava.peranta.model.MAX_FORWARDED_ACTIONS
 import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SemanticActionKind

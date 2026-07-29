@@ -27,6 +27,7 @@ import to.sava.peranta.net.NtfyEvent
 import to.sava.peranta.platform.topicForLog
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
+import to.sava.peranta.timeline.ErrorSuppressor
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
@@ -52,6 +53,14 @@ private const val DEDUPE_CAPACITY = 1000
  *
  * [commandExecutor] を渡した端末では、自分宛で未失効の command ペイロードを実行する（§3.4）。
  * null の端末（コマンド実行に対応しない受信専用端末など）は command を無視する。
+ *
+ * 復号前の入力から生じるエラーは鍵を持たない第三者でも任意回数起こせるため、タイムラインへの
+ * 追記は [ErrorSuppressor] の時間枠で抑える（§10.5）。抑えるのは 2 件目以降だけで、
+ * 各枠の 1 件目は必ず出す。
+ *
+ * 復号を通った payload は、表示・永続化の前に [normalizeReceivedPayload] でワイヤ形式の約束へ
+ * 収め直す（§4）。上限超過は拒否ではなく切り詰めで受け入れるため、この上限を知らない旧バージョンの
+ * 送信端末の通知も消えない。
  */
 class ReceivePipeline(
     private val ntfy: NtfyClient?,
@@ -77,6 +86,9 @@ class ReceivePipeline(
 
     /** 受信済み payload.id の集合。FIFO で [DEDUPE_CAPACITY] に丸める。 */
     private val seenIds = LinkedHashSet<String>()
+
+    /** エラー追記の抑止窓（§10.5）。種別ごとの性質は [ErrorKind.origin] が持つ。 */
+    private val errorSuppressor = ErrorSuppressor()
 
     /**
      * 保存済み履歴を読み込み、タイムラインと重複排除の初期状態を作る。購読は行わない。
@@ -112,33 +124,35 @@ class ReceivePipeline(
         val envelope = try {
             decodeEnvelope(event.message)
         } catch (e: SerializationException) {
-            recordError(ErrorKind.ENVELOPE_DECODE, "エンベロープの解析に失敗しました", cause = e)
+            recordError(ErrorKind.ENVELOPE_DECODE, "エンベロープの解析に失敗しました", causeLabel = e::class.simpleName)
             return
         }
 
-        val payload = try {
+        val decrypted = try {
             cipher.open(envelope)
         } catch (e: KeyIdMismatchException) {
-            recordError(ErrorKind.KEY_ID_MISMATCH, KEY_MISMATCH_MESSAGE, cause = e)
+            recordError(ErrorKind.KEY_ID_MISMATCH, KEY_MISMATCH_MESSAGE, causeLabel = e::class.simpleName)
             return
         } catch (e: DecryptionException) {
-            recordError(ErrorKind.DECRYPTION, "通知の復号に失敗しました", cause = e)
+            recordError(ErrorKind.DECRYPTION, "通知の復号に失敗しました", causeLabel = e::class.simpleName)
             return
         } catch (e: SerializationException) {
             recordError(ErrorKind.UNKNOWN_TYPE, "未知の通知種別を受信しました", causeLabel = e::class.simpleName)
             return
         }
-        log.d { "decrypted payload id=${payload.id} type=${payload::class.simpleName}" }
+        log.d { "decrypted payload id=${decrypted.id} type=${decrypted::class.simpleName}" }
 
-        if (!isForMe(payload)) {
-            log.d { "dropping payload id=${payload.id}: not addressed to us (to=${payload.to})" }
+        if (!isForMe(decrypted)) {
+            log.d { "dropping payload id=${decrypted.id}: not addressed to us (to=${decrypted.to})" }
             return
         }
 
-        if (isExpired(payload)) {
-            log.i { "dropping payload id=${payload.id}: expired" }
+        if (isExpired(decrypted)) {
+            log.i { "dropping payload id=${decrypted.id}: expired" }
             return
         }
+
+        val payload = normalizeReceivedPayload(decrypted)
 
         when (payload) {
             is NotificationPayload, is SmsPayload -> {
@@ -189,7 +203,11 @@ class ReceivePipeline(
             dispatchCommand(executor, payload)
             log.i { "command executed id=${payload.id} command=${payload.command}" }
         } catch (e: CommandExecutionException) {
-            recordError(ErrorKind.COMMAND_EXECUTION, e.message ?: "コマンドの実行に失敗しました", cause = e)
+            recordError(
+                ErrorKind.COMMAND_EXECUTION,
+                e.message ?: "コマンドの実行に失敗しました",
+                causeLabel = e::class.simpleName,
+            )
         }
     }
 
@@ -382,21 +400,31 @@ class ReceivePipeline(
 
     private fun List<AttachmentRef>.filterNotTextKind() = filterNot { it.kind == AttachmentKind.TEXT }
 
+    /**
+     * エラーをタイムラインへ載せる。外部から任意回数誘発できる種別が際限なく積まれないよう、
+     * [errorSuppressor] の時間枠を通してから追記する（§10.5）。抑止した分は次に通す 1 件のログへ
+     * 件数として畳み込み、追記そのものは行わない。
+     * 例外は種別名だけを残す。ktor の例外メッセージには接続先 URL（＝topic）が載るため、
+     * スタックトレースごとログへ流さない（§16）。
+     */
     private suspend fun recordError(
         kind: ErrorKind,
         message: String,
-        cause: Throwable? = null,
         causeLabel: String? = null,
     ) {
-        if (cause != null) {
-            log.w(cause) { "receive error [$kind]: $message" }
-        } else {
-            log.w { "receive error [$kind]: $message${causeLabel?.let { " ($it)" } ?: ""}" }
+        val at = now()
+        if (!errorSuppressor.allows(kind, message, at)) {
+            return
+        }
+        val suppressed = errorSuppressor.takeSuppressedCount(kind, message)
+        log.w {
+            "receive error [$kind]: $message${causeLabel?.let { " ($it)" } ?: ""}" +
+                if (suppressed > 0) " (suppressed $suppressed since last report)" else ""
         }
         record(
             ErrorItem(
                 id = newPayloadId(),
-                timestampEpochMillis = now(),
+                timestampEpochMillis = at,
                 message = message,
                 kind = kind,
             ),

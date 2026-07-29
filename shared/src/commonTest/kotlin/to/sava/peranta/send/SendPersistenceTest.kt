@@ -7,9 +7,11 @@ import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BlobEnc
 import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.FilePayload
+import to.sava.peranta.model.MAX_FORWARDED_TEXT_BYTES
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
+import to.sava.peranta.model.truncateToUtf8Bytes
 import to.sava.peranta.net.NtfyPublishException
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -140,9 +142,9 @@ class SendPersistenceTest {
     /** 予算以下はそのまま、超過分は省略記号付きで UTF-8 バイト予算内に収める。 */
     @Test
     fun truncationRespectsByteBudget() {
-        assertEquals("short", truncateForForwarding("short", MAX_FORWARDED_TEXT_BYTES))
+        assertEquals("short", truncateToUtf8Bytes("short", MAX_FORWARDED_TEXT_BYTES))
         val long = "あ".repeat(MAX_FORWARDED_TEXT_BYTES)
-        val truncated = truncateForForwarding(long, MAX_FORWARDED_TEXT_BYTES)
+        val truncated = truncateToUtf8Bytes(long, MAX_FORWARDED_TEXT_BYTES)
         assertTrue(truncated.encodeToByteArray().size <= MAX_FORWARDED_TEXT_BYTES)
         assertTrue(truncated.endsWith("…"))
     }
@@ -151,7 +153,7 @@ class SendPersistenceTest {
     @Test
     fun truncationCountsTwoByteChars() {
         val text = "é".repeat(20)
-        val truncated = truncateForForwarding(text, maxBytes = 15)
+        val truncated = truncateToUtf8Bytes(text, maxBytes = 15)
         assertTrue(truncated.encodeToByteArray().size <= 15)
         assertTrue(truncated.endsWith("…"))
     }
@@ -161,7 +163,7 @@ class SendPersistenceTest {
     fun truncationKeepsSurrogatePairsIntact() {
         val emoji = "😀"
         val text = emoji.repeat(100)
-        val truncated = truncateForForwarding(text, maxBytes = 25)
+        val truncated = truncateToUtf8Bytes(text, maxBytes = 25)
         assertTrue(truncated.encodeToByteArray().size <= 25)
         assertTrue(truncated.endsWith("…"))
         val withoutEllipsis = truncated.removeSuffix("…")

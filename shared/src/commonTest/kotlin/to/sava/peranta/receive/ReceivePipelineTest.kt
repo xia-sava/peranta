@@ -11,6 +11,9 @@ import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.Envelope
 import to.sava.peranta.model.FilePayload
+import to.sava.peranta.model.MAX_FORWARDED_ACTIONS
+import to.sava.peranta.model.MAX_FORWARDED_TEXT_BYTES
+import to.sava.peranta.model.MAX_FORWARDED_TITLE_BYTES
 import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
@@ -651,5 +654,46 @@ class ReceivePipelineTest {
         p.handleEvent(NtfyEvent("e", now, "t", "peranta-selftest:abc"))
         val error = p.items.value.single() as ErrorItem
         assertEquals(ErrorKind.ENVELOPE_DECODE, error.kind)
+    }
+
+    /**
+     * ワイヤ形式の上限を破った payload は捨てられず、切り詰められて表示と永続の両方に届く（§4）。
+     * 上限を知らない旧バージョンの送信端末から届いた通知が、受信側で黙って消えないことの表明。
+     */
+    @Test
+    fun payloadBreakingWireLimitsStillReachesTimeline() = runTest {
+        val store = store()
+        val p = pipeline(store)
+        val oversized = notification().copy(
+            title = "あ".repeat(5000),
+            text = "い".repeat(5000),
+            actions = (1..1000).map { "アクション$it" },
+        )
+
+        p.handleEvent(eventFor(oversized))
+
+        val shown = (p.items.value.single() as ReceivedNotification).payload as NotificationPayload
+        assertEquals("n1", shown.id)
+        assertTrue(shown.title.isNotBlank())
+        assertTrue(shown.title.encodeToByteArray().size <= MAX_FORWARDED_TITLE_BYTES)
+        assertTrue(shown.text.encodeToByteArray().size <= MAX_FORWARDED_TEXT_BYTES)
+        assertEquals(MAX_FORWARDED_ACTIONS, shown.actions.size)
+        assertEquals(listOf("n1"), store.loadAll().map { it.id })
+    }
+
+    /** 表示へ渡る前に制御文字・双方向制御文字が落ちる（§4）。永続にも正規化後の値が残る。 */
+    @Test
+    fun controlCharactersAreStrippedBeforeDisplayAndPersistence() = runTest {
+        val store = store()
+        val p = pipeline(store)
+        val spoofed = notification().copy(title = "銀行${Char(0x202E)}gpj.exe", text = "\n\n本文")
+
+        p.handleEvent(eventFor(spoofed))
+
+        val shown = (p.items.value.single() as ReceivedNotification).payload as NotificationPayload
+        val stored = (store.loadAll().single() as ReceivedNotification).payload as NotificationPayload
+        assertEquals("銀行gpj.exe", shown.title)
+        assertEquals("本文", shown.text)
+        assertEquals("銀行gpj.exe", stored.title)
     }
 }

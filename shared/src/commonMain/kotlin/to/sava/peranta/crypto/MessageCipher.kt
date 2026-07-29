@@ -63,9 +63,11 @@ class MessageCipher(key: ByteArray, val keyId: String) {
             throw KeyIdMismatchException(expected = keyId, actual = envelope.keyId)
         }
         val plaintext = try {
-            val nonce = Base64.decode(envelope.nonce)
-            val ciphertext = Base64.decode(envelope.ciphertext)
-            cipher.decryptWithIv(nonce, ciphertext, associatedData(envelope.v, envelope.keyId))
+            cipher.decryptWithIv(
+                checkedNonce(envelope.nonce),
+                Base64.decode(envelope.ciphertext),
+                associatedData(envelope.v, envelope.keyId),
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -73,6 +75,15 @@ class MessageCipher(key: ByteArray, val keyId: String) {
         }
         return decodePayload(plaintext.decodeToString())
     }
+
+    /**
+     * nonce を復号し、長さを確かめる。AES-GCM は 12 バイト以外の IV も受理する（GHASH で J0 を導出する）ため、
+     * 受信側が確かめないと「同一鍵の下で nonce を再利用しない」という前提が静かに崩れても気づけない。
+     */
+    private fun checkedNonce(nonceBase64: String): ByteArray =
+        Base64.decode(nonceBase64).also {
+            require(it.size == NONCE_SIZE) { "nonce must be $NONCE_SIZE bytes, was ${it.size}" }
+        }
 
     private fun associatedData(v: Int, keyId: String): ByteArray =
         "peranta:v=$v:keyId=$keyId".encodeToByteArray()

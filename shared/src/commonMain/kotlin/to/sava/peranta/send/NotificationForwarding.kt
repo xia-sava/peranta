@@ -10,12 +10,19 @@ import to.sava.peranta.filter.isOtpNotification
 import to.sava.peranta.filter.payloadForPersistence
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BROADCAST_TARGET
+import to.sava.peranta.model.FULL_TEXT_PREVIEW_BYTES
+import to.sava.peranta.model.MAX_ACTION_LABEL_BYTES
+import to.sava.peranta.model.MAX_FORWARDED_ACTIONS
+import to.sava.peranta.model.MAX_FORWARDED_TEXT_BYTES
+import to.sava.peranta.model.MAX_FORWARDED_TITLE_BYTES
 import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.newPayloadId
+import to.sava.peranta.model.truncateToUtf8Bytes
+import to.sava.peranta.model.utf8ByteLength
 
 /** OTP 通知に付ける失効までの猶予（§4）。 */
 const val OTP_TTL_MILLIS: Long = 5 * 60 * 1000L
@@ -25,76 +32,6 @@ const val SMS_TTL_MILLIS: Long = 10 * 60 * 1000L
 
 /** 伏せ字適用時にタイトル・本文へ入れる文字列。 */
 const val REDACTED_PLACEHOLDER: String = "（内容は伏せられています）"
-
-/**
- * 転送で載せるタイトルの UTF-8 バイト予算。
- * ntfy の message 上限（既定 4096 bytes）に封筒・base64 膨張（4/3）と各種メタの
- * オーバーヘッドを見込み、タイトル・本文の平文合計が上限に収まるよう配分する。
- */
-const val MAX_FORWARDED_TITLE_BYTES: Int = 300
-
-/**
- * 転送で載せる本文の UTF-8 バイト予算。
- * base64 膨張（4/3）と封筒・JSON フィールドのオーバーヘッドを見込み、
- * タイトルと合わせた平文ペイロードが暗号化後に 4096 bytes へ収まるよう抑える。
- */
-const val MAX_FORWARDED_TEXT_BYTES: Int = 2000
-
-/**
- * 全文添付を作るときにインラインへ残すプレビュー本文の UTF-8 バイト予算（§4.3）。
- * これを超える本文は全文を暗号化 blob として別送し、インラインはこの予算で切り詰めたプレビューにする。
- */
-const val FULL_TEXT_PREVIEW_BYTES: Int = 512
-
-/** 転送するアクションの個数上限。通知 UI の実用上限に余裕を持たせた値。 */
-const val MAX_FORWARDED_ACTIONS: Int = 5
-
-/** アクション名 1 個あたりの UTF-8 バイト予算。 */
-const val MAX_ACTION_LABEL_BYTES: Int = 100
-
-/** 切り詰め時に末尾へ付ける省略記号。 */
-private const val TRUNCATION_ELLIPSIS: String = "…"
-
-/** [value] の UTF-8 バイト長を返す。 */
-private fun utf8ByteLength(value: String): Int = value.encodeToByteArray().size
-
-/** コードポイント [codePoint] を UTF-8 で表したときのバイト数を返す。 */
-private fun utf8ByteWidth(codePoint: Int): Int = when {
-    codePoint < 0x80 -> 1
-    codePoint < 0x800 -> 2
-    codePoint < 0x10000 -> 3
-    else -> 4
-}
-
-/** サロゲートペア [high]/[low] を 1 つのコードポイント値へ合成する。 */
-private fun combineSurrogates(high: Char, low: Char): Int =
-    0x10000 + ((high.code - 0xD800) shl 10) + (low.code - 0xDC00)
-
-/**
- * [value] を UTF-8 で [maxBytes] バイト以内に収める。超過時はコードポイント境界で切り、
- * 末尾を省略記号にする。サロゲートペア（絵文字等）を分断しない。
- */
-fun truncateForForwarding(value: String, maxBytes: Int): String {
-    if (utf8ByteLength(value) <= maxBytes) return value
-    val budget = maxBytes - utf8ByteLength(TRUNCATION_ELLIPSIS)
-    val builder = StringBuilder()
-    var usedBytes = 0
-    var index = 0
-    while (index < value.length) {
-        val current = value[index]
-        val isSurrogatePair = current.isHighSurrogate() &&
-            index + 1 < value.length &&
-            value[index + 1].isLowSurrogate()
-        val codePoint = if (isSurrogatePair) combineSurrogates(current, value[index + 1]) else current.code
-        val charWidth = if (isSurrogatePair) 2 else 1
-        val byteWidth = utf8ByteWidth(codePoint)
-        if (usedBytes + byteWidth > budget) break
-        repeat(charWidth) { builder.append(value[index + it]) }
-        usedBytes += byteWidth
-        index += charWidth
-    }
-    return builder.append(TRUNCATION_ELLIPSIS).toString()
-}
 
 /** 捕捉した通知から取り出した素の値。sbn 抽出とフィルタ判定を分離するための入力。 */
 data class NotificationInput(
@@ -164,12 +101,12 @@ fun prepareForwardedNotification(
 
     val rawTitle = if (decision.redact) REDACTED_PLACEHOLDER else input.title
     val rawText = if (decision.redact) REDACTED_PLACEHOLDER else input.text
-    val title = truncateForForwarding(rawTitle, MAX_FORWARDED_TITLE_BYTES)
-    val text = truncateForForwarding(rawText, MAX_FORWARDED_TEXT_BYTES)
+    val title = truncateToUtf8Bytes(rawTitle, MAX_FORWARDED_TITLE_BYTES)
+    val text = truncateToUtf8Bytes(rawText, MAX_FORWARDED_TEXT_BYTES)
     if (title.length < rawTitle.length || text.length < rawText.length) {
         log.d { "forwarded notification truncated for ${input.packageName}" }
     }
-    val actions = input.actions.take(MAX_FORWARDED_ACTIONS).map { truncateForForwarding(it, MAX_ACTION_LABEL_BYTES) }
+    val actions = input.actions.take(MAX_FORWARDED_ACTIONS).map { truncateToUtf8Bytes(it, MAX_ACTION_LABEL_BYTES) }
     val actionDetails = input.actionDetails.take(MAX_FORWARDED_ACTIONS)
 
     return PreparedForwardedNotification(
@@ -213,7 +150,7 @@ fun buildSmsPayload(
     sentAtEpochMillis = now,
     senderNumber = senderNumber,
     senderName = senderName,
-    text = truncateForForwarding(text, MAX_FORWARDED_TEXT_BYTES),
+    text = truncateToUtf8Bytes(text, MAX_FORWARDED_TEXT_BYTES),
     postedAtEpochMillis = now,
     expiresAtEpochMillis = now + SMS_TTL_MILLIS,
     priority = Priority.HIGH,
@@ -298,7 +235,7 @@ suspend fun attachFullTextIfNeeded(
     if (!shouldAttachFullText(payload, fullText, attachFullTextWhenTruncated, persistSensitiveHistory)) return payload
     val ref = uploadFullText(fullText)
     return payload.copy(
-        text = truncateForForwarding(fullText, FULL_TEXT_PREVIEW_BYTES),
+        text = truncateToUtf8Bytes(fullText, FULL_TEXT_PREVIEW_BYTES),
         attachments = payload.attachments + ref,
     )
 }
@@ -317,7 +254,7 @@ suspend fun attachFullTextIfNeeded(
     if (!shouldAttachFullText(payload, fullText, attachFullTextWhenTruncated, persistSensitiveHistory)) return payload
     val ref = uploadFullText(fullText)
     return payload.copy(
-        text = truncateForForwarding(fullText, FULL_TEXT_PREVIEW_BYTES),
+        text = truncateToUtf8Bytes(fullText, FULL_TEXT_PREVIEW_BYTES),
         attachments = payload.attachments + ref,
     )
 }

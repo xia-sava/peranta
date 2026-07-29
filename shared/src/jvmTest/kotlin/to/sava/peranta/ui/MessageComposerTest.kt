@@ -15,7 +15,7 @@ import androidx.compose.ui.test.withKeyDown
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import to.sava.peranta.blob.TransferProgress
-import to.sava.peranta.send.MAX_MESSAGE_TEXT_BYTES
+import to.sava.peranta.model.MAX_MESSAGE_TEXT_BYTES
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

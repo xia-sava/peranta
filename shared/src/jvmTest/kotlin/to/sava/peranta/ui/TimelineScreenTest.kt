@@ -33,7 +33,7 @@ import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.SemanticActionKind
 import to.sava.peranta.model.nowEpochMillis
-import to.sava.peranta.send.MAX_REPLY_TEXT_BYTES
+import to.sava.peranta.model.MAX_REPLY_TEXT_BYTES
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.ReceivedMessage

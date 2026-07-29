@@ -38,7 +38,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import to.sava.peranta.blob.TransferProgress
-import to.sava.peranta.send.MAX_MESSAGE_TEXT_BYTES
+import to.sava.peranta.model.MAX_MESSAGE_TEXT_BYTES
 
 /** composer 入力欄のタグ。 */
 const val TAG_COMPOSER_INPUT: String = "composer-input"

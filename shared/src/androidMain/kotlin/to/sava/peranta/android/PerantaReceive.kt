@@ -30,6 +30,7 @@ import to.sava.peranta.send.CommandSender
 import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
+import to.sava.peranta.timeline.ErrorSuppressor
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineItem
@@ -41,9 +42,6 @@ import to.sava.peranta.ui.shell.RosterUi
 
 /** イベントに詰める固定 topic ラベル。エンドポイント URL は秘匿するため運搬に含めない（§16）。 */
 private const val EVENT_TOPIC_LABEL = "unifiedpush"
-
-/** 同一内容のエラーを連続で重複追記しないための抑止時間枠。 */
-private const val ERROR_DEDUPE_WINDOW_MILLIS: Long = 60 * 1000L
 
 /**
  * Android 受信側のプロセス内シングルトン。UnifiedPush のコールバックから駆動される。
@@ -59,7 +57,7 @@ object PerantaReceive {
     private val mutex = Mutex()
     private var pipeline: ReceivePipeline? = null
     private var pipelineConfigKey: PipelineKey? = null
-    private val recentErrors = mutableMapOf<String, Long>()
+    private val errorSuppressor = ErrorSuppressor()
     private val commandScope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val httpClient by lazy { createNtfyHttpClient() }
 
@@ -131,29 +129,23 @@ object PerantaReceive {
 
     /**
      * 登録などタイムライン処理の外で生じたエラーをタイムラインへ反映する（§10.5）。
-     * 画面回転などで同じエラーが連続して積まれないよう、直近の同一メッセージは抑止する。
+     * 画面回転などで同じエラーが連続して積まれないよう、抑止は受信中核と同じ [ErrorSuppressor] に委ねる。
      */
     suspend fun reportError(context: Context, message: String) {
         mutex.withLock {
-            if (isRecentDuplicateError(message, nowEpochMillis())) {
+            val at = nowEpochMillis()
+            if (!errorSuppressor.allows(ErrorKind.OTHER, message, at)) {
                 log.i { "suppressing duplicate error: $message" }
                 return
             }
             val item = ErrorItem(
                 id = newPayloadId(),
-                timestampEpochMillis = nowEpochMillis(),
+                timestampEpochMillis = at,
                 message = message,
                 kind = ErrorKind.OTHER,
             )
             PerantaSend.timelineFeed.record(item)
         }
-    }
-
-    private fun isRecentDuplicateError(message: String, at: Long): Boolean {
-        recentErrors.entries.removeAll { at - it.value > ERROR_DEDUPE_WINDOW_MILLIS }
-        val previous = recentErrors[message]
-        recentErrors[message] = at
-        return previous != null && at - previous <= ERROR_DEDUPE_WINDOW_MILLIS
     }
 
     private suspend fun pipelineLocked(

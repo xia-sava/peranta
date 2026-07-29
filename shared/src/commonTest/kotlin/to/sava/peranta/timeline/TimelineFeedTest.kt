@@ -195,4 +195,75 @@ class TimelineFeedTest {
 
         assertTrue(feed.items.value.isEmpty())
     }
+
+    /** 在メモリのタイムラインは上限で頭打ちになり、超えた分は古い順に落ちる。 */
+    @Test
+    fun itemsAreCappedAtMaxItems() = runTest {
+        val feed = TimelineFeed(store(), maxItems = 3)
+
+        repeat(10) { feed.record(notification("n$it", 100L + it)) }
+
+        assertEquals(listOf("n7", "n8", "n9"), feed.items.value.map { it.id })
+    }
+
+    /** load も同じ上限を適用し、履歴が上限を超えていても在メモリは膨らまない。 */
+    @Test
+    fun loadIsCappedAtMaxItems() = runTest {
+        val store = store()
+        repeat(10) { store.append(notification("n$it", 100L + it)) }
+        val feed = TimelineFeed(store, maxItems = 3)
+
+        feed.load(now = 1_000)
+
+        assertEquals(listOf("n7", "n8", "n9"), feed.items.value.map { it.id })
+    }
+
+    /** 起動時の prune を通っていれば、稼働中も一定件数ごとに同じ条件で永続側が剪定される。 */
+    @Test
+    fun storeIsPrunedWhileRunningWithTheStartupPolicy() = runTest {
+        val calls = mutableListOf<Pair<Int, Long?>>()
+        val store = object : TimelineStore {
+            override suspend fun append(item: TimelineItem) {}
+            override suspend fun loadAll(): List<TimelineItem> = emptyList()
+            override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) {
+                calls += maxItems to maxAgeMillis
+            }
+        }
+        val feed = TimelineFeed(store)
+        feed.prune(maxItems = 500, now = 0, maxAgeMillis = 42)
+
+        repeat(400) { feed.record(notification("n$it", 100L + it)) }
+
+        assertEquals(3, calls.size)
+        assertTrue(calls.all { it == 500 to 42L })
+    }
+
+    /** 起動時の prune を通っていなければ、稼働中に永続側の剪定は走らない。 */
+    @Test
+    fun storeIsNotPrunedWithoutStartupPrune() = runTest {
+        var pruneCalls = 0
+        val store = object : TimelineStore {
+            override suspend fun append(item: TimelineItem) {}
+            override suspend fun loadAll(): List<TimelineItem> = emptyList()
+            override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) {
+                pruneCalls++
+            }
+        }
+        val feed = TimelineFeed(store)
+
+        repeat(400) { feed.record(notification("n$it", 100L + it)) }
+
+        assertEquals(0, pruneCalls)
+    }
+
+    /** 上限を超える追記でも、その 1 件は表示に載る（新しいものが落ちない）。 */
+    @Test
+    fun newestItemSurvivesTheCap() = runTest {
+        val feed = TimelineFeed(store(), maxItems = 1)
+
+        feed.record(notification("old", 100))
+        feed.record(notification("new", 200))
+
+        assertEquals(listOf("new"), feed.items.value.map { it.id })
+    }
 }

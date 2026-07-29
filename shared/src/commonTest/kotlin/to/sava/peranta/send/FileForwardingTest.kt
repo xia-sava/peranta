@@ -4,6 +4,7 @@ import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.BlobEnc
+import to.sava.peranta.model.MAX_CAPTION_BYTES
 import to.sava.peranta.model.Priority
 import kotlin.test.Test
 import kotlin.test.assertEquals
