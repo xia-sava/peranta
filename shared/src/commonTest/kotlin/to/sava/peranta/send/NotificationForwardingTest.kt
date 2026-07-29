@@ -6,6 +6,7 @@ import to.sava.peranta.filter.RuleAction
 import to.sava.peranta.model.MAX_ACTION_LABEL_BYTES
 import to.sava.peranta.model.MAX_FORWARDED_ACTIONS
 import to.sava.peranta.model.NotificationActionDetail
+import to.sava.peranta.model.NotificationVisibility
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SemanticActionKind
 import kotlin.test.Test
@@ -19,6 +20,7 @@ class NotificationForwardingTest {
         packageName: String = "com.example.bank",
         title: String = "Verification",
         text: String = "your code is 123456",
+        visibility: NotificationVisibility = NotificationVisibility.PRIVATE,
     ) = NotificationInput(
         packageName = packageName,
         appName = "Bank",
@@ -27,7 +29,21 @@ class NotificationForwardingTest {
         notificationKey = "0|$packageName|1|null|10",
         actions = listOf("アーカイブ"),
         postedAtEpochMillis = 1000,
+        visibility = visibility,
     )
+
+    /** 元通知のロック画面可視性を payload へ載せる。受信側がこの範囲を超えて表示しないため。 */
+    @Test
+    fun carriesLockScreenVisibility() {
+        val payload = buildNotificationPayload(
+            input(visibility = NotificationVisibility.SECRET),
+            mode = FilterMode.DENYLIST,
+            rules = emptyList(),
+            deviceId = "phone",
+            now = 2000,
+        )!!
+        assertEquals(NotificationVisibility.SECRET, payload.visibility)
+    }
 
     /** 転送対象の通知は宛先を全端末にした NotificationPayload になる。 */
     @Test

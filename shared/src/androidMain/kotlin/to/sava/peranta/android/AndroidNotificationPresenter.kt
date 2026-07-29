@@ -13,6 +13,7 @@ import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import co.touchlab.kermit.Logger
+import to.sava.peranta.model.NotificationVisibility
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.receive.NotificationChannelKind
 import to.sava.peranta.receive.NotificationDisplay
@@ -104,12 +105,34 @@ class AndroidNotificationPresenter(
             .setOnlyAlertOnce(silent)
             .setSmallIcon(R.drawable.ic_notification)
             .setAutoCancel(true)
+            .applyLockScreenVisibility(display, channelId)
             .applyContentIntent(notificationId, display.id)
             .applyExpiry(display)
             .applyOpenUrlAction(display)
             .build()
         notify(notificationId, notification)
     }
+
+    /**
+     * 元通知のロック画面可視性を引き継ぐ（§3.2）。伏せる指定（[NotificationVisibility.PRIVATE]）の
+     * ときは発信元だけを載せた代替を添え、伏せられた状態でも何からの通知かは判るようにする。
+     */
+    private fun Notification.Builder.applyLockScreenVisibility(
+        display: NotificationDisplay,
+        channelId: String,
+    ): Notification.Builder =
+        setVisibility(androidVisibilityOf(display.visibility)).also {
+            if (display.visibility == NotificationVisibility.PRIVATE) {
+                it.setPublicVersion(redactedNotification(display, channelId))
+            }
+        }
+
+    /** ロック画面で本文を伏せるときに代わりに出す通知。発信元だけを載せ、件名も本文も持たない。 */
+    private fun redactedNotification(display: NotificationDisplay, channelId: String): Notification =
+        Notification.Builder(context, channelId)
+            .setContentTitle(display.source ?: REDACTED_TITLE)
+            .setSmallIcon(R.drawable.ic_notification)
+            .build()
 
     /** 画像が届いていれば大きな画像で、無ければ本文の全文表示で組む。 */
     private fun styleFor(display: NotificationDisplay, image: Bitmap?): Notification.Style =
@@ -227,6 +250,9 @@ class AndroidNotificationPresenter(
         private const val CHANNEL_LOW = "peranta-low"
         private const val CHANNEL_ERROR = "peranta-error"
         private const val ERROR_TITLE = "Peranta 受信エラー"
+
+        /** 発信元が判らない通知をロック画面で伏せるときの代替の件名。 */
+        private const val REDACTED_TITLE = "通知が届いています"
 
         /** 「開く」アクションのラベル（§3.2）。 */
         private const val OPEN_ACTION_LABEL = "開く"

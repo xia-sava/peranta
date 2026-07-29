@@ -4,6 +4,7 @@ import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
+import to.sava.peranta.model.NotificationVisibility
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.timeline.ReceivedMessage
@@ -27,6 +28,7 @@ class NotificationDisplayTest {
         appName: String = "Bank",
         priority: Priority = Priority.HIGH,
         expiresAt: Long? = 5_000L,
+        visibility: NotificationVisibility? = null,
     ) = NotificationPayload(
         id = "n1",
         from = "phone",
@@ -40,6 +42,7 @@ class NotificationDisplayTest {
         postedAtEpochMillis = 900L,
         expiresAtEpochMillis = expiresAt,
         priority = priority,
+        visibility = visibility,
     )
 
     /** 通知 payload はタイトル・本文・優先度・失効時刻を表示内容へ写す。 */
@@ -201,6 +204,44 @@ class NotificationDisplayTest {
     @Test
     fun messageBlankBodyFallsBackToConstant() {
         assertEquals("（本文なし）", displayFor(message(text = "")).body)
+    }
+
+    /** 元通知のロック画面可視性は表示内容へそのまま写る。 */
+    @Test
+    fun notificationCarriesVisibility() {
+        assertEquals(
+            NotificationVisibility.PUBLIC,
+            displayFor(received(notification(visibility = NotificationVisibility.PUBLIC)))!!.visibility,
+        )
+        assertEquals(
+            NotificationVisibility.SECRET,
+            displayFor(received(notification(visibility = NotificationVisibility.SECRET)))!!.visibility,
+        )
+    }
+
+    /** 可視性を運ばない（旧バージョン由来の）通知は伏せる側の既定になる。 */
+    @Test
+    fun notificationWithoutVisibilityDefaultsToPrivate() {
+        assertEquals(
+            NotificationVisibility.PRIVATE,
+            displayFor(received(notification(visibility = null)))!!.visibility,
+        )
+    }
+
+    /** SMS と受信メッセージは元通知を持たないため、常に伏せる側で表示する。 */
+    @Test
+    fun smsAndMessageAreAlwaysPrivate() {
+        val sms = SmsPayload(
+            id = "s4",
+            from = "phone",
+            to = "*",
+            sentAtEpochMillis = 900L,
+            senderNumber = "+81900000000",
+            text = "コードは 999999 です",
+            postedAtEpochMillis = 900L,
+        )
+        assertEquals(NotificationVisibility.PRIVATE, displayFor(received(sms))!!.visibility)
+        assertEquals(NotificationVisibility.PRIVATE, displayFor(message(fromName = "phone")).visibility)
     }
 
     /** 優先度は対応する通知チャネル区分へ一対一で写る。 */

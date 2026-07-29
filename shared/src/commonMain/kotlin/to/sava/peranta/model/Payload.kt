@@ -22,6 +22,25 @@ enum class Priority {
     HIGH,
 }
 
+/**
+ * 元通知がロック画面で見せてよい範囲（§4.1）。Android の `Notification.VISIBILITY_*` を
+ * プラットフォーム非依存の 3 段へ写したもので、受信側はこの範囲を超えて内容を表示しない。
+ */
+@Serializable
+enum class NotificationVisibility {
+    /** ロック画面でも内容を出してよい。 */
+    @SerialName("public")
+    PUBLIC,
+
+    /** ロック画面では発信元だけを出し、内容は伏せる。 */
+    @SerialName("private")
+    PRIVATE,
+
+    /** ロック画面には出さない。 */
+    @SerialName("secret")
+    SECRET,
+}
+
 /** 通知アクションの意味分類（Notification.Action#getSemanticAction の閉集合を写す、§3.4）。 */
 @Serializable
 enum class SemanticActionKind {
@@ -130,6 +149,11 @@ data class NotificationPayload(
      */
     val revision: Int = 0,
     override val fromName: String? = null,
+    /**
+     * 元通知のロック画面可視性（§4.1）。旧バージョン由来のペイロードでは未設定（null）で、
+     * 受信側は Android の既定と同じ [NotificationVisibility.PRIVATE] として扱う。
+     */
+    val visibility: NotificationVisibility? = null,
 ) : Payload()
 
 /** 画像・ファイルの転送（§4.3）。本体は暗号化 blob として別送し、[attachments] で参照する。 */

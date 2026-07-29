@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.NotificationPayload
+import to.sava.peranta.model.NotificationVisibility
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.receive.CommandExecutionException
@@ -239,6 +240,7 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             actionDetails = fields.actionDetails,
             postedAtEpochMillis = sbn.postTime,
             priority = resolvePriority(sbn.notification),
+            visibility = fields.visibility,
         )
         val isCrossProfile = sbn.user != Process.myUserHandle()
         forward(input, deviceId, config, isCrossProfile, sbn.notification)
@@ -390,7 +392,13 @@ class PerantaNotificationListenerService : NotificationListenerService() {
                 },
             )
         }
-        return NotificationFields(title = title, text = text, actions = actions, actionDetails = actionDetails)
+        return NotificationFields(
+            title = title,
+            text = text,
+            actions = actions,
+            actionDetails = actionDetails,
+            visibility = notificationVisibilityOf(sbn.notification.visibility),
+        )
     }
 
     /** 元通知の priority（PRIORITY_MIN..PRIORITY_MAX）を転送用の [Priority] に写す。 */
@@ -418,6 +426,7 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         val text: String?,
         val actions: List<String>,
         val actionDetails: List<NotificationActionDetail> = emptyList(),
+        val visibility: NotificationVisibility = NotificationVisibility.PRIVATE,
     )
 
     companion object {

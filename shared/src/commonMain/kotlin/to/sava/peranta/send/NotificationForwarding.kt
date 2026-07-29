@@ -17,6 +17,7 @@ import to.sava.peranta.model.MAX_FORWARDED_TEXT_BYTES
 import to.sava.peranta.model.MAX_FORWARDED_TITLE_BYTES
 import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.NotificationPayload
+import to.sava.peranta.model.NotificationVisibility
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
@@ -45,6 +46,8 @@ data class NotificationInput(
     val actionDetails: List<NotificationActionDetail> = emptyList(),
     val postedAtEpochMillis: Long,
     val priority: Priority = Priority.NORMAL,
+    /** 元通知のロック画面可視性（§4.1）。 */
+    val visibility: NotificationVisibility = NotificationVisibility.PRIVATE,
 )
 
 /**
@@ -126,6 +129,7 @@ fun prepareForwardedNotification(
             expiresAtEpochMillis = if (isOtp) now + OTP_TTL_MILLIS else null,
             priority = decision.priority,
             fromName = deviceName,
+            visibility = input.visibility,
         ),
         fullText = rawText,
     )
