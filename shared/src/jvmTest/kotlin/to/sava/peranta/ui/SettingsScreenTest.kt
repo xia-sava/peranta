@@ -248,6 +248,32 @@ class SettingsScreenTest {
         assertEquals(false, repo.load().autoDisplayImages)
     }
 
+    /** 詳細な記録チェックボックスは既定 OFF で初期表示される（§11）。 */
+    @Test
+    fun verboseLoggingCheckboxShowsDefaultOff() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_VERBOSE_LOGGING).performScrollTo().assertIsOff()
+    }
+
+    /** 詳細な記録チェックボックスをトグルすると、即座に値が ConfigRepository に反映される。 */
+    @Test
+    fun togglingVerboseLoggingCheckboxPersistsImmediately() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_VERBOSE_LOGGING).performScrollTo().performClick()
+
+        assertEquals(true, repo.load().verboseLogging)
+    }
+
     /** 履歴の保持日数欄は既定（未設定）では空欄で表示される（§11: 既定は無制限）。 */
     @Test
     fun timelineRetentionDaysFieldShowsEmptyByDefault() = runComposeUiTest {

@@ -17,6 +17,7 @@ import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyPublishException
+import to.sava.peranta.platform.topicForLog
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.SentNotification
@@ -76,7 +77,7 @@ class SendPipeline(
     suspend fun publishEnvelope(body: String, topics: List<String>, cacheSeconds: Int?) {
         topics.forEach { topic ->
             ntfy.publish(topic, body, cacheSeconds)
-            log.d { "published to $topic (cache=${cacheSeconds ?: "default"})" }
+            log.d { "published to ${topicForLog(topic)} (cache=${cacheSeconds ?: "default"})" }
         }
     }
 

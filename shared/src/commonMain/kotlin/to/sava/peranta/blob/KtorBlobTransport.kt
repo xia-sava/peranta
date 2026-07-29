@@ -20,6 +20,7 @@ import kotlinx.serialization.Serializable
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.model.PerantaJson
 import to.sava.peranta.net.httpBaseUrl
+import to.sava.peranta.platform.topicForLog
 
 /** ntfy の添付アップロードで実ファイル名を載せないためのヘッダ（§7 のリスク対応、blobId のみを送る）。 */
 private const val HEADER_FILENAME: String = "X-Filename"
@@ -65,7 +66,7 @@ class KtorBlobTransport(
         }
         val attachment = PerantaJson.decodeFromString<NtfyPublishResponse>(response.bodyAsText()).attachment
             ?: throw BlobTransportException(response.status.value, "blob upload response has no attachment")
-        log.d { "uploaded blob $blobId to $topic ($contentLength bytes)" }
+        log.d { "uploaded blob $blobId to ${topicForLog(topic)} ($contentLength bytes)" }
         return UploadedBlob(
             url = attachment.url,
             blobExpiresAtEpochMillis = attachment.expires?.let { it * MILLIS_PER_SECOND },

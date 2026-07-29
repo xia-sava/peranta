@@ -48,6 +48,9 @@ private const val CAPTION_MARKER = "caption-never-logged"
 /** 添付ダウンロード先のホスト。ログに現れてはならない。 */
 private const val HOST_MARKER = "blob-host-never-logged.example.com"
 
+/** 配送先の topic。推測されないことが前提の値なので、完全な形はログに現れてはならない。 */
+private const val TOPIC_MARKER = "peranta-dev-desk-topicnevrlogged"
+
 /** リトライで回復し得ない HTTP ステータス。 */
 private const val HTTP_BAD_REQUEST = 400
 
@@ -55,7 +58,7 @@ private const val HTTP_BAD_REQUEST = 400
 private const val HTTP_SERVICE_UNAVAILABLE = 503
 
 /**
- * 送信経路のログ衛生。通知・SMS・メッセージ・キャプションと共有鍵が、送信の成否によらず
+ * 送信経路のログ衛生。通知・SMS・メッセージ・キャプションと共有鍵と topic が、送信の成否によらず
  * どの severity のログ行にも（例外メッセージ経由でも）現れないことを固定する。
  */
 class SendLogHygieneTest {
@@ -73,6 +76,7 @@ class SendLogHygieneTest {
         MESSAGE_TEXT_MARKER,
         CAPTION_MARKER,
         HOST_MARKER,
+        TOPIC_MARKER,
         Base64.encode(keyBytes),
     )
 
@@ -158,7 +162,7 @@ class SendLogHygieneTest {
         override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) {}
     }
 
-    private suspend fun dispatch(payload: Payload, ntfy: NtfyClient, topics: List<String> = listOf("topic")) {
+    private suspend fun dispatch(payload: Payload, ntfy: NtfyClient, topics: List<String> = listOf(TOPIC_MARKER)) {
         pipeline(ntfy).dispatch(payload, topics, persistSensitive = false) { _, _, _, _ -> }
     }
 
@@ -172,28 +176,28 @@ class SendLogHygieneTest {
     /** 通知の送信でタイトル・本文と共有鍵はログに出ない。 */
     @Test
     fun sentNotificationKeepsBodyOutOfLog() = runTest {
-        pipeline().send(notification(), listOf("topic"))
+        pipeline().send(notification(), listOf(TOPIC_MARKER))
         assertLoggedWithoutMarkers()
     }
 
     /** SMS の送信で本文はログに出ない。 */
     @Test
     fun sentSmsKeepsBodyOutOfLog() = runTest {
-        pipeline().send(sms(), listOf("topic"))
+        pipeline().send(sms(), listOf(TOPIC_MARKER))
         assertLoggedWithoutMarkers()
     }
 
     /** メッセージの送信で本文はログに出ない。 */
     @Test
     fun sentMessageKeepsBodyOutOfLog() = runTest {
-        pipeline().send(message(), listOf("topic"))
+        pipeline().send(message(), listOf(TOPIC_MARKER))
         assertLoggedWithoutMarkers()
     }
 
     /** ファイル転送の送信でキャプションと添付の取得先ホストはログに出ない。 */
     @Test
     fun sentFileKeepsCaptionAndHostOutOfLog() = runTest {
-        pipeline().send(file(), listOf("topic"))
+        pipeline().send(file(), listOf(TOPIC_MARKER))
         assertLoggedWithoutMarkers()
     }
 
@@ -222,7 +226,7 @@ class SendLogHygieneTest {
     @Test
     fun failedRecordingKeepsBodyOutOfLog() = runTest {
         pipeline(store = FailingTimelineStore())
-            .dispatch(notification(), listOf("topic"), persistSensitive = false) { _, _, _, _ -> }
+            .dispatch(notification(), listOf(TOPIC_MARKER), persistSensitive = false) { _, _, _, _ -> }
         assertLoggedWithoutMarkers()
     }
 }

@@ -40,6 +40,7 @@ class SettingsController(private val repository: ConfigRepository) {
         timelineRetentionDays: Int?,
         autoDisplayImages: Boolean,
         attachNotificationImages: Boolean,
+        verboseLogging: Boolean,
     ): PerantaConfig {
         val updated = repository.load().copy(
             host = host,
@@ -51,6 +52,7 @@ class SettingsController(private val repository: ConfigRepository) {
             timelineRetentionDays = timelineRetentionDays,
             autoDisplayImages = autoDisplayImages,
             attachNotificationImages = attachNotificationImages,
+            verboseLogging = verboseLogging,
         )
         repository.save(updated)
         return updated

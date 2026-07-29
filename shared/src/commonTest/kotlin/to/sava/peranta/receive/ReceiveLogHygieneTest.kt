@@ -46,8 +46,11 @@ private const val REPLY_TEXT_MARKER = "reply-never-logged"
 /** 添付ダウンロード先のホスト。ログに現れてはならない。 */
 private const val HOST_MARKER = "blob-host-never-logged.example.com"
 
+/** 購読する topic。推測されないことが前提の値なので、完全な形はログに現れてはならない。 */
+private const val TOPIC_MARKER = "peranta-dev-desk-topicnevrlogged"
+
 /**
- * 受信経路のログ衛生。通知・SMS・メッセージ・キャプション・返信本文と共有鍵が、
+ * 受信経路のログ衛生。通知・SMS・メッセージ・キャプション・返信本文と共有鍵と topic が、
  * どの severity のログ行にも（例外メッセージ経由でも）現れないことを固定する。
  */
 class ReceiveLogHygieneTest {
@@ -67,6 +70,7 @@ class ReceiveLogHygieneTest {
         CAPTION_MARKER,
         REPLY_TEXT_MARKER,
         HOST_MARKER,
+        TOPIC_MARKER,
         Base64.encode(keyBytes),
     )
 
@@ -157,13 +161,25 @@ class ReceiveLogHygieneTest {
     )
 
     private suspend fun eventFor(payload: Payload, sealCipher: MessageCipher = cipher): NtfyEvent =
-        NtfyEvent(id = "e", time = now, topic = "t", message = encodeEnvelope(sealCipher.seal(payload)))
+        NtfyEvent(
+            id = "e",
+            time = now,
+            topic = TOPIC_MARKER,
+            message = encodeEnvelope(sealCipher.seal(payload)),
+        )
 
     /** ログが出ていること、かつどの行にも目印が無いことを確かめる。 */
     private fun assertLoggedWithoutMarkers() {
         assertTrue(writer.recorded.isNotEmpty(), "no log line was recorded")
         val leaked = writer.recorded.filter { line -> markers.any { line.contains(it) } }
         assertTrue(leaked.isEmpty(), "secret appeared in log: $leaked")
+    }
+
+    /** 購読の開始を報せるログに完全な topic 名は出ない。 */
+    @Test
+    fun startedSubscriptionKeepsTopicOutOfLog() = runTest {
+        pipeline().start(TOPIC_MARKER)
+        assertLoggedWithoutMarkers()
     }
 
     /** 通知の受信でタイトル・本文はログに出ない。 */
@@ -201,7 +217,7 @@ class ReceiveLogHygieneTest {
         val bytes = Base64.decode(envelope.ciphertext).also { it[0] = (it[0].toInt() xor 0x01).toByte() }
         val tampered = envelope.copy(ciphertext = Base64.encode(bytes))
 
-        pipeline().handleEvent(NtfyEvent("e", now, "t", encodeEnvelope(tampered)))
+        pipeline().handleEvent(NtfyEvent("e", now, TOPIC_MARKER, encodeEnvelope(tampered)))
 
         assertLoggedWithoutMarkers()
     }

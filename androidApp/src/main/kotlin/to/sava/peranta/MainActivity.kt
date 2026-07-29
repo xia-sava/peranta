@@ -399,7 +399,7 @@ class MainActivity : ComponentActivity() {
                             onRequestScan = { onResult -> requestScan(onResult) },
                             externalRefreshKey = resumeTick,
                             onClose = onWizardClose,
-                            onSaved = { rebuildReceivePipeline() },
+                            onSaved = { applySavedSettings() },
                         )
 
                         Overlay.PairingLanding -> PairingScanScreen(
@@ -515,7 +515,7 @@ class MainActivity : ComponentActivity() {
                                         onInstall = { available -> updater.install(available) },
                                     ),
                                     showHeader = false,
-                                    onSaved = { rebuildReceivePipeline() },
+                                    onSaved = { applySavedSettings() },
                                     onResetAll = { resetAllAndExit() },
                                 )
 
@@ -685,10 +685,12 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * 鍵の作成・作り直しを受信パイプラインへ即時反映する（§10.2 の例外）。
+     * 保存した設定を稼働中のプロセスへ即時反映する（§10.2 の例外）。鍵の作成・作り直しは受信パイプラインへ、
+     * 詳細な記録の切り替えはログの最小重大度へ効かせる。
      * Activity は作り直さないため、設定画面に表示中の QR は消えない。
      */
-    private fun rebuildReceivePipeline() {
+    private fun applySavedSettings() {
+        PerantaSend.configureLogging()
         lifecycleScope.launch { PerantaReceive.rebuildIfPipelineConfigChanged(this@MainActivity) }
     }
 

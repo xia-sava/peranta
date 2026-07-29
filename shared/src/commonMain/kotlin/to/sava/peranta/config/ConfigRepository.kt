@@ -58,6 +58,7 @@ class ConfigRepository(
             },
             autoDisplayImages = settings.getBoolean(KEY_AUTO_DISPLAY_IMAGES, true),
             attachNotificationImages = settings.getBoolean(KEY_ATTACH_NOTIFICATION_IMAGES, true),
+            verboseLogging = settings.getBoolean(KEY_VERBOSE_LOGGING, false),
         )
 
     /**
@@ -95,6 +96,7 @@ class ConfigRepository(
             ?: settings.remove(KEY_TIMELINE_RETENTION_DAYS)
         settings.putBoolean(KEY_AUTO_DISPLAY_IMAGES, config.autoDisplayImages)
         settings.putBoolean(KEY_ATTACH_NOTIFICATION_IMAGES, config.attachNotificationImages)
+        settings.putBoolean(KEY_VERBOSE_LOGGING, config.verboseLogging)
         putOrClearSecret(SECRET_SHARED_KEY, config.sharedKeyBase64)
     }
 
@@ -209,6 +211,7 @@ class ConfigRepository(
         const val KEY_TIMELINE_RETENTION_DAYS = "timelineRetentionDays"
         const val KEY_AUTO_DISPLAY_IMAGES = "autoDisplayImages"
         const val KEY_ATTACH_NOTIFICATION_IMAGES = "attachNotificationImages"
+        const val KEY_VERBOSE_LOGGING = "verboseLogging"
 
         /** 配送先 topic を settings に 1 文字列で保持する際の区切り。 */
         private const val TOPIC_SEPARATOR = "\n"

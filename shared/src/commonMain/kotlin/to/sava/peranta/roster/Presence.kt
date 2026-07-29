@@ -7,6 +7,7 @@ import to.sava.peranta.model.PresencePayload
 import to.sava.peranta.model.encodeEnvelope
 import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.net.NtfyClient
+import to.sava.peranta.platform.topicForLog
 
 /** display（受信表示）能力を表す capability 文字列。 */
 const val CAPABILITY_DISPLAY: String = "display"
@@ -66,5 +67,5 @@ suspend fun publishPresence(
 ) {
     val body = encodeEnvelope(cipher.seal(presence))
     ntfy.publish(controlTopic, body, cacheSeconds = null)
-    log.d { "presence announced to $controlTopic for device=${presence.from}" }
+    log.d { "presence announced to ${topicForLog(controlTopic)} for device=${presence.from}" }
 }

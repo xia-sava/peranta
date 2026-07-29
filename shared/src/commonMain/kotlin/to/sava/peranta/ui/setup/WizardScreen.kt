@@ -153,6 +153,7 @@ fun WizardScreen(
             timelineRetentionDays = config.timelineRetentionDays,
             autoDisplayImages = config.autoDisplayImages,
             attachNotificationImages = config.attachNotificationImages,
+            verboseLogging = config.verboseLogging,
         )
         config = controller.load()
         dirty = true

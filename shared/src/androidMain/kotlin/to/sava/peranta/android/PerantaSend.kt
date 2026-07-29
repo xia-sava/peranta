@@ -3,7 +3,7 @@ package to.sava.peranta.android
 import android.content.Context
 import android.graphics.Bitmap
 import co.touchlab.kermit.Logger
-import co.touchlab.kermit.Severity
+import co.touchlab.kermit.platformLogWriter
 import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +25,7 @@ import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.createNtfyHttpClient
+import to.sava.peranta.platform.configurePerantaLogging
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.send.CommandSender
 import to.sava.peranta.send.ForwardedKeyTracker
@@ -76,11 +77,11 @@ object PerantaSend {
     val timelineFeed: TimelineFeed by lazy { TimelineFeed(JsonlTimelineStore(defaultTimelineFile())) }
 
     /**
-     * ログの最小重大度を設定する（§16）。
-     * [debuggable] が false（リリース）なら Info 以上のみ出力し、topic 名等の debug ログを抑止する。
+     * ログの出力先と最小重大度を設定に従って決める（§11）。
+     * アプリ起動時と、設定の保存を稼働中のプロセスへ反映するときに呼ぶ。
      */
-    fun configureLogging(debuggable: Boolean) {
-        Logger.setMinSeverity(if (debuggable) Severity.Debug else Severity.Info)
+    fun configureLogging() {
+        configurePerantaLogging(androidConfigRepository().load().verboseLogging, platformLogWriter())
     }
 
     /**

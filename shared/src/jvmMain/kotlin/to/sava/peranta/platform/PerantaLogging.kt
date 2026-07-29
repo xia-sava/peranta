@@ -1,7 +1,6 @@
 package to.sava.peranta.platform
 
 import co.touchlab.kermit.LogWriter
-import co.touchlab.kermit.Logger
 import co.touchlab.kermit.Severity
 import co.touchlab.kermit.platformLogWriter
 import java.io.File
@@ -14,16 +13,17 @@ private const val MAX_LOG_BYTES = 1_000_000L
 private const val ROTATION_KEEP = 3
 
 /**
- * kermit のグローバル出力先を「コンソール + %APPDATA%\Peranta\logs\peranta.log」に設定する。
- * アプリ起動時に一度だけ呼ぶ。
+ * kermit のグローバル出力先を「コンソール + %APPDATA%\Peranta\logs\peranta.log」に設定し、
+ * [verboseLogging] からログに残す最小重大度を決める（§11）。アプリ起動時に一度だけ呼ぶ。
  */
-fun initLogging(logFile: File = File(JvmPaths.logDir, "peranta.log")) {
-    Logger.setLogWriters(platformLogWriter(), FileLogWriter(logFile))
+fun initLogging(verboseLogging: Boolean, logFile: File = File(JvmPaths.logDir, "peranta.log")) {
+    configurePerantaLogging(verboseLogging, platformLogWriter(), FileLogWriter(logFile))
 }
 
 /**
  * ログを 1 ファイルへ追記し、サイズ超過で世代ローテーションする [LogWriter]。
- * 本文を含む可能性がある debug メッセージも記録するが、ファイルはアプリ専用領域に置く。
+ * 記録するのは [configurePerantaLogging] が通した重大度の行だけで、通知の本文・タイトルと
+ * 完全な topic 名はどの重大度でも含まれない。ファイルはアプリ専用領域に置く。
  */
 private class FileLogWriter(private val file: File) : LogWriter() {
 

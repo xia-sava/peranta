@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.isActive
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.model.PerantaJson
+import to.sava.peranta.platform.topicForLog
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -54,7 +55,7 @@ class KtorNtfyClient(
         if (!response.status.isSuccess()) {
             throw NtfyPublishException(response.status.value, "publish failed: ${response.status}")
         }
-        log.d { "published to $topic (${body.length} bytes)" }
+        log.d { "published to ${topicForLog(topic)} (${body.length} bytes)" }
     }
 
     override suspend fun fetchHistory(topic: String, since: String): List<NtfyEvent> {
@@ -69,7 +70,7 @@ class KtorNtfyClient(
             .filter { it.isNotBlank() }
             .mapNotNull { parseFrame(it)?.toEventOrNull() }
             .toList()
-            .also { log.d { "fetched ${it.size} history events from $topic (since=$since)" } }
+            .also { log.d { "fetched ${it.size} history events from ${topicForLog(topic)} (since=$since)" } }
     }
 
     override fun subscribe(topic: String): Flow<NtfyEvent> = channelFlow {
@@ -84,7 +85,7 @@ class KtorNtfyClient(
                         config.accessToken?.let { header(HttpHeaders.Authorization, "Bearer $it") }
                     },
                 ) {
-                    log.d { "websocket connected: $topic (since=$lastEventId)" }
+                    log.d { "websocket connected: ${topicForLog(topic)} (since=$lastEventId)" }
                     var firstFrame = true
                     for (frame in incoming) {
                         if (firstFrame) {
@@ -95,7 +96,7 @@ class KtorNtfyClient(
                         val parsed = parseFrame(frame.readText()) ?: continue
                         if (parsed.isOpen) {
                             _connectionState.value = NtfyConnectionState.SUBSCRIBED
-                            log.d { "subscription established: $topic" }
+                            log.d { "subscription established: ${topicForLog(topic)}" }
                             continue
                         }
                         parsed.toEventOrNull()?.let { event ->
@@ -104,11 +105,11 @@ class KtorNtfyClient(
                         }
                     }
                 }
-                log.d { "websocket closed: $topic" }
+                log.d { "websocket closed: ${topicForLog(topic)}" }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                log.w(e) { "websocket disconnected: $topic, retrying in $backoff" }
+                log.w(e) { "websocket disconnected: ${topicForLog(topic)}, retrying in $backoff" }
             }
             _connectionState.value = NtfyConnectionState.DISCONNECTED
             delay(backoff)

@@ -31,6 +31,7 @@ class SettingsControllerTest {
         timelineRetentionDays: Int? = null,
         autoDisplayImages: Boolean = true,
         attachNotificationImages: Boolean = true,
+        verboseLogging: Boolean = false,
     ) = saveConnectionSettings(
         host = host,
         accessToken = accessToken,
@@ -41,6 +42,7 @@ class SettingsControllerTest {
         timelineRetentionDays = timelineRetentionDays,
         autoDisplayImages = autoDisplayImages,
         attachNotificationImages = attachNotificationImages,
+        verboseLogging = verboseLogging,
     )
 
     /** keyId 採番: 未設定・非数値・1 未満は "1"、正の整数はその +1。 */
@@ -155,6 +157,22 @@ class SettingsControllerTest {
         controller.saveConnection(attachNotificationImages = true)
 
         assertTrue(repo.load().attachNotificationImages)
+    }
+
+    /** 詳細な記録トグル（§11）の保存/読み込みラウンドトリップ。既定は OFF。 */
+    @Test
+    fun saveConnectionSettingsPersistsVerboseLogging() {
+        val (controller, repo) = controllerWith(PerantaConfig())
+
+        assertFalse(repo.load().verboseLogging)
+
+        controller.saveConnection(verboseLogging = true)
+
+        assertTrue(repo.load().verboseLogging)
+
+        controller.saveConnection(verboseLogging = false)
+
+        assertFalse(repo.load().verboseLogging)
     }
 
     /** 鍵未設定からの作成: 32 バイト鍵が入り keyId は "1" になる。 */

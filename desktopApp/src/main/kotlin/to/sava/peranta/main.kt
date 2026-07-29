@@ -52,6 +52,7 @@ import to.sava.peranta.config.isDevMode
 import to.sava.peranta.pairing.PairingImportController
 import to.sava.peranta.pairing.pairingQrMatrix
 import to.sava.peranta.platform.AppPath
+import to.sava.peranta.platform.applyLogVerbosity
 import to.sava.peranta.platform.copySensitiveTextToClipboard
 import to.sava.peranta.platform.eraseAppData
 import to.sava.peranta.platform.initLogging
@@ -242,9 +243,11 @@ private fun windowGeometryOf(state: WindowState): WindowGeometry? {
 }
 
 fun main(args: Array<String>) {
-    initLogging()
-    val log = Logger.withTag("Main")
+    // 設定の読み出しでも記録が要るため、出力先を先に用意してから詳しさを設定に合わせる。
+    initLogging(verboseLogging = false)
     val desktopSettings = DesktopSettings()
+    applyLogVerbosity(desktopSettings.config.verboseLogging)
+    val log = Logger.withTag("Main")
     val settingsController = desktopSettings.controller
     // QR 参加経路（貼り付け取り込み）。カメラは無いため onRequestScan は注入せず貼り付けのみで動く。
     val pairingImportController = PairingImportController(desktopSettings.repository)
@@ -409,6 +412,7 @@ fun main(args: Array<String>) {
             snapshotFlow { configGeneration }.collectLatest {
                 errorMessage = null
                 val freshConfig = withContext(ioDispatcher) { desktopSettings.reloadConfig() }
+                applyLogVerbosity(freshConfig.verboseLogging)
                 // 構築（トースター初期化の同期 I/O）中に世代切替でキャンセルされても必ず close するため、
                 // try は DesktopReceiver の構築から run() までを覆う。
                 var newReceiver: DesktopReceiver? = null

@@ -25,6 +25,8 @@ const val DEFAULT_HOST: String = "peranta.example.com"
  * ペアリング QR には含めない。
  * [attachNotificationImages] が true のとき、転送する通知に元の画像を添付する（§4.3.1）。
  * 端末ローカルの送信設定でありペアリング QR には含めない。
+ * [verboseLogging] が true のとき、ログに Verbose までの行を残す（§11）。false なら Info 以上だけを残す。
+ * 端末ローカルの診断設定でありペアリング QR には含めない。
  */
 data class PerantaConfig(
     val host: String = DEFAULT_HOST,
@@ -51,6 +53,7 @@ data class PerantaConfig(
     val timelineRetentionDays: Int? = null,
     val autoDisplayImages: Boolean = true,
     val attachNotificationImages: Boolean = true,
+    val verboseLogging: Boolean = false,
 ) {
     /**
      * ペアリング済みか（共有鍵と keyId が揃っているか）。

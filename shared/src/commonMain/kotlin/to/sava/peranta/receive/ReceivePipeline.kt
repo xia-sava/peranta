@@ -24,6 +24,7 @@ import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.model.revisionOrZero
 import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyEvent
+import to.sava.peranta.platform.topicForLog
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.ReceivedFile
@@ -95,13 +96,13 @@ class ReceivePipeline(
     suspend fun start(topic: String) {
         val client = ntfy ?: error("ntfy client is required to subscribe")
         loadHistory()
-        log.i { "receive pipeline started: topic=$topic" }
+        log.i { "receive pipeline started: topic=${topicForLog(topic)}" }
         client.subscribe(topic).collect { handleEvent(it) }
     }
 
     /** 1 件の受信イベントを処理する（テストからも直接呼ぶ）。 */
     suspend fun handleEvent(event: NtfyEvent) {
-        log.i { "event received: id=${event.id} topic=${event.topic}" }
+        log.i { "event received: id=${event.id} topic=${topicForLog(event.topic)}" }
 
         if (interceptRawMessage(event.message)) {
             log.d { "event intercepted: id=${event.id}" }

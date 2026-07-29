@@ -99,6 +99,10 @@ private const val ATTACH_NOTIFICATION_IMAGES_DESCRIPTION: String =
     "この端末が転送する通知に、通知に付いていた画像と送信者のアイコンを添えます。" +
         "通信量が気になる場合は OFF にしてください。"
 
+/** 詳細な記録トグルの説明文（§11）。 */
+private const val VERBOSE_LOGGING_DESCRIPTION: String =
+    "動きを追うための細かい記録をログに残します。うまく動かないときの調べものに使います。"
+
 /** 自動起動トグルの説明文（§3.3）。 */
 private const val AUTO_START_DESCRIPTION: String =
     "サインインしたときに Peranta を起動し、タスクトレイに常駐して受信を始めます。" +
@@ -183,6 +187,7 @@ fun SettingsScreen(
     var attachNotificationImages by remember { mutableStateOf(initial.attachNotificationImages) }
     var timelineRetentionDays by remember { mutableStateOf(initial.timelineRetentionDays?.toString().orEmpty()) }
     var autoDisplayImages by remember { mutableStateOf(initial.autoDisplayImages) }
+    var verboseLogging by remember { mutableStateOf(initial.verboseLogging) }
     var sendEnabled by remember { mutableStateOf(initial.sendEnabled) }
     var smsDirectReceive by remember { mutableStateOf(initial.smsDirectReceive) }
     var autoStartEnabled by remember { mutableStateOf(autoStart?.isEnabled?.invoke() ?: false) }
@@ -216,6 +221,7 @@ fun SettingsScreen(
             timelineRetentionDays = timelineRetentionDays.toIntOrNull(),
             autoDisplayImages = autoDisplayImages,
             attachNotificationImages = attachNotificationImages,
+            verboseLogging = verboseLogging,
         )
         dirty = true
     }
@@ -343,6 +349,17 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                LabeledCheckbox(
+                    checked = verboseLogging,
+                    onCheckedChange = { verboseLogging = it; persistConnection() },
+                    label = "詳細な記録を残す",
+                    tag = TAG_VERBOSE_LOGGING,
+                )
+                Text(
+                    text = VERBOSE_LOGGING_DESCRIPTION,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
                 SectionHeader(title = SECTION_NOTIFICATIONS)
                 LabeledCheckbox(
@@ -821,6 +838,9 @@ const val TAG_ATTACH_NOTIFICATION_IMAGES: String = "settings-attach-notification
 const val TAG_AUTO_START: String = "settings-auto-start"
 const val TAG_SEND_ENABLED: String = "settings-send-enabled"
 const val TAG_SMS_DIRECT_RECEIVE: String = "settings-sms-direct-receive"
+
+/** 詳細な記録トグルのテストタグ。 */
+const val TAG_VERBOSE_LOGGING: String = "settings-verbose-logging"
 const val TAG_CURRENT_VERSION: String = "settings-current-version"
 const val TAG_UPDATE_CHECK: String = "settings-update-check"
 const val TAG_UPDATE_DEV_BUILD_NOTE: String = "settings-update-dev-build-note"
