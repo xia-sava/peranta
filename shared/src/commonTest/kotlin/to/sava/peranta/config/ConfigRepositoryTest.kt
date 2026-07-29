@@ -208,15 +208,27 @@ class ConfigRepositoryTest {
         assertFalse(loaded.isReadyForSend)
     }
 
-    /** 失効させた deviceId 集合は save/load で往復し、未設定なら空集合に戻る（§9）。 */
+    /** このアプリが読み書きしない設定キーは、次の保存で端末から取り除かれる。 */
     @Test
-    fun revokedDeviceIdsRoundTrip() {
+    fun droppedSettingKeysAreRemovedOnSave() {
+        val settings = MapSettings()
+        settings.putString("revokedDeviceIds", "dev-lost\ndev-old")
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
+
+        repo.save(PerantaConfig())
+
+        assertFalse(settings.hasKey("revokedDeviceIds"))
+    }
+
+    /** 仕事用プロファイルの転送は save/load で往復し、既定は転送しない（§3.1）。 */
+    @Test
+    fun forwardWorkProfileNotificationsRoundTrips() {
         val settings = MapSettings()
         val repo = ConfigRepository(settings, SettingsSecretStore(settings))
-        repo.save(PerantaConfig(revokedDeviceIds = setOf("dev-lost", "dev-old")))
-        assertEquals(setOf("dev-lost", "dev-old"), repo.load().revokedDeviceIds)
         repo.save(PerantaConfig())
-        assertTrue(repo.load().revokedDeviceIds.isEmpty())
+        assertFalse(repo.load().forwardWorkProfileNotifications)
+        repo.save(PerantaConfig(forwardWorkProfileNotifications = true))
+        assertTrue(repo.load().forwardWorkProfileNotifications)
     }
 
     /** タイムライン保持日数は port と同じ optional int として save/load で往復し、未設定なら null に戻る（§11）。 */
@@ -227,6 +239,28 @@ class ConfigRepositoryTest {
         repo.save(PerantaConfig(timelineRetentionDays = 30))
         assertEquals(30, repo.load().timelineRetentionDays)
         repo.save(PerantaConfig(timelineRetentionDays = null))
+        assertNull(repo.load().timelineRetentionDays)
+    }
+
+    /** 何も保存されていない端末（インストール直後）にはタイムライン保持日数の既定を与える（§11）。 */
+    @Test
+    fun timelineRetentionDaysDefaultsOnAFreshInstall() {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
+
+        assertEquals(ConfigRepository.DEFAULT_TIMELINE_RETENTION_DAYS, repo.load().timelineRetentionDays)
+    }
+
+    /**
+     * 既に使っている端末では保持日数を無制限のままにする（§11）。
+     * 既定を有限にしたことで、保持日数を自分で決めていない利用者の履歴が消えてはいけない。
+     */
+    @Test
+    fun timelineRetentionDaysStaysUnlimitedOnAnExistingInstall() {
+        val settings = MapSettings()
+        settings.putString(ConfigRepository.KEY_DEVICE_NAME, "phone")
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
+
         assertNull(repo.load().timelineRetentionDays)
     }
 

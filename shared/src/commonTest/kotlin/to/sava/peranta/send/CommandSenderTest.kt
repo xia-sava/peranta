@@ -48,12 +48,10 @@ class CommandSenderTest {
     private fun config(
         controlTopic: String? = this.controlTopic,
         deliveryTopics: List<String> = emptyList(),
-        revokedDeviceIds: Set<String> = emptySet(),
     ) = PerantaConfig(
         deviceId = self,
         controlTopic = controlTopic,
         deliveryTopics = deliveryTopics,
-        revokedDeviceIds = revokedDeviceIds,
     )
 
     private fun sender(ntfy: RecordingControlNtfy, config: PerantaConfig = config()) =
@@ -80,20 +78,6 @@ class CommandSenderTest {
         assertEquals(BROADCAST_TARGET, command.to)
         assertEquals(self, command.from)
         assertEquals("0|com.x|1|null|10", command.targetNotificationKey)
-    }
-
-    /** dismiss は失効させた端末を配送先から除く（§9）。 */
-    @Test
-    fun dismissExcludesRevokedDevice() = runTest {
-        val ntfy = RecordingControlNtfy(
-            history = listOf(
-                event(presence("phone", "https://h/phone-topic")),
-                event(presence("tablet", "https://h/tablet-topic")),
-            ),
-        )
-        val ok = sender(ntfy, config(revokedDeviceIds = setOf("tablet"))).dismiss("0|k")
-        assertTrue(ok)
-        assertEquals(listOf("phone-topic"), ntfy.published.map { it.topic })
     }
 
     /** ロスター取得が失敗したら dismiss は静的フォールバックへ流さず、何も送らない。 */

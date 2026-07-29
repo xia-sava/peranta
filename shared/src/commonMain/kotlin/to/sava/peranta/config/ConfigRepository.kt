@@ -44,18 +44,14 @@ class ConfigRepository(
             unifiedPushEndpoint = settings.getStringOrNull(KEY_UNIFIED_PUSH_ENDPOINT),
             sendEnabled = settings.getBoolean(KEY_SEND_ENABLED, false),
             smsDirectReceive = settings.getBoolean(KEY_SMS_DIRECT_RECEIVE, true),
+            forwardWorkProfileNotifications = settings.getBoolean(KEY_FORWARD_WORK_PROFILE, false),
             filterMode = loadFilterMode(),
             deliveryTopics = loadDeliveryTopics(),
             filterRules = decodeFilterRules(settings.getStringOrNull(KEY_FILTER_RULES)),
             persistSensitiveHistory = settings.getBoolean(KEY_PERSIST_SENSITIVE, false),
             otpSenderPackages = loadCsvList(KEY_OTP_SENDERS),
-            revokedDeviceIds = loadCsvList(KEY_REVOKED_DEVICE_IDS).toSet(),
             attachFullTextWhenTruncated = settings.getBoolean(KEY_ATTACH_FULL_TEXT, true),
-            timelineRetentionDays = if (settings.hasKey(KEY_TIMELINE_RETENTION_DAYS)) {
-                settings.getInt(KEY_TIMELINE_RETENTION_DAYS, 0)
-            } else {
-                null
-            },
+            timelineRetentionDays = ensureTimelineRetentionDays(),
             autoDisplayImages = settings.getBoolean(KEY_AUTO_DISPLAY_IMAGES, true),
             attachNotificationImages = settings.getBoolean(KEY_ATTACH_NOTIFICATION_IMAGES, true),
             verboseLogging = settings.getBoolean(KEY_VERBOSE_LOGGING, false),
@@ -71,6 +67,7 @@ class ConfigRepository(
     }
 
     private fun saveLocked(config: PerantaConfig) {
+        UNUSED_KEYS.forEach { settings.remove(it) }
         settings.putString(KEY_HOST, config.host)
         if (!forceTls) settings.putBoolean(KEY_USE_TLS, config.useTls)
         config.port?.let { settings.putInt(KEY_PORT, it) } ?: settings.remove(KEY_PORT)
@@ -84,12 +81,12 @@ class ConfigRepository(
         putOrRemove(KEY_UNIFIED_PUSH_ENDPOINT, config.unifiedPushEndpoint)
         settings.putBoolean(KEY_SEND_ENABLED, config.sendEnabled)
         settings.putBoolean(KEY_SMS_DIRECT_RECEIVE, config.smsDirectReceive)
+        settings.putBoolean(KEY_FORWARD_WORK_PROFILE, config.forwardWorkProfileNotifications)
         settings.putString(KEY_FILTER_MODE, config.filterMode.name)
         settings.putString(KEY_DELIVERY_TOPICS, config.deliveryTopics.joinToString(TOPIC_SEPARATOR))
         settings.putString(KEY_FILTER_RULES, encodeFilterRules(config.filterRules))
         settings.putBoolean(KEY_PERSIST_SENSITIVE, config.persistSensitiveHistory)
         settings.putString(KEY_OTP_SENDERS, config.otpSenderPackages.joinToString(TOPIC_SEPARATOR))
-        settings.putString(KEY_REVOKED_DEVICE_IDS, config.revokedDeviceIds.joinToString(TOPIC_SEPARATOR))
         settings.putBoolean(KEY_ATTACH_FULL_TEXT, config.attachFullTextWhenTruncated)
         config.timelineRetentionDays
             ?.let { settings.putInt(KEY_TIMELINE_RETENTION_DAYS, it) }
@@ -136,6 +133,19 @@ class ConfigRepository(
             ?: FilterMode.DENYLIST
 
     private fun loadDeliveryTopics(): List<String> = loadCsvList(KEY_DELIVERY_TOPICS)
+
+    /**
+     * タイムライン履歴の保持日数を返す（§11）。保存済みの値があればそれを使う。
+     * 値が無く、かつ設定が 1 件も保存されていない端末（＝インストール直後）には
+     * [DEFAULT_TIMELINE_RETENTION_DAYS] を採番して永続化する。既に使っている端末では
+     * null（日数による剪定なし）のままとし、保持日数を自分で決めていない利用者の履歴が
+     * 更新をきっかけに消えないようにする。
+     */
+    private fun ensureTimelineRetentionDays(): Int? = when {
+        settings.hasKey(KEY_TIMELINE_RETENTION_DAYS) -> settings.getInt(KEY_TIMELINE_RETENTION_DAYS, 0)
+        settings.keys.isNotEmpty() -> null
+        else -> DEFAULT_TIMELINE_RETENTION_DAYS.also { settings.putInt(KEY_TIMELINE_RETENTION_DAYS, it) }
+    }
 
     /** [key] に区切り文字連結で保存された文字列一覧を読み出す。 */
     private fun loadCsvList(key: String): List<String> =
@@ -201,20 +211,33 @@ class ConfigRepository(
         const val KEY_UNIFIED_PUSH_ENDPOINT = "unifiedPushEndpoint"
         const val KEY_SEND_ENABLED = "sendEnabled"
         const val KEY_SMS_DIRECT_RECEIVE = "smsDirectReceive"
+        const val KEY_FORWARD_WORK_PROFILE = "forwardWorkProfileNotifications"
         const val KEY_FILTER_MODE = "filterMode"
         const val KEY_DELIVERY_TOPICS = "deliveryTopics"
         const val KEY_FILTER_RULES = "filterRules"
         const val KEY_PERSIST_SENSITIVE = "persistSensitiveHistory"
         const val KEY_OTP_SENDERS = "otpSenderPackages"
-        const val KEY_REVOKED_DEVICE_IDS = "revokedDeviceIds"
         const val KEY_ATTACH_FULL_TEXT = "attachFullTextWhenTruncated"
         const val KEY_TIMELINE_RETENTION_DAYS = "timelineRetentionDays"
         const val KEY_AUTO_DISPLAY_IMAGES = "autoDisplayImages"
         const val KEY_ATTACH_NOTIFICATION_IMAGES = "attachNotificationImages"
         const val KEY_VERBOSE_LOGGING = "verboseLogging"
 
+        /**
+         * インストール直後の端末に与えるタイムライン履歴の保持日数（§11）。
+         * 端末を他人に触られたときに読める履歴の古さに天井を置きつつ、
+         * 見返す用途では気づかない長さにする。
+         */
+        const val DEFAULT_TIMELINE_RETENTION_DAYS = 90
+
         /** 配送先 topic を settings に 1 文字列で保持する際の区切り。 */
         private const val TOPIC_SEPARATOR = "\n"
+
+        /**
+         * このアプリが読み書きしない設定キー。保存のたびに取り除き、
+         * 使われない値が端末に残り続けないようにする。
+         */
+        private val UNUSED_KEYS = listOf("revokedDeviceIds")
 
         /**
          * [save] と [updateFilterRules] の書き込みを直列化するロック。

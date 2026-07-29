@@ -15,7 +15,6 @@ const val DEFAULT_HOST: String = "peranta.example.com"
  * [deviceName] は人間向けの表示名で、リネーム可能でありアドレス指定には使わない。
  * [controlTopic] は全端末で共有する presence/ロスター用 topic（§8）で、ペアリングで配布する。
  * [blobTopic] は全端末で共有する画像/ファイル転送用 topic（§8、§4.3）で、ペアリングで配布する。
- * [revokedDeviceIds] は失効させた端末の deviceId 集合で、ロスター解決時に配送先から除外する（§9）。
  * [attachFullTextWhenTruncated] が true のとき、プレビュー予算を超える本文は全文を暗号化 blob として
  * 添付し、受信側で自動展開させる（§4.3）。false なら従来どおり単純にバイト切り詰めする。
  * [timelineRetentionDays] はタイムライン履歴の保持日数（§11）。null は日数による剪定を行わない
@@ -27,6 +26,9 @@ const val DEFAULT_HOST: String = "peranta.example.com"
  * 端末ローカルの送信設定でありペアリング QR には含めない。
  * [verboseLogging] が true のとき、ログに Verbose までの行を残す（§11）。false なら Info 以上だけを残す。
  * 端末ローカルの診断設定でありペアリング QR には含めない。
+ * [forwardWorkProfileNotifications] が true のとき、仕事用プロファイル（自ユーザーとは別のプロファイル）で
+ * 発生した通知も転送する（§3.1）。既定は false で、組織の管理境界の内側にある通知を端末の外へ出さない。
+ * 端末ローカルの送信設定でありペアリング QR には含めない。
  */
 data class PerantaConfig(
     val host: String = DEFAULT_HOST,
@@ -43,12 +45,12 @@ data class PerantaConfig(
     val unifiedPushEndpoint: String? = null,
     val sendEnabled: Boolean = false,
     val smsDirectReceive: Boolean = true,
+    val forwardWorkProfileNotifications: Boolean = false,
     val filterMode: FilterMode = FilterMode.DENYLIST,
     val deliveryTopics: List<String> = emptyList(),
     val filterRules: List<FilterRule> = emptyList(),
     val persistSensitiveHistory: Boolean = false,
     val otpSenderPackages: List<String> = emptyList(),
-    val revokedDeviceIds: Set<String> = emptySet(),
     val attachFullTextWhenTruncated: Boolean = true,
     val timelineRetentionDays: Int? = null,
     val autoDisplayImages: Boolean = true,

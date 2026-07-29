@@ -41,12 +41,10 @@ class SendTargetResolverTest {
     private fun config(
         deliveryTopics: List<String> = emptyList(),
         controlTopic: String? = this.controlTopic,
-        revokedDeviceIds: Set<String> = emptySet(),
     ) = PerantaConfig(
         deviceId = selfDeviceId,
         controlTopic = controlTopic,
         deliveryTopics = deliveryTopics,
-        revokedDeviceIds = revokedDeviceIds,
     )
 
     /** control topic のロスターから、自分を除いた端末のエンドポイント topic へ解決する。 */
@@ -61,19 +59,6 @@ class SendTargetResolverTest {
         )
         val topics = resolveSendTopics(config(deliveryTopics = listOf("static")), cipher, ntfy)
         assertEquals(listOf("desktop-topic", "tablet-topic"), topics)
-    }
-
-    /** 失効させた deviceId は配送先から除外される（§9）。 */
-    @Test
-    fun revokedDeviceIsExcluded() = runTest {
-        val ntfy = RecordingControlNtfy(
-            history = listOf(
-                event("tablet", "https://h/tablet-topic"),
-                event("desktop", "https://h/desktop-topic"),
-            ),
-        )
-        val topics = resolveSendTopics(config(revokedDeviceIds = setOf("tablet")), cipher, ntfy)
-        assertEquals(listOf("desktop-topic"), topics)
     }
 
     /**

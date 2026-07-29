@@ -85,37 +85,6 @@ class RosterTest {
         assertEquals(listOf("static-a"), resolveDeliveryTargets(emptyList(), "self", listOf("static-a")))
     }
 
-    /** 失効させた deviceId は配送先解決から除外される（§9）。 */
-    @Test
-    fun resolveExcludesRevokedDevices() {
-        val roster = buildRoster(
-            listOf(
-                presence("other-1", "One", "https://h/topic-1", sentAt = 100),
-                presence("other-2", "Two", "https://h/topic-2", sentAt = 100),
-            ),
-        )
-        val targets = resolveDeliveryTargets(
-            roster,
-            selfDeviceId = "self",
-            fallback = listOf("static"),
-            revokedDeviceIds = setOf("other-1"),
-        )
-        assertEquals(listOf("topic-2"), targets)
-    }
-
-    /** 失効集合はロスターから該当エントリを取り除き、空集合なら素通しする。 */
-    @Test
-    fun excludeRevokedFiltersMatchingEntries() {
-        val roster = buildRoster(
-            listOf(
-                presence("dev-a", "A", "https://h/a", sentAt = 100),
-                presence("dev-b", "B", "https://h/b", sentAt = 100),
-            ),
-        )
-        assertEquals(listOf("dev-b"), excludeRevoked(roster, setOf("dev-a")).map { it.deviceId })
-        assertEquals(listOf("dev-a", "dev-b"), excludeRevoked(roster, emptySet()).map { it.deviceId })
-    }
-
     /** 取得できたロスターが空なら [resolveDeliveryTargets] と同じくフォールバックへ退避する。 */
     @Test
     fun resolveDeliveryTopicsFallsBackWhenFetchedRosterEmpty() {
