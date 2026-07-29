@@ -17,6 +17,9 @@ env:
   JAVA_VERSION: "23"
   # jpackage が使えるのは WiX 3 系のみ。ランナーに無いときに入れる版を固定する。
   WIX_VERSION: "3.14.1"
+  # マニフェストの署名を確かめる公開鍵（X.509 SubjectPublicKeyInfo の DER を base64）。
+  # アプリへ埋め込んである値と同じでなければならない。
+  MANIFEST_PUBLIC_KEY: "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEEZEKvNteC6DDKA7tYX85vzGFlhjQbhwc/99nC6q8ED3YphUC9mvbZYWVgCUb+sizUFzZMQQdAiLN1d11Nmnbhw=="
 
 jobs:
   version:
@@ -184,7 +187,8 @@ jobs:
           path: artifacts/peranta.apk
           if-no-files-found: error
 
-  # 配布物の照合値からマニフェストを組む。公開の権限は持たず、成果物として release へ渡す。
+  # 配布物の照合値からマニフェストを組み、署名する。公開の権限は持たず、成果物として release へ渡す。
+  # 署名鍵を持つのはこのジョブだけで、リリースを書き換える権限とは同居させない。
   manifest:
     needs: [version, desktop, android]
     runs-on: ubuntu-latest
@@ -217,10 +221,39 @@ jobs:
               desktop: { versionCode: $versionCode, versionName: $versionName, url: $msiUrl, sha256: $msiSha }
             }' > artifacts/latest.json
 
+      # latest.json の生バイトへ署名する。アプリは署名を確かめてからでないとマニフェストを解釈しない。
+      # 鍵は環境変数で受け取り、権限を絞った一時ファイルへ書いて使い、ジョブを抜けるときに消す。
+      # 引数へ載せるとプロセス一覧から読める。
+      - name: Sign latest.json
+        env:
+          SIGNING_KEY: ${{ secrets.PERANTA_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "PERANTA_SIGNING_KEY が未設定です" >&2
+            exit 1
+          fi
+          key_file="$RUNNER_TEMP/manifest-signing-key.pem"
+          trap 'rm -f "$key_file"' EXIT
+          (umask 077 && printf '%s\n' "$SIGNING_KEY" > "$key_file")
+          openssl dgst -sha256 -sign "$key_file" artifacts/latest.json |
+            base64 -w0 > artifacts/latest.json.sig
+
+          # アプリが持つ公開鍵で確かめてから配る。鍵が食い違ったまま公開すると、
+          # 配布済みの全端末が更新できなくなる。
+          printf '%s' "$MANIFEST_PUBLIC_KEY" | base64 -d > "$RUNNER_TEMP/manifest-public-key.der"
+          openssl pkey -pubin -inform DER -in "$RUNNER_TEMP/manifest-public-key.der" \
+            -out "$RUNNER_TEMP/manifest-public-key.pem"
+          base64 -d artifacts/latest.json.sig > "$RUNNER_TEMP/latest.json.sig.der"
+          openssl dgst -sha256 -verify "$RUNNER_TEMP/manifest-public-key.pem" \
+            -signature "$RUNNER_TEMP/latest.json.sig.der" artifacts/latest.json
+
       - uses: actions/upload-artifact@v4
         with:
           name: manifest
-          path: artifacts/latest.json
+          path: |
+            artifacts/latest.json
+            artifacts/latest.json.sig
           if-no-files-found: error
 
   # 成果物を公開するだけのジョブ。contents: write を持つのはここだけ。
@@ -249,3 +282,4 @@ jobs:
             artifacts/peranta.msi
             artifacts/peranta.apk
             artifacts/latest.json
+            artifacts/latest.json.sig

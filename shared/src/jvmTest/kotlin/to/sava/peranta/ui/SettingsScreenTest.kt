@@ -21,10 +21,7 @@ import com.russhwolf.settings.MapSettings
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.headersOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,11 +34,13 @@ import to.sava.peranta.ui.setup.OVERVIEW_ROW_FORWARD
 import to.sava.peranta.ui.setup.OVERVIEW_ROW_RECEIVE
 import to.sava.peranta.ui.setup.SMS_DIRECT_RECEIVE_DESCRIPTION
 import to.sava.peranta.update.PLATFORM_DESKTOP
+import to.sava.peranta.update.TestSigningKey
 import to.sava.peranta.update.UpdateChecker
 import to.sava.peranta.update.UpdateController
 import to.sava.peranta.update.UpdateInstallState
 import to.sava.peranta.update.UpdateStatus
 import to.sava.peranta.update.releaseAssetUrl
+import to.sava.peranta.update.signedManifestEngine
 import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -938,15 +937,10 @@ class SettingsScreenTest {
         val manifestJson = """
             { "desktop": { "versionCode": 20, "versionName": "2.0.0", "sha256": "abc" } }
         """.trimIndent()
-        val engine = MockEngine {
-            respond(
-                content = manifestJson,
-                status = HttpStatusCode.OK,
-                headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
-            )
-        }
-        val updateController =
-            UpdateController(UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP), scope)
+        val key = TestSigningKey()
+        val engine = signedManifestEngine(manifestJson, key.sign(manifestJson))
+        val checker = UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP, publicKey = key.publicKey)
+        val updateController = UpdateController(checker, scope)
         var installed: UpdateStatus.Available? = null
 
         try {
@@ -984,15 +978,10 @@ class SettingsScreenTest {
         val manifestJson = """
             { "desktop": { "versionCode": 20, "versionName": "2.0.0", "sha256": "abc" } }
         """.trimIndent()
-        val engine = MockEngine {
-            respond(
-                content = manifestJson,
-                status = HttpStatusCode.OK,
-                headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
-            )
-        }
-        val updateController =
-            UpdateController(UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP), scope)
+        val key = TestSigningKey()
+        val engine = signedManifestEngine(manifestJson, key.sign(manifestJson))
+        val checker = UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP, publicKey = key.publicKey)
+        val updateController = UpdateController(checker, scope)
 
         try {
             setContent {

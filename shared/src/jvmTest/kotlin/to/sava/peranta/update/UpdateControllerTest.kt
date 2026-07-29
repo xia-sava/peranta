@@ -2,11 +2,6 @@ package to.sava.peranta.update
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
-import io.ktor.client.engine.mock.respond
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.headersOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,20 +16,16 @@ import kotlin.test.assertFalse
 
 class UpdateControllerTest {
 
+    private val key = TestSigningKey()
+
     private val manifestJson = """
         { "desktop": { "versionCode": 20, "versionName": "2.0.0", "sha256": "d2" } }
     """.trimIndent()
 
-    private fun manifestEngine(): MockEngine = MockEngine {
-        respond(
-            content = manifestJson,
-            status = HttpStatusCode.OK,
-            headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
-        )
-    }
+    private fun manifestEngine(): MockEngine = signedManifestEngine(manifestJson, key.sign(manifestJson))
 
     private fun controller(scope: CoroutineScope, engine: MockEngine = manifestEngine()): UpdateController {
-        val checker = UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP)
+        val checker = UpdateChecker(HttpClient(engine), 1, PLATFORM_DESKTOP, publicKey = key.publicKey)
         return UpdateController(checker, scope)
     }
 
@@ -56,7 +47,7 @@ class UpdateControllerTest {
         }
     }
 
-    /** 実行中の多重 checkNow は無視され、HTTP リクエストも確認も 1 回だけ走る。 */
+    /** 実行中の多重 checkNow は無視され、確認は 1 回だけ走る（マニフェストと署名の 2 要求で 1 回）。 */
     @Test
     fun checkNowIgnoresConcurrentInvocation() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -71,7 +62,7 @@ class UpdateControllerTest {
 
             assertEquals(UpdateStatus.Available("2.0.0", releaseAssetUrl("peranta.msi"), "d2"), status)
             assertFalse(controller.checking.value)
-            assertEquals(1, engine.requestHistory.size)
+            assertEquals(2, engine.requestHistory.size)
         } finally {
             scope.cancel()
         }

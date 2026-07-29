@@ -4,7 +4,7 @@ import co.touchlab.kermit.Logger
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.bodyAsBytes
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import to.sava.peranta.model.PerantaJson
@@ -26,6 +26,12 @@ private val RELEASE_ASSET_NAMES = mapOf(
 /** latest.json の所在（§12）。接続先の設定とは独立に引けるよう固定の配布元を指す。 */
 val LATEST_MANIFEST_URL: String = releaseAssetUrl("latest.json")
 
+/** マニフェストの署名の所在（§12）。マニフェストと同じ場所に同じ名前で並べる。 */
+private const val MANIFEST_SIGNATURE_SUFFIX = ".sig"
+
+/** 署名を確かめられなかったときの理由。確かめられなかったこと以上の内部事情は伝えない。 */
+private const val SIGNATURE_UNVERIFIED = "配布物の署名を確認できませんでした"
+
 /**
  * 配布元の latest.json を取得し、自分の [currentVersionCode] と [platformKey] の配布物を比較する。
  * ネットワーク失敗・JSON 不正・プラットフォームキー欠落はいずれも [UpdateStatus.Failed] とし、
@@ -34,13 +40,18 @@ val LATEST_MANIFEST_URL: String = releaseAssetUrl("latest.json")
  * 配布物の取得先はマニフェストの指定を受け付けず、[releaseAssetUrl] で固定の配布元から組み立てる。
  * マニフェストが動かせるのは版と照合値だけになる。
  *
- * [manifestUrl] は取得先を差し替えるための口で、配布物としての動作では固定の [LATEST_MANIFEST_URL] を使う。
+ * マニフェストは署名を検証してからでないと解釈しない。署名が無い・読めない・鍵が合わない場合は
+ * いずれも拒否し、検証を省く経路を作らない。検証の対象は取得したバイト列そのものとする。
+ *
+ * [manifestUrl] と [publicKey] は取得先と信頼の起点を差し替えるための口で、
+ * 配布物としての動作では固定の [LATEST_MANIFEST_URL] と [MANIFEST_PUBLIC_KEY] を使う。
  */
 class UpdateChecker(
     private val httpClient: HttpClient,
     private val currentVersionCode: Int,
     private val platformKey: String,
     private val manifestUrl: String = LATEST_MANIFEST_URL,
+    private val publicKey: String = MANIFEST_PUBLIC_KEY,
     private val log: Logger = Logger.withTag("UpdateChecker"),
 ) {
     suspend fun check(): UpdateStatus {
@@ -51,7 +62,13 @@ class UpdateChecker(
         if (!response.status.isSuccess()) {
             return UpdateStatus.Failed("latest.json の取得に失敗しました (HTTP ${response.status.value})")
         }
-        val manifest = decode(response)
+        val body = bytesOf(response)
+            ?: return UpdateStatus.Failed("latest.json の取得に失敗しました")
+        if (!hasValidSignature(body)) {
+            log.w { "manifest signature not verified" }
+            return UpdateStatus.Failed(SIGNATURE_UNVERIFIED)
+        }
+        val manifest = decode(body)
             ?: return UpdateStatus.Failed("latest.json の解析に失敗しました")
         val release = manifest.release(platformKey)
             ?: return UpdateStatus.Failed("latest.json にプラットフォーム '$platformKey' の項目がありません")
@@ -61,6 +78,14 @@ class UpdateChecker(
         log.i { "update available: ${release.versionName} (code ${release.versionCode})" }
         return UpdateStatus.Available(release.versionName, releaseAssetUrl(assetName), release.sha256)
     }
+
+    /** マニフェストに添えられた署名を取得して照合する。取得できない署名は不正な署名と同じく拒否する。 */
+    private suspend fun hasValidSignature(manifest: ByteArray): Boolean =
+        fetch("$manifestUrl$MANIFEST_SIGNATURE_SUFFIX")
+            ?.takeIf { response -> response.status.isSuccess() }
+            ?.let { response -> bytesOf(response) }
+            ?.let { signature -> verifyManifestSignature(manifest, signature.decodeToString(), publicKey) }
+            ?: false
 
     private suspend fun fetch(url: String): HttpResponse? =
         try {
@@ -72,11 +97,19 @@ class UpdateChecker(
             null
         }
 
-    private suspend fun decode(response: HttpResponse): LatestManifest? =
+    private suspend fun bytesOf(response: HttpResponse): ByteArray? =
         try {
-            PerantaJson.decodeFromString<LatestManifest>(response.bodyAsText())
+            response.bodyAsBytes()
         } catch (cancellation: CancellationException) {
             throw cancellation
+        } catch (error: Exception) {
+            log.w(error) { "response body read failed" }
+            null
+        }
+
+    private fun decode(manifest: ByteArray): LatestManifest? =
+        try {
+            PerantaJson.decodeFromString<LatestManifest>(manifest.decodeToString())
         } catch (error: Exception) {
             log.w(error) { "latest.json decode failed" }
             null
