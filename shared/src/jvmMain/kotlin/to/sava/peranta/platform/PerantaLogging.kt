@@ -13,7 +13,7 @@ private const val MAX_LOG_BYTES = 1_000_000L
 private const val ROTATION_KEEP = 3
 
 /**
- * kermit のグローバル出力先を「コンソール + %APPDATA%\Peranta\logs\peranta.log」に設定し、
+ * kermit のグローバル出力先を「コンソール + アプリのデータ領域の logs\peranta.log」に設定し、
  * [verboseLogging] からログに残す最小重大度を決める（§11）。アプリ起動時に一度だけ呼ぶ。
  */
 fun initLogging(verboseLogging: Boolean, logFile: File = File(JvmPaths.logDir, "peranta.log")) {

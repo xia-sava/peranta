@@ -2,7 +2,7 @@ package to.sava.peranta.timeline
 
 /**
  * JSONL タイムラインのファイル I/O を抽象化する最小インターフェース。
- * 置き場所（Android の filesDir / Windows の %APPDATA%）はプラットフォーム毎に解決する。
+ * 置き場所（Android の filesDir / Windows の %LOCALAPPDATA%）はプラットフォーム毎に解決する。
  */
 interface TimelineFile {
 

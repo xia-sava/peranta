@@ -57,6 +57,7 @@ import to.sava.peranta.platform.copySensitiveTextToClipboard
 import to.sava.peranta.platform.eraseAppData
 import to.sava.peranta.platform.initLogging
 import to.sava.peranta.platform.ioDispatcher
+import to.sava.peranta.platform.migrateAppDataIfNeeded
 import to.sava.peranta.platform.platformCapabilities
 import to.sava.peranta.toast.ComposeToaster
 import to.sava.peranta.toast.ToastHost
@@ -243,6 +244,8 @@ private fun windowGeometryOf(state: WindowState): WindowGeometry? {
 }
 
 fun main(args: Array<String>) {
+    // ログも履歴もアプリのデータ領域へ書くので、置き場が定まってから使い始める（§11）。
+    migrateAppDataIfNeeded()
     // 設定の読み出しでも記録が要るため、出力先を先に用意してから詳しさを設定に合わせる。
     initLogging(verboseLogging = false)
     val desktopSettings = DesktopSettings()

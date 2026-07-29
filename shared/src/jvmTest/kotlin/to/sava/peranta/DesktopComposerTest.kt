@@ -40,7 +40,7 @@ class DesktopComposerTest {
 
     private val tempFiles = mutableListOf<File>()
 
-    /** 貼り付け画像の置き場。実際のデータ領域（%APPDATA%\Peranta\clipboard）は触らない。 */
+    /** 貼り付け画像の置き場。実際のアプリデータ領域の clipboard は触らない。 */
     private val clipboardRoot: File = Files.createTempDirectory("peranta-clipboard-test").toFile()
 
     @AfterTest

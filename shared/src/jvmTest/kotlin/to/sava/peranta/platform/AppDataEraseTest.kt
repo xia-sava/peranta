@@ -38,7 +38,7 @@ class AppDataEraseTest {
             file("logs/update-apply.log"),
         )
 
-        eraseAppData(appDir)
+        eraseAppData(listOf(appDir))
 
         erased.forEach { assertFalse(it.exists(), "残っている: ${it.relativeTo(appDir)}") }
         listOf("attachments", "clipboard", "logs").forEach {
@@ -51,7 +51,7 @@ class AppDataEraseTest {
     fun leavesFilesPerantaDidNotWrite() {
         val untouched = listOf(file("memo.txt"), file("timeline.jsonl.bak"), file("someone-else/data.bin"))
 
-        eraseAppData(appDir)
+        eraseAppData(listOf(appDir))
 
         untouched.forEach { assertTrue(it.exists(), "消えている: ${it.relativeTo(appDir)}") }
         assertTrue(appDir.exists())
@@ -60,8 +60,30 @@ class AppDataEraseTest {
     /** 何も書かれていない領域に対しても失敗しない。 */
     @Test
     fun succeedsOnEmptyAppDir() {
-        eraseAppData(appDir)
+        eraseAppData(listOf(appDir))
 
         assertTrue(appDir.exists())
+    }
+
+    /** 移設できずに旧い置き場が残っている場合、そちらの履歴・添付・ログも消える。 */
+    @Test
+    fun erasesLeftoverLegacyDirectoryToo() {
+        val legacyDir = Files.createTempDirectory("peranta-erase-legacy-test").toFile()
+        try {
+            val legacyTimeline = File(legacyDir, "timeline.jsonl").also { it.writeText("x") }
+            val legacyLog = File(legacyDir, "logs/peranta.log").also {
+                it.parentFile.mkdirs()
+                it.writeText("x")
+            }
+            val timeline = file("timeline.jsonl")
+
+            eraseAppData(listOf(appDir, legacyDir))
+
+            assertFalse(legacyTimeline.exists(), "旧い置き場の履歴が残っている")
+            assertFalse(legacyLog.exists(), "旧い置き場のログが残っている")
+            assertFalse(timeline.exists(), "現在の置き場の履歴が残っている")
+        } finally {
+            legacyDir.deleteRecursively()
+        }
     }
 }
