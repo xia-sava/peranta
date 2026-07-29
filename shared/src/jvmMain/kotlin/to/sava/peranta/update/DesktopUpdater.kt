@@ -17,14 +17,21 @@ import java.io.File
  * Desktop の自己更新配線。HTTP クライアント・確認スコープ・MSI インストーラを内包し、
  * UI へは [controller]・[installState]・[install] だけを公開する（§12）。
  * ktor 型を app モジュールへ漏らさない。
+ *
+ * [downloadRelease]（配布物の取得）と [launchInstaller]（照合済み配布物の引き渡し）は
+ * 内包する [DesktopUpdateInstaller] の対応する操作を既定とし、差し替えを受け付ける。
  */
 class DesktopUpdater(
     currentVersionCode: Int,
     private val log: Logger = Logger.withTag("Updater"),
+    downloadRelease: (suspend (url: String, onProgress: (received: Long, total: Long) -> Unit) -> File)? = null,
+    launchInstaller: ((msi: File) -> Unit)? = null,
 ) {
     private val httpClient = createNtfyHttpClient()
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val installer = DesktopUpdateInstaller(httpClient)
+    private val downloadRelease = downloadRelease ?: installer::download
+    private val launchInstaller = launchInstaller ?: installer::launchInstaller
 
     /** UI が購読する更新状態。 */
     val controller: UpdateController =
@@ -54,7 +61,7 @@ class DesktopUpdater(
         _installState.value = UpdateInstallState.Downloading(0, 0)
         scope.launch {
             try {
-                val msi = installer.download(available.url) { received, total ->
+                val msi = downloadRelease(available.url) { received, total ->
                     _installState.value = UpdateInstallState.Downloading(received, total)
                 }
                 _installState.value = UpdateInstallState.Verifying
@@ -82,7 +89,7 @@ class DesktopUpdater(
     fun applyNow(onReadyToExit: () -> Unit) {
         val msi = verified ?: return
         try {
-            installer.launchInstaller(msi)
+            launchInstaller(msi)
             _installState.value = UpdateInstallState.Launching
             onReadyToExit()
         } catch (error: Exception) {
