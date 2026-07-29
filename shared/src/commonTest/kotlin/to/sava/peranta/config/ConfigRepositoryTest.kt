@@ -21,11 +21,11 @@ import kotlin.test.assertTrue
 
 class ConfigRepositoryTest {
 
-    /** save した設定が load で同じ値に戻り、共有鍵も KeyStore 経由で往復する。 */
+    /** save した設定が load で同じ値に戻り、共有鍵とアクセストークンも SecretStore 経由で往復する。 */
     @Test
     fun saveThenLoadRoundTrips() {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings), forceTls = false)
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings), forceTls = false)
         val key = Base64.encode(generateKey())
         val config = PerantaConfig(
             host = "localhost",
@@ -47,7 +47,7 @@ class ConfigRepositoryTest {
     @Test
     fun clearRemovesEverySettingAndSharedKey() {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings), forceTls = false)
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings), forceTls = false)
         repo.save(
             PerantaConfig(
                 host = "peranta.example.com",
@@ -69,24 +69,49 @@ class ConfigRepositoryTest {
         assertEquals(PerantaConfig().host, cleared.host)
     }
 
-    /** 鍵の保管先が settings の外にある実装でも、clear は KeyStore へ消去を伝える（§11）。 */
+    /** 秘密の保管先が settings の外にある実装でも、clear は SecretStore へ消去を伝える（§11）。 */
     @Test
-    fun clearAlsoClearsKeyStoreOutsideSettings() {
+    fun clearAlsoClearsSecretsOutsideSettings() {
         val settings = MapSettings()
-        val keyStore = SettingsKeyStore(MapSettings())
-        val repo = ConfigRepository(settings, keyStore, forceTls = false)
-        repo.save(PerantaConfig(sharedKeyBase64 = Base64.encode(generateKey()), keyId = "k1"))
+        val secretStore = SettingsSecretStore(MapSettings())
+        val repo = ConfigRepository(settings, secretStore, forceTls = false)
+        repo.save(
+            PerantaConfig(
+                accessToken = "tok",
+                sharedKeyBase64 = Base64.encode(generateKey()),
+                keyId = "k1",
+            ),
+        )
 
         repo.clear()
 
-        assertNull(keyStore.loadKey())
+        assertNull(secretStore.loadSecret(SECRET_SHARED_KEY))
+        assertNull(secretStore.loadSecret(SECRET_ACCESS_TOKEN))
+    }
+
+    /**
+     * 素のまま保存する実装では、旧版が settings へ直に書いた共有鍵・アクセストークンを
+     * そのまま読み出せる（保存形式を変えていない、§11）。
+     */
+    @Test
+    fun loadsSecretsWrittenDirectlyIntoSettings() {
+        val key = Base64.encode(generateKey())
+        val settings = MapSettings()
+        settings.putString(SECRET_SHARED_KEY, key)
+        settings.putString(SECRET_ACCESS_TOKEN, "tok")
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings), forceTls = false)
+
+        val loaded = repo.load()
+
+        assertEquals(key, loaded.sharedKeyBase64)
+        assertEquals("tok", loaded.accessToken)
     }
 
     /** リリース相当（forceTls）では TLS を常に有効として読み出し、保存値も書かない（§16）。 */
     @Test
     fun forceTlsAlwaysLoadsTrueAndSkipsPersisting() {
         val settings = MapSettings()
-        val forced = ConfigRepository(settings, SettingsKeyStore(settings), forceTls = true)
+        val forced = ConfigRepository(settings, SettingsSecretStore(settings), forceTls = true)
         forced.save(PerantaConfig(useTls = false))
         assertTrue(forced.load().useTls)
         assertFalse(settings.hasKey(ConfigRepository.KEY_USE_TLS))
@@ -96,7 +121,7 @@ class ConfigRepositoryTest {
     @Test
     fun devRepositoryDefaultsTlsOnAndHonorsStoredValue() {
         val settings = MapSettings()
-        val dev = ConfigRepository(settings, SettingsKeyStore(settings), forceTls = false)
+        val dev = ConfigRepository(settings, SettingsSecretStore(settings), forceTls = false)
         assertTrue(dev.load().useTls)
         dev.save(PerantaConfig(useTls = false))
         assertFalse(dev.load().useTls)
@@ -120,7 +145,7 @@ class ConfigRepositoryTest {
     @Test
     fun unifiedPushEndpointRoundTrips() {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
         repo.save(PerantaConfig(unifiedPushEndpoint = "https://peranta.example.com/UPxyz"))
         assertEquals("https://peranta.example.com/UPxyz", repo.load().unifiedPushEndpoint)
         repo.save(PerantaConfig(unifiedPushEndpoint = null))
@@ -131,7 +156,7 @@ class ConfigRepositoryTest {
     @Test
     fun ensureReceiveTopicGeneratesAndPersists() {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
         val first = repo.ensureReceiveTopic("My Desk")
         assertTrue(first.startsWith("peranta-dev-my-desk-"), first)
         assertEquals(first, repo.ensureReceiveTopic("My Desk"))
@@ -141,7 +166,7 @@ class ConfigRepositoryTest {
     @Test
     fun sendRoleFieldsRoundTrip() {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
         val config = PerantaConfig(
             deviceName = "phone",
             sendEnabled = true,
@@ -170,7 +195,7 @@ class ConfigRepositoryTest {
     @Test
     fun sendRoleDefaultsRoundTrip() {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
         repo.save(PerantaConfig())
         val loaded = repo.load()
         assertFalse(loaded.sendEnabled)
@@ -187,7 +212,7 @@ class ConfigRepositoryTest {
     @Test
     fun revokedDeviceIdsRoundTrip() {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
         repo.save(PerantaConfig(revokedDeviceIds = setOf("dev-lost", "dev-old")))
         assertEquals(setOf("dev-lost", "dev-old"), repo.load().revokedDeviceIds)
         repo.save(PerantaConfig())
@@ -198,7 +223,7 @@ class ConfigRepositoryTest {
     @Test
     fun timelineRetentionDaysRoundTrips() {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
         repo.save(PerantaConfig(timelineRetentionDays = 30))
         assertEquals(30, repo.load().timelineRetentionDays)
         repo.save(PerantaConfig(timelineRetentionDays = null))
@@ -209,7 +234,7 @@ class ConfigRepositoryTest {
     @Test
     fun updateFilterRulesAppliesTransformAndKeepsOtherFields() = runTest {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
         repo.save(PerantaConfig(deviceName = "phone", sendEnabled = true))
         val updated = repo.updateFilterRules { rules -> mutePackage(rules, "com.spam") }
         assertEquals(listOf(FilterRule("com.spam", RuleAction.EXCLUDE)), updated)
@@ -223,7 +248,7 @@ class ConfigRepositoryTest {
     @Test
     fun updateFilterRulesSkipsWriteWhenUnchanged() = runTest {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
         repo.save(PerantaConfig(filterRules = listOf(FilterRule("com.spam", RuleAction.EXCLUDE))))
         var received: List<FilterRule>? = null
         val result = repo.updateFilterRules { rules ->
@@ -241,7 +266,7 @@ class ConfigRepositoryTest {
     @Test
     fun saveAndUpdateFilterRulesShareExclusionUnderConcurrency() = runTest {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
         val iterations = 200
 
         coroutineScope {
@@ -262,7 +287,7 @@ class ConfigRepositoryTest {
     @Test
     fun attachFullTextToggleRoundTrips() {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
         assertTrue(repo.load().attachFullTextWhenTruncated)
         repo.save(PerantaConfig(attachFullTextWhenTruncated = false))
         assertFalse(repo.load().attachFullTextWhenTruncated)
@@ -274,7 +299,7 @@ class ConfigRepositoryTest {
     @Test
     fun autoDisplayImagesToggleRoundTrips() {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
         assertTrue(repo.load().autoDisplayImages)
         repo.save(PerantaConfig(autoDisplayImages = false))
         assertFalse(repo.load().autoDisplayImages)
@@ -286,7 +311,7 @@ class ConfigRepositoryTest {
     @Test
     fun savingWithoutKeyClearsStoredKey() {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
         repo.save(PerantaConfig(sharedKeyBase64 = Base64.encode(generateKey())))
         repo.save(PerantaConfig(sharedKeyBase64 = null))
         assertNull(repo.load().sharedKeyBase64)

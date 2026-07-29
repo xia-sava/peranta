@@ -45,9 +45,9 @@ class PairingApplierTest {
         assertTrue(repo.load().isReadyForUnifiedPushReceive)
     }
 
-    /** 共有鍵は KeyStore シーム経由で保存され、別インスタンスの設定層からも読み出せる。 */
+    /** 共有鍵は SecretStore シーム経由で保存され、別インスタンスの設定層からも読み出せる。 */
     @Test
-    fun applyPersistsKeyThroughKeyStoreSeam() {
+    fun applyPersistsKeyThroughSecretStoreSeam() {
         val settings = MapSettings()
         PairingApplier(ConfigRepository(settings)).apply(
             PairingData("h", "tk", "k1", key(), port = null),

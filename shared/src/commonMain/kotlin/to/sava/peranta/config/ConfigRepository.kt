@@ -9,13 +9,12 @@ import to.sava.peranta.filter.FilterMode
 import to.sava.peranta.filter.FilterRule
 import to.sava.peranta.filter.decodeFilterRules
 import to.sava.peranta.filter.encodeFilterRules
-import kotlin.io.encoding.Base64
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 /**
  * [PerantaConfig] を multiplatform-settings に読み書きする。
- * 共有鍵の実体だけは [KeyStore] 経由で保管し、その他の項目は settings に直接保存する。
+ * 共有鍵とアクセストークンは [SecretStore] 経由で保管し、その他の項目は settings に直接保存する。
  *
  * [forceTls] が真（リリースビルド・既定）のとき TLS は常に有効として読み出し、保存もしない。
  * 偽（Android の debug ビルド / Desktop の devMode）のときは保存値を尊重するが、既定は有効で、
@@ -25,20 +24,19 @@ import kotlin.uuid.Uuid
  */
 class ConfigRepository(
     private val settings: Settings,
-    private val keyStore: KeyStore = createKeyStore(settings),
+    private val secretStore: SecretStore = createSecretStore(settings),
     private val forceTls: Boolean = true,
 ) {
 
-    fun load(): PerantaConfig {
-        val sharedKeyBase64 = keyStore.loadKey()?.let { Base64.encode(it) }
-        return PerantaConfig(
+    fun load(): PerantaConfig =
+        PerantaConfig(
             host = settings.getString(KEY_HOST, DEFAULT_HOST),
             useTls = if (forceTls) true else settings.getBoolean(KEY_USE_TLS, true),
             port = if (settings.hasKey(KEY_PORT)) settings.getInt(KEY_PORT, 0) else null,
-            accessToken = settings.getStringOrNull(KEY_TOKEN),
+            accessToken = secretStore.loadSecret(SECRET_ACCESS_TOKEN),
             deviceId = settings.getStringOrNull(KEY_DEVICE_ID),
             deviceName = settings.getStringOrNull(KEY_DEVICE_NAME),
-            sharedKeyBase64 = sharedKeyBase64,
+            sharedKeyBase64 = secretStore.loadSecret(SECRET_SHARED_KEY),
             keyId = settings.getStringOrNull(KEY_KEY_ID),
             receiveTopic = settings.getStringOrNull(KEY_RECEIVE_TOPIC),
             controlTopic = settings.getStringOrNull(KEY_CONTROL_TOPIC),
@@ -61,7 +59,6 @@ class ConfigRepository(
             autoDisplayImages = settings.getBoolean(KEY_AUTO_DISPLAY_IMAGES, true),
             attachNotificationImages = settings.getBoolean(KEY_ATTACH_NOTIFICATION_IMAGES, true),
         )
-    }
 
     /**
      * 設定を全キー書き戻しで保存する。[updateFilterRules] と同じ排他ロックを取り、
@@ -76,7 +73,7 @@ class ConfigRepository(
         settings.putString(KEY_HOST, config.host)
         if (!forceTls) settings.putBoolean(KEY_USE_TLS, config.useTls)
         config.port?.let { settings.putInt(KEY_PORT, it) } ?: settings.remove(KEY_PORT)
-        putOrRemove(KEY_TOKEN, config.accessToken)
+        putOrClearSecret(SECRET_ACCESS_TOKEN, config.accessToken)
         putOrRemove(KEY_DEVICE_ID, config.deviceId)
         putOrRemove(KEY_DEVICE_NAME, config.deviceName)
         putOrRemove(KEY_KEY_ID, config.keyId)
@@ -98,18 +95,17 @@ class ConfigRepository(
             ?: settings.remove(KEY_TIMELINE_RETENTION_DAYS)
         settings.putBoolean(KEY_AUTO_DISPLAY_IMAGES, config.autoDisplayImages)
         settings.putBoolean(KEY_ATTACH_NOTIFICATION_IMAGES, config.attachNotificationImages)
-        config.sharedKeyBase64
-            ?.let { keyStore.storeKey(Base64.decode(it)) }
-            ?: keyStore.clearKey()
+        putOrClearSecret(SECRET_SHARED_KEY, config.sharedKeyBase64)
     }
 
     /**
-     * 端末に保存した設定を全て消す（§11）。共有鍵も破棄するため、以後は初期設定からやり直しになる。
-     * 鍵の保管先は settings の外にある実装もあるため、settings の消去とは別に [KeyStore] へも消去を求める。
+     * 端末に保存した設定を全て消す（§11）。共有鍵とアクセストークンも破棄するため、
+     * 以後は初期設定からやり直しになる。
+     * 秘密の保管先は settings の外にある実装もあるため、settings の消去とは別に [SecretStore] へも消去を求める。
      */
     fun clear(): Unit = runBlocking {
         configMutex.withLock {
-            keyStore.clearKey()
+            SECRET_NAMES.forEach { secretStore.clearSecret(it) }
             settings.clear()
         }
     }
@@ -186,11 +182,14 @@ class ConfigRepository(
         value?.let { settings.putString(key, it) } ?: settings.remove(key)
     }
 
+    private fun putOrClearSecret(name: String, value: String?) {
+        value?.let { secretStore.storeSecret(name, it) } ?: secretStore.clearSecret(name)
+    }
+
     companion object {
         const val KEY_HOST = "host"
         const val KEY_USE_TLS = "useTls"
         const val KEY_PORT = "port"
-        const val KEY_TOKEN = "accessToken"
         const val KEY_DEVICE_ID = "deviceId"
         const val KEY_DEVICE_NAME = "deviceName"
         const val KEY_KEY_ID = "keyId"

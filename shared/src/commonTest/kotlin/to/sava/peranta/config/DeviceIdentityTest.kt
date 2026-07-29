@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 class DeviceIdentityTest {
 
     private fun repo(settings: MapSettings = MapSettings()) =
-        ConfigRepository(settings, SettingsKeyStore(settings))
+        ConfigRepository(settings, SettingsSecretStore(settings))
 
     /** ensureDeviceId は未設定なら生成して永続化し、以後は同じ ID を返す。 */
     @Test

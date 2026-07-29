@@ -2,7 +2,7 @@ package to.sava.peranta.pairing
 
 import com.russhwolf.settings.MapSettings
 import to.sava.peranta.config.ConfigRepository
-import to.sava.peranta.config.SettingsKeyStore
+import to.sava.peranta.config.SettingsSecretStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -49,7 +49,7 @@ class PairingBlobTopicTest {
     @Test
     fun applierStoresBlobTopic() {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
         repo.save(repo.load().copy(deviceName = "tablet"))
         PairingApplier(repo).apply(PairingData("h", "tk", "k1", key(), blobTopic = "peranta-blob-abc"))
         assertEquals("peranta-blob-abc", repo.load().blobTopic)
@@ -59,7 +59,7 @@ class PairingBlobTopicTest {
     @Test
     fun applierKeepsExistingBlobTopicWhenAbsent() {
         val settings = MapSettings()
-        val repo = ConfigRepository(settings, SettingsKeyStore(settings))
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
         repo.save(repo.load().copy(deviceName = "tablet", blobTopic = "peranta-blob-existing"))
         PairingApplier(repo).apply(PairingData("h", "tk", "k1", key()))
         assertEquals("peranta-blob-existing", repo.load().blobTopic)

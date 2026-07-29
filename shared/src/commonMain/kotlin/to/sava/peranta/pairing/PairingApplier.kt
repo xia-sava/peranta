@@ -5,7 +5,8 @@ import kotlin.io.encoding.Base64
 
 /**
  * 復号済みの [PairingData] をローカル設定へ適用する（§6）。
- * 共有鍵は [ConfigRepository] を介して KeyStore シームに保存し、他項目は settings に保存する。
+ * 共有鍵とアクセストークンは [ConfigRepository] を介して SecretStore シームに保存し、
+ * 他項目は settings に保存する。
  * TLS には触れない（有効/無効はビルド種別で決まる、§16）。
  *
  * 端末名は QR に含まれない。[deviceName] を渡した場合は空文字列でもそのまま適用し、

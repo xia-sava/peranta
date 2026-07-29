@@ -53,6 +53,7 @@ kotlin {
             dependsOn(jvmShared)
             dependencies {
                 implementation(libs.cryptography.provider.jdk)
+                implementation(libs.jna.platform)
                 implementation(libs.ktor.client.cio)
                 implementation(libs.multiplatform.settings.noArg)
             }
@@ -143,6 +144,9 @@ kover {
                 classes("to.sava.peranta.toast.NoOpToaster")
                 classes("to.sava.peranta.toast.ReceivedNotificationToast")
                 classes("to.sava.peranta.toast.ToastResult")
+                // 秘密の保管を OS の保護機構へ委ねる配線（Windows の DPAPI 呼び出しが要る。
+                // 保護済み値の読み書きと旧形式からの移行は ProtectedSecretStore でテストする）。
+                classes("to.sava.peranta.config.WindowsDpapiProtector")
                 // 自己更新のプラットフォーム別インストーラ・配線（OS のインストーラ/ブラウザ起動・実 HTTP が必要）。
                 classes("to.sava.peranta.update.AndroidUpdateInstaller")
                 classes("to.sava.peranta.update.DesktopUpdateInstaller")
