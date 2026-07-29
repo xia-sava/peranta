@@ -44,8 +44,21 @@ class RosterStore(
         val events = fetchHistoryOrNull() ?: return RosterFetchResult.FetchFailed
         val presences = events.mapNotNull { presenceOrNull(it) }
         log.d { "roster built from ${presences.size}/${events.size} presence messages" }
-        return RosterFetchResult.Fetched(buildRoster(presences))
+        val entries = buildRoster(presences)
+        log.d { "roster: ${entries.joinToString(separator = "; ") { describe(it) }}" }
+        return RosterFetchResult.Fetched(entries)
     }
+
+    /**
+     * 診断ログ向けにエントリを 1 行で表す。宛先が引けない原因は deviceId の不一致かエンドポイントの
+     * 欠落に絞られるため、その 2 点とコマンドを実行できるかを出す。エンドポイントは購読先そのもの
+     * なので、値ではなく有無だけを残す。
+     */
+    private fun describe(entry: RosterEntry): String =
+        "${entry.deviceId}(${entry.deviceName}) " +
+            "endpoint=${if (topicOf(entry.endpoint).isBlank()) "none" else "set"} " +
+            "capabilities=${entry.capabilities.joinToString(",").ifEmpty { "none" }} " +
+            "sender=${entry.sender}"
 
     /** 履歴取得を [fetchTimeoutMillis] で打ち切りつつ実行する。失敗・タイムアウトは null。 */
     private suspend fun fetchHistoryOrNull(): List<NtfyEvent>? =
