@@ -61,10 +61,15 @@ class SettingsController(private val repository: ConfigRepository) {
     /**
      * 送信ロールまわりの設定を保存する。他項目は既存値を引き継ぐ。
      */
-    fun saveSendRoleSettings(sendEnabled: Boolean, smsDirectReceive: Boolean): PerantaConfig {
+    fun saveSendRoleSettings(
+        sendEnabled: Boolean,
+        smsDirectReceive: Boolean,
+        forwardWorkProfileNotifications: Boolean,
+    ): PerantaConfig {
         val updated = repository.load().copy(
             sendEnabled = sendEnabled,
             smsDirectReceive = smsDirectReceive,
+            forwardWorkProfileNotifications = forwardWorkProfileNotifications,
         )
         repository.save(updated)
         return updated

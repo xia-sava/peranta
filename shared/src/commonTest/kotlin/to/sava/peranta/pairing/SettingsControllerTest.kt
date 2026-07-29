@@ -234,18 +234,23 @@ class SettingsControllerTest {
         assertNull(noKey.buildPairingUri())
     }
 
-    /** 送信ロール設定の保存: sendEnabled/smsDirectReceive がリポジトリへ反映される。 */
+    /** 送信ロール設定の保存: sendEnabled/smsDirectReceive/仕事用プロファイルがリポジトリへ反映される。 */
     @Test
     fun saveSendRoleSettingsPersistsValues() {
         val (controller, repo) = controllerWith(
             PerantaConfig(sendEnabled = false, smsDirectReceive = true),
         )
 
-        controller.saveSendRoleSettings(sendEnabled = true, smsDirectReceive = false)
+        controller.saveSendRoleSettings(
+            sendEnabled = true,
+            smsDirectReceive = false,
+            forwardWorkProfileNotifications = true,
+        )
 
         val loaded = repo.load()
         assertTrue(loaded.sendEnabled)
         assertFalse(loaded.smsDirectReceive)
+        assertTrue(loaded.forwardWorkProfileNotifications)
     }
 
     /** 送信ロール設定の保存: 他項目（host 等）は既存値を引き継ぐ。 */
@@ -255,7 +260,11 @@ class SettingsControllerTest {
             PerantaConfig(host = "example.test", accessToken = "tk"),
         )
 
-        controller.saveSendRoleSettings(sendEnabled = true, smsDirectReceive = true)
+        controller.saveSendRoleSettings(
+            sendEnabled = true,
+            smsDirectReceive = true,
+            forwardWorkProfileNotifications = false,
+        )
 
         val loaded = repo.load()
         assertEquals("example.test", loaded.host)

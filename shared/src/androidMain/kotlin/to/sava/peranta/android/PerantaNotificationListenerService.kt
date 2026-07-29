@@ -211,12 +211,15 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             text = fields.text,
             at = now,
         )
+        val isCrossProfile = sbn.user != Process.myUserHandle()
         val skipReason = notificationSkipReason(
             packageName = packageName,
             defaultSmsPackage = defaultSmsPackage,
             isSmsDuplicate = smsDuplicate,
             isOngoing = sbn.isOngoing,
             isGroupSummary = sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0,
+            isCrossProfile = isCrossProfile,
+            forwardWorkProfile = config.forwardWorkProfileNotifications,
         )
         if (skipReason != null) {
             log.d { "skipping notification from $packageName reason=$skipReason" }
@@ -242,7 +245,6 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             priority = resolvePriority(sbn.notification),
             visibility = fields.visibility,
         )
-        val isCrossProfile = sbn.user != Process.myUserHandle()
         forward(input, deviceId, config, isCrossProfile, sbn.notification)
         // 転送を続けているだけでは presence を出す機会が無く、control topic 上の presence が
         // 保持期間を過ぎて消えるとコマンドの宛先として引けなくなる（§3.5）。

@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.PowerManager
+import android.os.UserManager
 import android.provider.Settings
 import co.touchlab.kermit.Logger
 import org.unifiedpush.android.connector.UnifiedPush
@@ -32,6 +33,7 @@ class AndroidSetupProbe(context: Context) {
     private val log = Logger.withTag("SetupProbe")
     private val powerManager = appContext.getSystemService(PowerManager::class.java)
     private val notificationManager = appContext.getSystemService(NotificationManager::class.java)
+    private val userManager = appContext.getSystemService(UserManager::class.java)
 
     /** ntfy（ディストリビュータ）が導入され既定に設定し得る状態か。 */
     fun ntfyInstalled(): Boolean =
@@ -83,6 +85,10 @@ class AndroidSetupProbe(context: Context) {
     /** このアプリの通知表示が有効か。 */
     fun notificationsEnabled(): Boolean =
         notificationManager.areNotificationsEnabled()
+
+    /** この端末に仕事用プロファイル（自ユーザーとは別のプロファイル）があるか（§3.1）。 */
+    fun hasWorkProfile(): Boolean =
+        (userManager?.userProfiles?.size ?: 1) > 1
 
     /** ntfy 側のサーバ設定へ貼り付ける値と ntfy 起動をまとめた補助操作。貼り先は ntfy アプリの表記に合わせる。 */
     fun ntfyServerAids(config: PerantaConfig): List<FixAid> =

@@ -12,12 +12,16 @@ class NlsSkipTest {
         isSmsDuplicate: Boolean = false,
         isOngoing: Boolean = false,
         isGroupSummary: Boolean = false,
+        isCrossProfile: Boolean = false,
+        forwardWorkProfile: Boolean = false,
     ): NotificationSkipReason? = notificationSkipReason(
         packageName = packageName,
         defaultSmsPackage = defaultSmsPackage,
         isSmsDuplicate = isSmsDuplicate,
         isOngoing = isOngoing,
         isGroupSummary = isGroupSummary,
+        isCrossProfile = isCrossProfile,
+        forwardWorkProfile = forwardWorkProfile,
     )
 
     /** 自分自身の通知は常に落とす（転送ループ防止）。 */
@@ -57,5 +61,27 @@ class NlsSkipTest {
     @Test
     fun otherAppNotificationIsForwarded() {
         assertNull(reason("com.example.bank", isSmsDuplicate = true))
+    }
+
+    /** 仕事用プロファイルの通知は、その転送を有効にしていなければ落とす（§3.1）。 */
+    @Test
+    fun workProfileNotificationIsSkippedByDefault() {
+        assertEquals(
+            NotificationSkipReason.WORK_PROFILE,
+            reason("com.example.mail", isCrossProfile = true),
+        )
+    }
+
+    /** 仕事用プロファイルの転送を有効にすれば、個人プロファイルと同じ扱いになる。 */
+    @Test
+    fun workProfileNotificationIsForwardedWhenEnabled() {
+        assertNull(reason("com.example.mail", isCrossProfile = true, forwardWorkProfile = true))
+    }
+
+    /** 個人プロファイルの通知は、仕事用プロファイルの設定に影響されない。 */
+    @Test
+    fun personalProfileNotificationIsUnaffectedByTheWorkProfileSetting() {
+        assertNull(reason("com.example.mail"))
+        assertNull(reason("com.example.mail", forwardWorkProfile = true))
     }
 }

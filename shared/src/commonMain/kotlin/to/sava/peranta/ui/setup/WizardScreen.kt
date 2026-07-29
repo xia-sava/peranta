@@ -185,13 +185,13 @@ fun WizardScreen(
 
     fun chooseForward(forward: Boolean) {
         answers = answers.copy(forward = forward)
-        controller.saveSendRoleSettings(forward, config.smsDirectReceive)
+        controller.saveSendRoleSettings(forward, config.smsDirectReceive, config.forwardWorkProfileNotifications)
         reload()
         onSaved?.invoke()
     }
 
     fun setSmsDirectReceive(checked: Boolean) {
-        controller.saveSendRoleSettings(config.sendEnabled, checked)
+        controller.saveSendRoleSettings(config.sendEnabled, checked, config.forwardWorkProfileNotifications)
         reload()
         onSaved?.invoke()
     }

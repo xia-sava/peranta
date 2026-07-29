@@ -37,6 +37,7 @@ class AndroidHealthChecker(
                 if (config.smsDirectReceive) {
                     add(smsPermissionItem())
                 }
+                workProfileItem(config)?.let { add(it) }
             }
             if (config.isReadyForUnifiedPushReceive) {
                 addAll(receiveSetupHealthItems(receiveSetupProvider.items(), onOpenReceiveSetup))
@@ -126,6 +127,26 @@ class AndroidHealthChecker(
             detail = if (enabled) null else "受信した通知を表示するにはこのアプリの通知を有効にしてください。",
             fixLabel = if (enabled) null else "設定を開く",
             onFix = if (enabled) null else probe::openAppNotificationSettings,
+        )
+    }
+
+    /**
+     * 仕事用プロファイルの通知の扱い（§3.1）。プロファイルを持たない端末では項目を出さない。
+     * 既定では転送しないため、通知が届かないことを不調と取り違えないよう、設定の場所を添えて情報として出す。
+     */
+    private fun workProfileItem(config: PerantaConfig): HealthCheckItem? {
+        if (!probe.hasWorkProfile()) return null
+        val forwarding = config.forwardWorkProfileNotifications
+        return HealthCheckItem(
+            id = "work-profile",
+            label = "仕事用プロファイルの通知",
+            state = if (forwarding) HealthCheckState.PASS else HealthCheckState.INFO,
+            detail = if (forwarding) {
+                null
+            } else {
+                "この端末には仕事用プロファイルがあり、そちらの通知は転送していません。" +
+                    "転送するには設定の「仕事用プロファイルの通知も転送する」を ON にしてください。"
+            },
         )
     }
 

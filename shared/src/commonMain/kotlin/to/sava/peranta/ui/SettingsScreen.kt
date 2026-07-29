@@ -99,6 +99,11 @@ private const val ATTACH_NOTIFICATION_IMAGES_DESCRIPTION: String =
     "この端末が転送する通知に、通知に付いていた画像と送信者のアイコンを添えます。" +
         "通信量が気になる場合は OFF にしてください。"
 
+/** 仕事用プロファイルの転送トグルの説明文（§3.1）。 */
+internal const val FORWARD_WORK_PROFILE_DESCRIPTION: String =
+    "仕事用プロファイル（会社から配られたアプリが入る領域）の通知は、この設定を ON にするまで転送しません。" +
+        "個人用の通知はこの設定に関わらず転送します。"
+
 /** 詳細な記録トグルの説明文（§11）。 */
 private const val VERBOSE_LOGGING_DESCRIPTION: String =
     "動きを追うための細かい記録をログに残します。うまく動かないときの調べものに使います。"
@@ -140,7 +145,8 @@ private const val SECTION_DANGER: String = "危険な操作"
  * QR の描画・スクロールバー・ペアリング文字列コピーはプラットフォーム依存のため
  * [qrContent] / [scrollbarContent] / [onCopyPairingUri] スロットで注入する。
  * [showSendRoleOptions] が真のときだけ送信ロール（[to.sava.peranta.config.PerantaConfig.sendEnabled] /
- * [to.sava.peranta.config.PerantaConfig.smsDirectReceive]）のトグルを表示する。
+ * [to.sava.peranta.config.PerantaConfig.smsDirectReceive] /
+ * [to.sava.peranta.config.PerantaConfig.forwardWorkProfileNotifications]）のトグルを表示する。
  * [onSaved] は設定の保存・鍵生成が成功した直後に呼ぶ（受信パイプラインの再構築契機に使う）。
  * [onOpenWizard] が非 null のとき、セットアップをページ列で案内するウィザードへの導線を出す。
  * [loadHealthItems] が非 null のとき冒頭に「セットアップ状況」セクションを出し、初回コンポジションで一度だけ
@@ -190,6 +196,7 @@ fun SettingsScreen(
     var verboseLogging by remember { mutableStateOf(initial.verboseLogging) }
     var sendEnabled by remember { mutableStateOf(initial.sendEnabled) }
     var smsDirectReceive by remember { mutableStateOf(initial.smsDirectReceive) }
+    var forwardWorkProfile by remember { mutableStateOf(initial.forwardWorkProfileNotifications) }
     var autoStartEnabled by remember { mutableStateOf(autoStart?.isEnabled?.invoke() ?: false) }
 
     var statusMessage by remember { mutableStateOf<String?>(null) }
@@ -323,28 +330,35 @@ fun SettingsScreen(
                 SectionHeader(title = SECTION_THIS_DEVICE)
                 DeviceNameField(value = deviceName, onValueChange = { deviceName = it; persistConnection() })
                 if (showSendRoleOptions) {
+                    fun persistSendRole() {
+                        controller.saveSendRoleSettings(sendEnabled, smsDirectReceive, forwardWorkProfile)
+                        dirty = true
+                    }
                     LabeledCheckbox(
                         checked = sendEnabled,
-                        onCheckedChange = {
-                            sendEnabled = it
-                            controller.saveSendRoleSettings(sendEnabled, smsDirectReceive)
-                            dirty = true
-                        },
+                        onCheckedChange = { sendEnabled = it; persistSendRole() },
                         label = "この端末から通知・SMS を送信する",
                         tag = TAG_SEND_ENABLED,
                     )
                     LabeledCheckbox(
                         checked = smsDirectReceive,
-                        onCheckedChange = {
-                            smsDirectReceive = it
-                            controller.saveSendRoleSettings(sendEnabled, smsDirectReceive)
-                            dirty = true
-                        },
+                        onCheckedChange = { smsDirectReceive = it; persistSendRole() },
                         label = "SMS を直接受信して転送する",
                         tag = TAG_SMS_DIRECT_RECEIVE,
                     )
                     Text(
                         text = SMS_DIRECT_RECEIVE_DESCRIPTION,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    LabeledCheckbox(
+                        checked = forwardWorkProfile,
+                        onCheckedChange = { forwardWorkProfile = it; persistSendRole() },
+                        label = "仕事用プロファイルの通知も転送する",
+                        tag = TAG_FORWARD_WORK_PROFILE,
+                    )
+                    Text(
+                        text = FORWARD_WORK_PROFILE_DESCRIPTION,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -838,6 +852,9 @@ const val TAG_ATTACH_NOTIFICATION_IMAGES: String = "settings-attach-notification
 const val TAG_AUTO_START: String = "settings-auto-start"
 const val TAG_SEND_ENABLED: String = "settings-send-enabled"
 const val TAG_SMS_DIRECT_RECEIVE: String = "settings-sms-direct-receive"
+
+/** 仕事用プロファイルの転送トグルのテストタグ。 */
+const val TAG_FORWARD_WORK_PROFILE: String = "settings-forward-work-profile"
 
 /** 詳細な記録トグルのテストタグ。 */
 const val TAG_VERBOSE_LOGGING: String = "settings-verbose-logging"

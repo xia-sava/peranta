@@ -832,6 +832,7 @@ class SettingsScreenTest {
 
         onNodeWithTag(TAG_SEND_ENABLED).assertDoesNotExist()
         onNodeWithTag(TAG_SMS_DIRECT_RECEIVE).assertDoesNotExist()
+        onNodeWithTag(TAG_FORWARD_WORK_PROFILE).assertDoesNotExist()
     }
 
     /** showSendRoleOptions=true なら送信ロールのトグルが出て、トグル時に即座に sendEnabled/smsDirectReceive へ反映される。 */
@@ -864,6 +865,39 @@ class SettingsScreenTest {
         setContent { SettingsScreen(controller, showSendRoleOptions = true) }
 
         onNodeWithText(SMS_DIRECT_RECEIVE_DESCRIPTION).assertIsDisplayed()
+    }
+
+    /**
+     * 仕事用プロファイルの転送は既定で OFF のまま出し、ON にできることと
+     * 既定では転送しないことを説明文で示す（§3.1）。
+     */
+    @Test
+    fun workProfileForwardingIsOffAndExplainedWhenSendRoleOptionsShown() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller, showSendRoleOptions = true) }
+
+        onNodeWithTag(TAG_FORWARD_WORK_PROFILE).assertIsOff()
+        onNodeWithText(FORWARD_WORK_PROFILE_DESCRIPTION).assertIsDisplayed()
+    }
+
+    /** 仕事用プロファイルのトグルは即座に保存され、他の送信ロール設定を巻き添えにしない。 */
+    @Test
+    fun workProfileForwardingIsPersistedWithoutDisturbingOtherSendRoleSettings() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig(sendEnabled = true, smsDirectReceive = true))
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller, showSendRoleOptions = true) }
+
+        onNodeWithTag(TAG_FORWARD_WORK_PROFILE).performClick()
+
+        val loaded = repo.load()
+        assertEquals(true, loaded.forwardWorkProfileNotifications)
+        assertEquals(true, loaded.sendEnabled)
+        assertEquals(true, loaded.smsDirectReceive)
     }
 
     // --- アプリの更新 ---
