@@ -1,6 +1,8 @@
 package to.sava.peranta.timeline
 
 import to.sava.peranta.platform.JvmPaths
+import to.sava.peranta.platform.TIMELINE_TEMP_PREFIX
+import to.sava.peranta.platform.TIMELINE_TEMP_SUFFIX
 import java.io.File
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -21,7 +23,7 @@ class FileTimelineFile(private val file: File) : TimelineFile {
         file.parentFile?.mkdirs()
         val content = lines.joinToString(separator = "") { "$it\n" }
         val target = file.toPath()
-        val tmp = Files.createTempFile(target.parent, "timeline", ".tmp")
+        val tmp = Files.createTempFile(target.parent, TIMELINE_TEMP_PREFIX, TIMELINE_TEMP_SUFFIX)
         Files.write(tmp, content.encodeToByteArray())
         try {
             Files.move(

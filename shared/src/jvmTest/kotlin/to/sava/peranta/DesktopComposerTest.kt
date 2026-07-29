@@ -40,9 +40,13 @@ class DesktopComposerTest {
 
     private val tempFiles = mutableListOf<File>()
 
+    /** 貼り付け画像の置き場。実際のデータ領域（%APPDATA%\Peranta\clipboard）は触らない。 */
+    private val clipboardRoot: File = Files.createTempDirectory("peranta-clipboard-test").toFile()
+
     @AfterTest
     fun cleanup() {
         tempFiles.forEach { it.delete() }
+        clipboardRoot.deleteRecursively()
     }
 
     private fun tempFile(name: String, content: String): File {
@@ -208,6 +212,7 @@ class DesktopComposerTest {
             ntfy = FakeNtfyClient(),
             sendPipeline = pipeline,
             scope = this,
+            clipboardImagesRoot = clipboardRoot,
         )
         val image = BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB)
 
@@ -222,6 +227,93 @@ class DesktopComposerTest {
         )
         val staged = composer.ui().attachments!!.staged.value
         assertEquals(listOf("clipboard-1.png", "clipboard-2.png"), staged.map { it.name })
+    }
+
+    /** 貼り付け画像はアプリのデータ領域（消去の対象）の下に置き、%TEMP% には残さない。 */
+    @Test
+    fun stageClipboardImageWritesUnderTheGivenRoot() = runTest {
+        val store = FakeTimelineStore()
+        val pipeline = SendPipeline(MessageCipher(generateKey(), "k1"), FakeNtfyClient(), store)
+        val composer = DesktopComposer(
+            config = config(),
+            httpClient = successHttpClient(),
+            cipher = MessageCipher(generateKey(), "k1"),
+            ntfy = FakeNtfyClient(),
+            sendPipeline = pipeline,
+            scope = this,
+            clipboardImagesRoot = clipboardRoot,
+        )
+
+        val staged = composer.stageClipboardImage(BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB))
+
+        assertTrue(staged.canonicalPath.startsWith(clipboardRoot.canonicalPath))
+    }
+
+    /** ステージから外した貼り付け画像はその場で消える。利用者が選んだファイルは外しても消さない。 */
+    @Test
+    fun removeStagedDeletesPastedImageButKeepsPickedFile() = runTest {
+        val store = FakeTimelineStore()
+        val pipeline = SendPipeline(MessageCipher(generateKey(), "k1"), FakeNtfyClient(), store)
+        val composer = DesktopComposer(
+            config = config(),
+            httpClient = successHttpClient(),
+            cipher = MessageCipher(generateKey(), "k1"),
+            ntfy = FakeNtfyClient(),
+            sendPipeline = pipeline,
+            scope = this,
+            clipboardImagesRoot = clipboardRoot,
+        )
+        val picked = tempImageFile("picked")
+        val pasted = composer.stageClipboardImage(BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB))
+        composer.addStaged(listOf(picked))
+
+        composer.ui().attachments!!.removeStaged(0)
+        composer.ui().attachments!!.removeStaged(0)
+
+        assertFalse(pasted.exists())
+        assertTrue(picked.exists())
+    }
+
+    /** 送信に成功したらステージが空になり、貼り付け画像の平文コピーもディスクに残らない。 */
+    @Test
+    fun successfulSendDeletesPastedImage() = runTest {
+        val store = FakeTimelineStore()
+        val pipeline = SendPipeline(MessageCipher(generateKey(), "k1"), FakeNtfyClient(), store)
+        val composer = DesktopComposer(
+            config = config(),
+            httpClient = successHttpClient(),
+            cipher = MessageCipher(generateKey(), "k1"),
+            ntfy = FakeNtfyClient(),
+            sendPipeline = pipeline,
+            scope = this,
+            clipboardImagesRoot = clipboardRoot,
+        )
+        val pasted = composer.stageClipboardImage(BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB))
+
+        assertTrue(composer.ui().send("キャプション"))
+
+        assertFalse(pasted.exists())
+    }
+
+    /** 送信に失敗したときはステージを保つので、貼り付け画像も再送のために残す。 */
+    @Test
+    fun failedSendKeepsPastedImage() = runTest {
+        val store = FakeTimelineStore()
+        val pipeline = SendPipeline(MessageCipher(generateKey(), "k1"), FakeNtfyClient(), store)
+        val composer = DesktopComposer(
+            config = config(),
+            httpClient = failingHttpClient(),
+            cipher = MessageCipher(generateKey(), "k1"),
+            ntfy = FakeNtfyClient(),
+            sendPipeline = pipeline,
+            scope = this,
+            clipboardImagesRoot = clipboardRoot,
+        )
+        val pasted = composer.stageClipboardImage(BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB))
+
+        assertFalse(composer.ui().send("キャプション"))
+
+        assertTrue(pasted.exists())
     }
 
     /** isImageFile は拡張子（大文字小文字を区別しない）で画像ファイルを判定する。 */

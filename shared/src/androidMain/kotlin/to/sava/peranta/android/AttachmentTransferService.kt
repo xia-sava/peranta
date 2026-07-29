@@ -291,7 +291,7 @@ class AttachmentTransferService : Service() {
     /** アップロード対象を専用キャッシュ領域へコピーし、権限維持とサイズ確定を行う。失敗時は null。 */
     private fun spool(transferId: String, uri: Uri): File? =
         try {
-            val dir = File(cacheDir, SPOOL_DIR).apply { mkdirs() }
+            val dir = File(cacheDir, OUTGOING_CACHE_DIR).apply { mkdirs() }
             val target = File.createTempFile("upload", ".bin", dir)
             contentResolver.openInputStream(uri)?.use { input ->
                 target.outputStream().use { output -> input.copyTo(output) }
@@ -447,7 +447,6 @@ class AttachmentTransferService : Service() {
         private const val UPLOAD_TITLE = "画像をアップロード中"
         private const val DOWNLOAD_TITLE = "ファイルをダウンロード中"
         private const val CANCEL_LABEL = "キャンセル"
-        private const val SPOOL_DIR = "outgoing"
         private const val DEFAULT_IMAGE_MIME = "image/*"
         private const val CLIP_LABEL = "peranta-attachments"
         private const val PROGRESS_POLL_MILLIS = 500L

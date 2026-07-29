@@ -24,6 +24,7 @@ import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.NtfyClient
+import to.sava.peranta.platform.JvmPaths
 import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.send.buildFilePayloads
 import to.sava.peranta.send.resolveSendTopics
@@ -39,9 +40,11 @@ import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
+import java.io.Closeable
 import java.io.File
 import java.io.FilterInputStream
 import java.nio.file.Files
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import javax.imageio.ImageIO
 import kotlin.io.encoding.Base64
@@ -52,6 +55,12 @@ internal const val FILE_SEND_FAILED_MESSAGE: String = "ファイルの送信に�
 
 /** クリップボード貼り付けでステージする画像の一時ファイル名（[sequence] は 1 始まりの連番）。 */
 internal fun clipboardImageFileName(sequence: Long): String = "clipboard-$sequence.png"
+
+/**
+ * 貼り付け画像の置き場を composer ごとに分けるディレクトリの前置き。
+ * 連番は composer ごとに振り直されるため、作り直された composer が前の画像を上書きしないようにする。
+ */
+private const val CLIPBOARD_SESSION_PREFIX: String = "session"
 
 /** ステージ済みチップにサムネイルを出す画像ファイルの拡張子（大文字小文字を区別しない）。 */
 private val IMAGE_FILE_EXTENSIONS: Set<String> = setOf("png", "jpg", "jpeg", "gif", "webp", "bmp")
@@ -83,6 +92,7 @@ internal fun BufferedImage.scaledToFit(maxSide: Int): BufferedImage {
  * Desktop の composer 送信束（§13 M9d）。テキストのみなら [to.sava.peranta.model.MessagePayload]、
  * ステージ済みファイルが有れば暗号化 blob アップロード + [to.sava.peranta.model.FilePayload]（caption=text）で送る。
  * [DesktopReceiver] が保持する config/httpClient/cipher/ntfy/sendPipeline を共有して生成する。
+ * [clipboardImagesRoot] は貼り付け画像の置き場の基点で、既定はアプリのデータ領域（消去の対象）。
  */
 class DesktopComposer(
     private val config: PerantaConfig,
@@ -92,12 +102,18 @@ class DesktopComposer(
     private val sendPipeline: SendPipeline,
     private val scope: CoroutineScope,
     private val log: Logger = Logger.withTag("DesktopComposer"),
+    private val clipboardImagesRoot: File = JvmPaths.clipboardImagesDir,
 ) {
     private val stagedFiles = MutableStateFlow<List<File>>(emptyList())
     private val staged = MutableStateFlow<List<StagedFile>>(emptyList())
     private val uploadProgress = MutableStateFlow<TransferProgress?>(null)
     private val clipboardImageCounter = AtomicLong(0)
-    private val clipboardImageDir: File by lazy { Files.createTempDirectory("peranta-clipboard").toFile() }
+    private val clipboardImageDir: File by lazy {
+        Files.createTempDirectory(clipboardImagesRoot.toPath(), CLIPBOARD_SESSION_PREFIX).toFile()
+    }
+
+    /** 貼り付けで作ったファイル。ステージから外れたときに消す対象をこれに限り、利用者が選んだファイルには触れない。 */
+    private val pastedImages: MutableSet<File> = ConcurrentHashMap.newKeySet()
 
     /** composer が使う操作束。添付は [config.blobTopic][PerantaConfig.blobTopic] が有るときのみ有効にする。 */
     fun ui(): MessageComposerUi = MessageComposerUi(
@@ -162,6 +178,7 @@ class DesktopComposer(
     internal fun stageClipboardImage(image: Image): File {
         val target = File(clipboardImageDir, clipboardImageFileName(clipboardImageCounter.incrementAndGet()))
         ImageIO.write(image.toBufferedImage(), "png", target)
+        pastedImages.add(target)
         addStaged(listOf(target))
         return target
     }
@@ -178,9 +195,17 @@ class DesktopComposer(
         return buffered
     }
 
+    /**
+     * ステージ済みの一覧を [files] へ入れ替える。ステージから外れた貼り付け画像はその場で消し、
+     * 送る中身の平文コピーをディスクへ残さない（§11）。
+     */
     private fun setStaged(files: List<File>) {
+        val dropped = stagedFiles.value - files.toSet()
         stagedFiles.value = files
         staged.value = files.map { StagedFile(it.name, it.length(), decodeStagedThumbnail(it)) }
+        dropped.filter { pastedImages.remove(it) }
+            .filterNot { it.delete() }
+            .forEach { log.w { "failed to delete pasted image ${it.name}" } }
     }
 
     /**
@@ -210,7 +235,7 @@ class DesktopComposer(
         return if (files.isEmpty()) {
             sendMessage(config, cipher, ntfy, sendPipeline, text)
         } else {
-            sendFiles(files, text)
+            sendFiles(files, text).also { delivered -> if (delivered) setStaged(emptyList()) }
         }
     }
 
@@ -218,11 +243,14 @@ class DesktopComposer(
         val blobTopic = config.blobTopic ?: return false
         val totalBytes = files.sumOf { it.length() }
         val transferred = AtomicLong(0)
+        val sources = mutableListOf<Closeable>()
         uploadProgress.value = TransferProgress(0, totalBytes, TransferState.RUNNING)
         return try {
             val blobCipher = BlobCipher(Base64.decode(config.sharedKeyBase64!!), config.keyId!!)
             val transport = KtorBlobTransport(config, httpClient)
-            val refs = files.map { file -> uploadOne(file, blobCipher, transport, blobTopic, transferred, totalBytes) }
+            val refs = files.map { file ->
+                uploadOne(file, blobCipher, transport, blobTopic, transferred, totalBytes, sources)
+            }
             val payloads = buildFilePayloads(
                 deviceId = config.deviceId!!,
                 attachments = refs,
@@ -237,7 +265,6 @@ class DesktopComposer(
                 return false
             }
             payloads.forEach { payload -> sendPipeline.send(payload, topics) }
-            setStaged(emptyList())
             true
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -246,6 +273,10 @@ class DesktopComposer(
             runCatching { sendPipeline.recordError(FILE_SEND_FAILED_MESSAGE) }
             false
         } finally {
+            sources.forEach { source ->
+                runCatching { source.close() }
+                    .onFailure { log.w(it) { "failed to close upload source" } }
+            }
             uploadProgress.value = null
         }
     }
@@ -257,6 +288,7 @@ class DesktopComposer(
         blobTopic: String,
         transferred: AtomicLong,
         totalBytes: Long,
+        sources: MutableList<Closeable>,
     ): AttachmentRef {
         val mimeType = mimeTypeFor(file)
         return uploadAttachment(
@@ -268,13 +300,21 @@ class DesktopComposer(
                 mimeType = mimeType,
                 sizeBytes = file.length(),
                 kind = attachmentKindForMimeType(mimeType),
-                openSource = { countingChannel(file, transferred, totalBytes) },
+                openSource = { countingChannel(file, transferred, totalBytes, sources) },
             ),
         )
     }
 
-    /** [file] を読みながらバイト数を [transferred] へ積み上げ、複数ファイル合計の進捗を [uploadProgress] へ直接反映する。 */
-    private fun countingChannel(file: File, transferred: AtomicLong, totalBytes: Long): ByteReadChannel {
+    /**
+     * [file] を読みながらバイト数を [transferred] へ積み上げ、複数ファイル合計の進捗を [uploadProgress] へ直接反映する。
+     * 開いた読み取り元は [sources] へ預け、送信の後始末で必ず閉じる（掴んだままだとファイルを消せない）。
+     */
+    private fun countingChannel(
+        file: File,
+        transferred: AtomicLong,
+        totalBytes: Long,
+        sources: MutableList<Closeable>,
+    ): ByteReadChannel {
         val counting = object : FilterInputStream(file.inputStream()) {
             override fun read(b: ByteArray, off: Int, len: Int): Int =
                 super.read(b, off, len).also { read ->
@@ -284,6 +324,7 @@ class DesktopComposer(
                     }
                 }
         }
+        sources.add(counting)
         return counting.toByteReadChannel()
     }
 

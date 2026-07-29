@@ -52,7 +52,8 @@ import to.sava.peranta.config.isDevMode
 import to.sava.peranta.pairing.PairingImportController
 import to.sava.peranta.pairing.pairingQrMatrix
 import to.sava.peranta.platform.AppPath
-import to.sava.peranta.platform.JvmPaths
+import to.sava.peranta.platform.copySensitiveTextToClipboard
+import to.sava.peranta.platform.eraseAppData
 import to.sava.peranta.platform.initLogging
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.platform.platformCapabilities
@@ -91,9 +92,7 @@ import java.awt.EventQueue
 import java.awt.Frame
 import java.awt.GraphicsEnvironment
 import java.awt.Rectangle
-import java.awt.Toolkit
 import java.awt.Window as AwtWindow
-import java.awt.datatransfer.StringSelection
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.system.exitProcess
 
@@ -173,11 +172,6 @@ private fun desktopWizardSetupProvider(autoStart: AutoStartManager): SetupItemsP
             ),
         )
     }
-
-/** ペアリング文字列をシステムクリップボードにコピーする。 */
-private fun copyToClipboard(text: String) {
-    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
-}
 
 /** メインウィンドウをアクティブ化し、最前面に出す（トーストクリック導線で使う）。EDT 上で実行する。 */
 private fun bringWindowToFront(window: AwtWindow) {
@@ -311,9 +305,10 @@ fun main(args: Array<String>) {
             appScope.launch {
                 receiver?.let { withTimeoutOrNull(RECEIVER_CLOSE_TIMEOUT_MILLIS) { it.close() } }
                 updater.close()
-                desktopSettings.repository.clear()
-                JvmPaths.timelineFile.delete()
-                JvmPaths.attachmentsDir.deleteRecursively()
+                withContext(ioDispatcher) {
+                    desktopSettings.repository.clear()
+                    eraseAppData()
+                }
                 exitApplication()
             }
             Unit
@@ -471,7 +466,7 @@ fun main(args: Array<String>) {
                         healthChecker = DesktopHealthChecker(autoStart, selfTestProvider),
                         importController = pairingImportController,
                         qrContent = { uri -> DesktopQrCode(uri) },
-                        onCopyPairingUri = ::copyToClipboard,
+                        onCopyPairingUri = ::copySensitiveTextToClipboard,
                         scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
                         onClose = { showWizard = false },
                         onSaved = { configGeneration++ },
@@ -516,7 +511,7 @@ fun main(args: Array<String>) {
                                 controller = settingsController,
                                 qrContent = { uri -> DesktopQrCode(uri) },
                                 scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
-                                onCopyPairingUri = ::copyToClipboard,
+                                onCopyPairingUri = ::copySensitiveTextToClipboard,
                                 onOpenWizard = { showWizard = true },
                                 loadHealthItems = { DesktopHealthChecker(autoStart, selfTestProvider).check() },
                                 onOpenHealthCheck = { onNavigate(ShellDestination.HealthCheck) },

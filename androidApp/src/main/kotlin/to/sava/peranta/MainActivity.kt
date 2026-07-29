@@ -57,6 +57,8 @@ import to.sava.peranta.android.PerantaReceive
 import to.sava.peranta.android.PerantaSend
 import to.sava.peranta.android.PerantaUnifiedPush
 import to.sava.peranta.android.androidConfigRepository
+import to.sava.peranta.android.eraseCachedAppData
+import to.sava.peranta.android.eraseSendRetryQueue
 import to.sava.peranta.android.normalizeScrollItemId
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.model.AttachmentRef
@@ -813,12 +815,20 @@ class MainActivity : ComponentActivity() {
     /**
      * 端末に残る情報を全て消してアプリを終了する（§11）。次の起動は初期設定から始まる。
      * 通知リスナーはアプリの終了後もシステムが再びつなぎうるが、共有鍵を失った状態では何も送らない。
+     *
+     * 消す前に UnifiedPush の登録を解いて受信パイプラインを捨てるのは、稼働したままだと
+     * 消したあとの通知が履歴へ書き戻されるため。
      */
     private fun resetAllAndExit() {
-        androidConfigRepository().clear()
-        defaultTimelineFile().overwrite(emptyList())
-        AndroidAttachmentReceive.attachmentsDir(this).deleteRecursively()
-        finishAffinity()
-        exitProcess(0)
+        lifecycleScope.launch {
+            PerantaUnifiedPush.unregister(this@MainActivity)
+            PerantaReceive.reset()
+            eraseSendRetryQueue(this@MainActivity)
+            androidConfigRepository().clear()
+            defaultTimelineFile().overwrite(emptyList())
+            eraseCachedAppData(cacheDir)
+            finishAffinity()
+            exitProcess(0)
+        }
     }
 }
