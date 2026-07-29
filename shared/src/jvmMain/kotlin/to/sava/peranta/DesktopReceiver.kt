@@ -44,9 +44,12 @@ import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
 import to.sava.peranta.send.CommandSender
 import to.sava.peranta.send.SendPipeline
+import to.sava.peranta.roster.PresenceAnnounceGate
+import to.sava.peranta.roster.PresenceAnnounceScheduler
 import to.sava.peranta.roster.RosterStore
 import to.sava.peranta.roster.buildPresencePayload
 import to.sava.peranta.roster.presenceCapabilities
+import to.sava.peranta.roster.presenceFingerprint
 import to.sava.peranta.roster.publishPresence
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.JsonlTimelineStore
@@ -89,7 +92,7 @@ import kotlin.io.encoding.Base64
  * 端末名があれば安定 deviceId を確定し、受信 topic 未設定なら topic を採番・永続化する。
  */
 private fun enrichConfig(repository: ConfigRepository, devMode: Boolean): PerantaConfig {
-    val config = if (devMode) repository.load().withDevOverrides() else repository.load().copy(useTls = true)
+    val config = if (devMode) repository.load().withDevOverrides() else repository.load()
     val deviceName = config.deviceName ?: return config
     val deviceId = repository.ensureDeviceId()
     val topic = config.receiveTopic ?: repository.ensureReceiveTopic(deviceName)
@@ -173,6 +176,8 @@ class DesktopReceiver(
     private val sendPipeline = SendPipeline(cipher, ntfy, feed)
     private val commandSender = CommandSender(config, cipher, ntfy, sendPipeline)
     private val composer by lazy { DesktopComposer(config, httpClient, cipher, ntfy, sendPipeline, toastScope) }
+    private val announceGate = PresenceAnnounceGate()
+    private val presenceScheduler = PresenceAnnounceScheduler<Unit>(toastScope) { announcePresence() }
     private val selfTestProbe = SelfTestProbe()
 
     private val attachmentCache = DesktopAttachmentCache(
@@ -244,8 +249,9 @@ class DesktopReceiver(
     }
 
     /**
-     * control topic へ自端末の presence を告知する（§3.5）。
+     * control topic へ自端末の presence を告知する（§3.5）。起動時と受信のたびに呼ぶ。
      * control topic 未設定なら何もしない。失敗しても受信開始は妨げない。
+     * 同一内容の連続 announce は [PresenceAnnounceGate] が最小間隔で抑止する。
      */
     private suspend fun announcePresence() {
         val controlTopic = config.controlTopic ?: return
@@ -262,7 +268,10 @@ class DesktopReceiver(
                 sender = config.sendEnabled,
                 now = nowEpochMillis(),
             )
+            val fingerprint = presenceFingerprint(presence)
+            if (!announceGate.shouldAnnounce(fingerprint, presence.sentAtEpochMillis)) return
             publishPresence(cipher, ntfy, controlTopic, presence)
+            announceGate.recordAnnounced(fingerprint, presence.sentAtEpochMillis)
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
@@ -272,6 +281,9 @@ class DesktopReceiver(
 
     /** タイムラインに載った新規アイテムをトースト表示へ回す（受信処理はブロックしない）。 */
     internal fun handleAppended(item: TimelineItem) {
+        // 受信は自端末が動いている証。起動しっぱなしでは告知の機会が無く、control topic の
+        // 保持期間を過ぎると presence が消えてロスターから落ちる（§3.5）。
+        presenceScheduler.request(Unit)
         when (item) {
             is ReceivedNotification -> toastScope.launch { showNotificationToast(item) }
             is ErrorItem -> toastScope.launch { showToast(item.id, toastContentFor(item)) }
