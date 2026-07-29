@@ -18,8 +18,10 @@ import kotlin.uuid.Uuid
  * 共有鍵の実体だけは [KeyStore] 経由で保管し、その他の項目は settings に直接保存する。
  *
  * [forceTls] が真（リリースビルド・既定）のとき TLS は常に有効として読み出し、保存もしない。
- * 偽（Android の debug ビルド / Desktop の devMode）のときは保存値を尊重し、既定は無効
- * （ローカル開発サーバ向け）。境界はビルド種別であり、実行時に切り替わることはない（§16）。
+ * 偽（Android の debug ビルド / Desktop の devMode）のときは保存値を尊重するが、既定は有効で、
+ * 平文にするには明示して落とす必要がある。開発でも接続先は TLS の本番サーバであることが通例で、
+ * 既定を無効にすると保存値を持たない端末が黙って平文へ落ちるため。境界はビルド種別であり、
+ * 実行時に切り替わることはない（§16）。
  */
 class ConfigRepository(
     private val settings: Settings,
@@ -31,7 +33,7 @@ class ConfigRepository(
         val sharedKeyBase64 = keyStore.loadKey()?.let { Base64.encode(it) }
         return PerantaConfig(
             host = settings.getString(KEY_HOST, DEFAULT_HOST),
-            useTls = if (forceTls) true else settings.getBoolean(KEY_USE_TLS, false),
+            useTls = if (forceTls) true else settings.getBoolean(KEY_USE_TLS, true),
             port = if (settings.hasKey(KEY_PORT)) settings.getInt(KEY_PORT, 0) else null,
             accessToken = settings.getStringOrNull(KEY_TOKEN),
             deviceId = settings.getStringOrNull(KEY_DEVICE_ID),

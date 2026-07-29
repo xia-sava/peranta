@@ -92,14 +92,14 @@ class ConfigRepositoryTest {
         assertFalse(settings.hasKey(ConfigRepository.KEY_USE_TLS))
     }
 
-    /** 開発相当（forceTls 無効）では TLS の既定は無効で、保存値を尊重する（§16）。 */
+    /** 開発相当（forceTls 無効）でも TLS の既定は有効で、明示して落としたときだけ無効になる（§16）。 */
     @Test
-    fun devRepositoryDefaultsTlsOffAndHonorsStoredValue() {
+    fun devRepositoryDefaultsTlsOnAndHonorsStoredValue() {
         val settings = MapSettings()
         val dev = ConfigRepository(settings, SettingsKeyStore(settings), forceTls = false)
-        assertFalse(dev.load().useTls)
-        dev.save(PerantaConfig(useTls = true))
         assertTrue(dev.load().useTls)
+        dev.save(PerantaConfig(useTls = false))
+        assertFalse(dev.load().useTls)
     }
 
     /** UnifiedPush 受信は端末名・共有鍵・keyId が揃えば成立し、topic/host は要件に含めない。 */
