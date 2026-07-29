@@ -13,12 +13,18 @@ ntfy 本体は Go 製の単一バイナリで、公式イメージ（`binwiederh
 | `server.yml` | ntfy の設定。開発・本番で共通（環境依存の値は環境変数で上書きする） |
 | `compose.yaml` | 本番。前段の TLS プロキシと external network `proxy` で繋ぐ |
 | `compose.caddy.yaml` / `Caddyfile` | 前段の TLS リバースプロキシ。1 台で完結させる場合に使う |
-| `compose.dev.yaml` | 開発用。`localhost:8090` に平文で publish する |
+| `compose.dev.yaml` | 開発用。`127.0.0.1:8090` に平文で publish する |
 
 ## 本番の立ち上げ
 
 前提は Docker の動く Linux サーバ 1 台、ドメイン、そして **80/443 が外から到達できること**
 （80 番は Let's Encrypt の証明書取得に必要）。
+
+**どのポートが外から見えるかを決めるのは compose の `ports` であって、ufw ではない。**
+Docker の port publish は iptables の `DOCKER-USER` チェーンで処理され、ufw のルールを迂回する。
+ufw で 80/443 を許可するのは Docker を経由しない経路のためで、publish したポートは
+ufw で塞いだつもりでも外から届く。公開したくないポートは publish しないか、
+バインドアドレスを `127.0.0.1` に限る（`compose.dev.yaml` がその形）。
 
 手順 2〜5 は `./setup.sh` でまとめて実行できる。何度流しても同じ状態に落ち着くので、
 失敗の原因を直してから実行し直せる。トークンが表示される手順 6 だけは扱わないので、
@@ -85,11 +91,19 @@ docker compose exec ntfy ntfy access peranta "up*" rw
 docker compose exec ntfy ntfy token add peranta
 ```
 
+**パスワードは 32 文字以上のランダム文字列にする。** ユーザー名 `peranta` はこの手順に固定文字列で
+書かれた公開の値で、ntfy はトークンとは別にパスワードでも認証を通す。したがってパスワードの強度が
+そのまま防壁の強度になり、破られると上の ACL がそのまま渡る。
+
+**ACL は上の `peranta-*` と `up*` の 2 つだけとする。** とくに匿名（`*`）への書き込み許可は、
+`auth-default-access: deny-all` の前提を崩し、ドメイン名を知るだけの第三者が添付枠を埋められる状態を作る
+（他の UnifiedPush 対応アプリを併用したい場合の扱いは [`../docs/setup.md`](../docs/setup.md) を参照）。
+
 `auth-default-access: deny-all` なので、トピックの購読と publish はトークンなしには通らない。
 ただし**添付は例外で、URL を知っていれば認証なしに取得できる**（ntfy の仕様）。Peranta は
 添付を端末側で暗号化してから置くため、URL が漏れても中身は読めない。
 
-発行したトークンはリポジトリに含めないこと。
+発行したトークンとパスワードはリポジトリに含めないこと。
 
 ### 7. クライアントを設定する
 
@@ -110,11 +124,15 @@ docker compose exec ntfy ntfy token add peranta
 - メッセージ（`cache.db`）: 保持は既定 24 時間。1 件あたり最大 16 KB なので合計しても数 MB
   程度。優先度の高い通知は publish 時に 60 秒へ短縮している
 - 添付（暗号化 blob）: 保持 72 時間、合計上限 2 GB（`server.yml` の
-  `attachment-total-size-limit`）。ここが実質的な天井になる
+  `attachment-total-size-limit`）。ここが実質的な天井になる。
+  単一の主体がこの枠を占有しないよう、`visitor-attachment-total-size-limit` を全体の 1/4 に置いている。
+  1 主体が 72 時間のうちにその量を超えて添付を置こうとすると、超えた分のアップロードが拒まれる
+  （保持期間切れで空けば再開する）
 
 ## 開発
 
-ローカルでは TLS プロキシを挟まず、平文の `localhost:8090` で動かす。
+ローカルでは TLS プロキシを挟まず、平文の `127.0.0.1:8090` で動かす。トークンが平文で流れるため、
+バインドはループバックに限る（同じ LAN の第三者に見せない）。
 
 ```sh
 docker compose -f compose.dev.yaml up -d

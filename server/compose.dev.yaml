@@ -1,12 +1,9 @@
 # 開発用ローカル ntfy（本番と同じ server.yml を使う）。
-# 本番と違い TLS プロキシを挟まず、ポートを直接 publish する。
+# 本番と違い TLS プロキシを挟まず、ループバックへ直接 publish する。
 #
-# 起動:      docker compose -f compose.dev.yaml up -d
-# ユーザー:   docker compose -f compose.dev.yaml exec -e NTFY_PASSWORD=<pw> ntfy ntfy user add peranta
-# ACL:       docker compose -f compose.dev.yaml exec ntfy ntfy access peranta "peranta-*" rw
-#            docker compose -f compose.dev.yaml exec ntfy ntfy access peranta "up*" rw
-#            （up* は UnifiedPush 用。ntfy アプリが払い出す upXXXX トピックの購読/配送に必要）
-# トークン:   docker compose -f compose.dev.yaml exec ntfy ntfy token add peranta
+# 起動: docker compose -f compose.dev.yaml up -d
+# ユーザー・ACL・トークンの作り方は README.md「6. ユーザーとトークンを作る」と同じ
+# （各コマンドへ -f compose.dev.yaml を付ける）。
 # 発行したトークン等は server/.local/ に保存する（gitignore 済み）
 
 name: peranta-dev
@@ -15,8 +12,9 @@ services:
   ntfy:
     image: binwiederhier/ntfy:v2.11.0
     command: serve
+    # 平文でトークンが流れるため、LAN の他ホストへは出さない
     ports:
-      - "8090:80"
+      - "127.0.0.1:8090:80"
     volumes:
       - ./server.yml:/etc/ntfy/server.yml:ro
       - ./.local/data:/var/lib/ntfy

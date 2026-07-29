@@ -14,8 +14,16 @@ cd "$(dirname "$0")"
 # 証明書の取得を待つ上限。Let's Encrypt との往復は通常 10 秒ほどで終わる。
 readonly CERTIFICATE_TIMEOUT_SECONDS=120
 
-# 取得の成否を判定する Caddy のログ。
+# 新規取得を示す Caddy のログ。取得済みの再実行ではこの行が出ないため、
+# 証明書ファイルの実在（certificate_present）と併せて判定する。
 readonly CERTIFICATE_SUCCESS_PATTERN='certificate obtained successfully'
+
+# 取得済みの証明書がボリュームにあるか。コンテナを作り直しただけの再実行を成功と判定する。
+certificate_present() {
+    docker compose -f compose.caddy.yaml exec -T caddy \
+        find /data/caddy/certificates -name "$PERANTA_DOMAIN.crt" -type f 2> /dev/null |
+        grep -q .
+}
 
 abort() {
     echo "エラー: $1" >&2
@@ -50,9 +58,9 @@ docker info > /dev/null 2>&1 || abort "docker デーモンに接続できませ�
 
 step "DNS を確かめる"
 
-getent hosts "$PERANTA_DOMAIN" > /dev/null || abort "$PERANTA_DOMAIN を解決できません。" \
-    "A レコード（または CNAME）をこのサーバへ向けてください。"
-echo "解決できました。"
+getent hosts "$PERANTA_DOMAIN" > /dev/null || abort "$PERANTA_DOMAIN を名前解決できません。" \
+    "A レコード（または CNAME）を用意してください。向き先がこのサーバかどうかまでは確かめません。"
+echo "名前解決できました。"
 
 step "ネットワークを用意する"
 
@@ -73,6 +81,10 @@ deadline=$((SECONDS + CERTIFICATE_TIMEOUT_SECONDS))
 while true; do
     if docker compose -f compose.caddy.yaml logs caddy 2>/dev/null | grep -q "$CERTIFICATE_SUCCESS_PATTERN"; then
         echo "取得できました。"
+        break
+    fi
+    if certificate_present; then
+        echo "取得済みの証明書があります。"
         break
     fi
     if [ "$SECONDS" -ge "$deadline" ]; then
@@ -107,5 +119,8 @@ cat <<MESSAGE
   docker compose exec ntfy ntfy token add peranta
 
 up* は UnifiedPush 用です（ntfy アプリが払い出す upXXXX トピックの購読に要ります）。
+パスワードは 32 文字以上のランダム文字列にしてください。ユーザー名 peranta は公開の固定文字列で、
+ntfy はトークンとは別にパスワードでも認証を通すためです。
+ACL は上の peranta-* と up* の 2 つだけにしてください（匿名の書き込み許可については README.md 参照）。
 発行したトークンとパスワードは安全な場所に控えてください。
 MESSAGE

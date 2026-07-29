@@ -6,7 +6,9 @@
 # 前段のリバースプロキシからはコンテナ内の 80 番へ渡る（外へは publish しない）
 listen-http: ":80"
 
-# 認証: 認証なしのアクセスは一切許可しない（トークン必須）
+# 認証: 認証なしのアクセスは一切許可しない（トークン必須）。
+# ACL に匿名（`*`）の書き込みを足すとこの前提が崩れ、ドメイン名を知るだけの第三者が
+# 添付枠とメッセージキャッシュを埋められる。ACL の与え方は README.md「6. ユーザーとトークンを作る」。
 auth-file: "/var/lib/ntfy/user.db"
 auth-default-access: "deny-all"
 
@@ -17,16 +19,21 @@ cache-file: "/var/cache/ntfy/cache.db"
 cache-duration: "24h"
 
 # 添付（暗号化 blob）の置き場（§4.3）。誰も購読しない blobTopic へ PUT された暗号文を保持する。
-# 自前ホストのみが使うため上限は既定より緩める。本体は常にクライアント側で暗号化済み。
+# 本体は常にクライアント側で暗号化済み。
+#
+# 3 つの上限は値そのものではなく関係に意味がある。
+#   1 添付の上限 ≤ visitor 合計の上限 ≤ 全体の上限の 1/4
+# visitor 合計を全体と同値にすると、単一の主体が全体枠を占有して他の端末のアップロードを
+# 保持期間いっぱい止められる。全体を変えるときは他の 2 つも関係を保ったまま動かす。
 attachment-cache-dir: "/var/cache/ntfy/attachments"
-# 1 添付あたりの上限（300MB 目標に安全マージンを乗せる）
+# 1 添付あたりの上限（§4.3 の 300MB に安全マージンを乗せる）
 attachment-file-size-limit: "350M"
 # 全添付の合計ディスク上限。超えると新規アップロードを拒む（保持期間切れで空く）
 attachment-total-size-limit: "2G"
 # 添付の保持期間（受信は手動ダウンロード想定のため長め）
 attachment-expiry-duration: "72h"
-# 1 ユーザーあたりの添付合計・日次帯域の上限
-visitor-attachment-total-size-limit: "2G"
+# 1 visitor あたりの添付合計・日次帯域の上限
+visitor-attachment-total-size-limit: "512M"
 visitor-attachment-daily-bandwidth-limit: "3G"
 
 # AttachmentRef を載せた通知本文の余裕を持たせるため既定（4k）から引き上げる（§4.3）
