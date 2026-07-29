@@ -14,8 +14,10 @@ enum class AutoStartStatus {
 
 /**
  * ログオン時自動起動（§3.3）の登録・照会・冪等な再登録を担う。
- * [appPath] は配布物の実行ファイルパス（jpackage の `jpackage.app-path`）で、
- * 開発実行では null になるため、その場合は自動起動を扱わない（開発時の java 起動コマンドを誤登録しない）。
+ * [appPath] は配布物の実行ファイルパスで、レジストリへ書く実行対象になるため
+ * [to.sava.peranta.platform.AppPath.verified] の検証を通った値を渡す。
+ * 開発実行や検証に落ちた値では null になり、その場合は自動起動を扱わない
+ * （開発時の java 起動コマンドや、差し替えられたパスを誤登録しない）。
  * 登録コマンドには [launchArgument] を付け、ログオン起動時はウィンドウを出さずトレイ常駐で開始させる。
  */
 class AutoStartManager(

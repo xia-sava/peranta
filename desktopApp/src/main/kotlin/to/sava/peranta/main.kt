@@ -51,6 +51,7 @@ import to.sava.peranta.autostart.WindowsRunRegistry
 import to.sava.peranta.config.isDevMode
 import to.sava.peranta.pairing.PairingImportController
 import to.sava.peranta.pairing.pairingQrMatrix
+import to.sava.peranta.platform.AppPath
 import to.sava.peranta.platform.JvmPaths
 import to.sava.peranta.platform.initLogging
 import to.sava.peranta.platform.ioDispatcher
@@ -256,8 +257,8 @@ fun main(args: Array<String>) {
 
     // ログオン自動起動から --minimized で起動された場合はウィンドウを出さずトレイ常駐で開始する（§3.3）。
     val startMinimized = args.contains(AutoStartManager.MINIMIZED_ARGUMENT)
-    // jpackage.app-path が無い開発実行では自動起動を扱わない（java 起動コマンドの誤登録を防ぐ）。
-    val autoStart = AutoStartManager(WindowsRunRegistry(), System.getProperty("jpackage.app-path"))
+    // 実行ファイルのパスが判らない開発実行では自動起動を扱わない（java 起動コマンドの誤登録を防ぐ）。
+    val autoStart = AutoStartManager(WindowsRunRegistry(), AppPath.verified)
     autoStart.reconcile()
     // 開発実行では登録できないが、設定が消えたように見えないよう項目は出して理由を添える（§3.3）。
     val autoStartUi = AutoStartUi(
