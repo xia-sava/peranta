@@ -22,7 +22,7 @@ import kotlin.test.assertFalse
 class UpdateControllerTest {
 
     private val manifestJson = """
-        { "desktop": { "versionCode": 20, "versionName": "2.0.0", "url": "http://h/d.msi" } }
+        { "desktop": { "versionCode": 20, "versionName": "2.0.0", "sha256": "d2" } }
     """.trimIndent()
 
     private fun manifestEngine(): MockEngine = MockEngine {
@@ -49,7 +49,7 @@ class UpdateControllerTest {
             val status = withTimeout(5_000) { controller.status.filterNotNull().first() }
             withTimeout(5_000) { controller.checking.first { !it } }
 
-            assertEquals(UpdateStatus.Available("2.0.0", "http://h/d.msi"), status)
+            assertEquals(UpdateStatus.Available("2.0.0", releaseAssetUrl("peranta.msi"), "d2"), status)
             assertFalse(controller.checking.value)
         } finally {
             scope.cancel()
@@ -69,7 +69,7 @@ class UpdateControllerTest {
             val status = withTimeout(5_000) { controller.status.filterNotNull().first() }
             withTimeout(5_000) { controller.checking.first { !it } }
 
-            assertEquals(UpdateStatus.Available("2.0.0", "http://h/d.msi"), status)
+            assertEquals(UpdateStatus.Available("2.0.0", releaseAssetUrl("peranta.msi"), "d2"), status)
             assertFalse(controller.checking.value)
             assertEquals(1, engine.requestHistory.size)
         } finally {

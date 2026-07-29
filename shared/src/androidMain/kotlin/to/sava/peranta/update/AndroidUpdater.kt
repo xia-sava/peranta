@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import to.sava.peranta.net.createNtfyHttpClient
+import to.sava.peranta.net.createUpdateHttpClient
 import to.sava.peranta.platform.ioDispatcher
 
 /**
@@ -23,7 +23,7 @@ class AndroidUpdater(
     currentVersionCode: Int,
     private val log: Logger = Logger.withTag("Updater"),
 ) {
-    private val httpClient = createNtfyHttpClient()
+    private val httpClient = createUpdateHttpClient()
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val installer = AndroidUpdateInstaller(context.applicationContext, httpClient)
 

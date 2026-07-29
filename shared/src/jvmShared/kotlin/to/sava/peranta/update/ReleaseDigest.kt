@@ -22,9 +22,7 @@ fun sha256HexOf(file: File): String {
 
 /**
  * ダウンロードした [file] が [expectedSha256] と一致するかを返す（§12）。
- * マニフェストが sha256 を持たないときは照合できないため true とする。
+ * 照合できない期待値（空文字）は不一致として扱い、照合を省く経路を作らない。
  */
-fun matchesSha256(file: File, expectedSha256: String?): Boolean {
-    if (expectedSha256.isNullOrBlank()) return true
-    return sha256HexOf(file).equals(expectedSha256, ignoreCase = true)
-}
+fun matchesSha256(file: File, expectedSha256: String): Boolean =
+    expectedSha256.isNotBlank() && sha256HexOf(file).equals(expectedSha256, ignoreCase = true)

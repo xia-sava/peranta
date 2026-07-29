@@ -28,19 +28,36 @@ class UpdateCheckerTest {
 
     private val manifestJson = """
         {
-          "android": { "versionCode": 20, "versionName": "2.0.0", "url": "http://h/a.apk" },
-          "desktop": { "versionCode": 20, "versionName": "2.0.0", "url": "http://h/d.msi" }
+          "android": { "versionCode": 20, "versionName": "2.0.0", "url": "http://h/a.apk", "sha256": "a1" },
+          "desktop": { "versionCode": 20, "versionName": "2.0.0", "url": "http://h/d.msi", "sha256": "d2" }
         }
     """.trimIndent()
 
-    /** 配布物の versionCode が自分より大きければ Available になり、名前と URL を保持する。 */
+    /**
+     * 配布物の versionCode が自分より大きければ Available になり、名前と照合値を保持する。
+     * 取得先はマニフェストの指定ではなく固定の配布元から組む。
+     */
     @Test
     fun availableWhenServerVersionIsHigher() = runTest {
         val checker = UpdateChecker(jsonEngine(HttpStatusCode.OK, manifestJson), 1, PLATFORM_DESKTOP)
 
         val status = checker.check()
 
-        assertEquals(UpdateStatus.Available("2.0.0", "http://h/d.msi"), status)
+        assertEquals(UpdateStatus.Available("2.0.0", releaseAssetUrl("peranta.msi"), "d2"), status)
+    }
+
+    /** sha256 を欠いたマニフェストは受理せず、解析失敗の Failed にする。 */
+    @Test
+    fun failedWhenDigestMissing() = runTest {
+        val withoutDigest = """
+            { "desktop": { "versionCode": 20, "versionName": "2.0.0" } }
+        """.trimIndent()
+        val checker = UpdateChecker(jsonEngine(HttpStatusCode.OK, withoutDigest), 1, PLATFORM_DESKTOP)
+
+        val status = checker.check()
+
+        assertTrue(status is UpdateStatus.Failed)
+        assertTrue(status.reason.contains("解析"))
     }
 
     /** 配布物の versionCode が自分と同じなら UpToDate（大きい時だけ更新）。 */
@@ -85,7 +102,7 @@ class UpdateCheckerTest {
     @Test
     fun failedWhenPlatformKeyMissing() = runTest {
         val androidOnly = """
-            { "android": { "versionCode": 20, "versionName": "2.0.0", "url": "http://h/a.apk" } }
+            { "android": { "versionCode": 20, "versionName": "2.0.0", "sha256": "a1" } }
         """.trimIndent()
         val checker = UpdateChecker(jsonEngine(HttpStatusCode.OK, androidOnly), 1, PLATFORM_DESKTOP)
 

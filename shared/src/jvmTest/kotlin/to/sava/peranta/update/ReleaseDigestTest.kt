@@ -47,12 +47,12 @@ class ReleaseDigestTest {
         assertFalse(matchesSha256(file, "0000000000000000000000000000000000000000000000000000000000000000"))
     }
 
-    /** 期待値が無ければ照合できないため true とする（sha256 を持たないマニフェスト向け）。 */
+    /** 照合できない期待値は不一致として扱う（照合を省く経路を作らない）。 */
     @Test
-    fun acceptsWhenExpectedDigestAbsent() {
+    fun rejectsBlankExpectedDigest() {
         val file = tempFileOf("abc")
 
-        assertTrue(matchesSha256(file, null))
-        assertTrue(matchesSha256(file, ""))
+        assertFalse(matchesSha256(file, ""))
+        assertFalse(matchesSha256(file, "   "))
     }
 }

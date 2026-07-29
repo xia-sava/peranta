@@ -6,14 +6,16 @@ import kotlinx.serialization.Serializable
 const val PLATFORM_ANDROID: String = "android"
 const val PLATFORM_DESKTOP: String = "desktop"
 
-/** 1 プラットフォーム分の配布物情報。 */
+/**
+ * 1 プラットフォーム分の配布物情報。
+ * 配布物の所在はアプリが固定の配布元から組み立てるため、マニフェストからは受け取らない（§12）。
+ */
 @Serializable
 data class PlatformRelease(
     val versionCode: Int,
     val versionName: String,
-    val url: String,
-    /** 配布物の SHA-256（16 進）。ダウンロードした実体の照合に使う。欠けていれば照合しない。 */
-    val sha256: String? = null,
+    /** 配布物の SHA-256（16 進）。ダウンロードした実体の照合に使う。欠けたマニフェストは受理しない。 */
+    val sha256: String,
 )
 
 /**

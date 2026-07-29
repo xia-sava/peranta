@@ -17,6 +17,12 @@ private const val RELEASE_TAG = "latest"
 fun releaseAssetUrl(assetName: String): String =
     "https://github.com/$RELEASE_REPOSITORY/releases/download/$RELEASE_TAG/$assetName"
 
+/** プラットフォーム毎の配布物のファイル名（§12）。固定名なのでビルドを跨いで変わらない。 */
+private val RELEASE_ASSET_NAMES = mapOf(
+    PLATFORM_ANDROID to "peranta.apk",
+    PLATFORM_DESKTOP to "peranta.msi",
+)
+
 /** latest.json の所在（§12）。接続先の設定とは独立に引けるよう固定の配布元を指す。 */
 val LATEST_MANIFEST_URL: String = releaseAssetUrl("latest.json")
 
@@ -24,6 +30,11 @@ val LATEST_MANIFEST_URL: String = releaseAssetUrl("latest.json")
  * 配布元の latest.json を取得し、自分の [currentVersionCode] と [platformKey] の配布物を比較する。
  * ネットワーク失敗・JSON 不正・プラットフォームキー欠落はいずれも [UpdateStatus.Failed] とし、
  * 理由を握り潰さない。
+ *
+ * 配布物の取得先はマニフェストの指定を受け付けず、[releaseAssetUrl] で固定の配布元から組み立てる。
+ * マニフェストが動かせるのは版と照合値だけになる。
+ *
+ * [manifestUrl] は取得先を差し替えるための口で、配布物としての動作では固定の [LATEST_MANIFEST_URL] を使う。
  */
 class UpdateChecker(
     private val httpClient: HttpClient,
@@ -33,6 +44,8 @@ class UpdateChecker(
     private val log: Logger = Logger.withTag("UpdateChecker"),
 ) {
     suspend fun check(): UpdateStatus {
+        val assetName = RELEASE_ASSET_NAMES[platformKey]
+            ?: return UpdateStatus.Failed("プラットフォーム '$platformKey' の配布物がありません")
         val response = fetch(manifestUrl)
             ?: return UpdateStatus.Failed("latest.json の取得に失敗しました")
         if (!response.status.isSuccess()) {
@@ -46,7 +59,7 @@ class UpdateChecker(
             return UpdateStatus.UpToDate
         }
         log.i { "update available: ${release.versionName} (code ${release.versionCode})" }
-        return UpdateStatus.Available(release.versionName, release.url, release.sha256)
+        return UpdateStatus.Available(release.versionName, releaseAssetUrl(assetName), release.sha256)
     }
 
     private suspend fun fetch(url: String): HttpResponse? =

@@ -41,6 +41,7 @@ import to.sava.peranta.update.UpdateChecker
 import to.sava.peranta.update.UpdateController
 import to.sava.peranta.update.UpdateInstallState
 import to.sava.peranta.update.UpdateStatus
+import to.sava.peranta.update.releaseAssetUrl
 import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -935,7 +936,7 @@ class SettingsScreenTest {
         val settingsController = SettingsController(repo)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val manifestJson = """
-            { "desktop": { "versionCode": 20, "versionName": "2.0.0", "url": "http://h/d.msi", "sha256": "abc" } }
+            { "desktop": { "versionCode": 20, "versionName": "2.0.0", "sha256": "abc" } }
         """.trimIndent()
         val engine = MockEngine {
             respond(
@@ -967,7 +968,7 @@ class SettingsScreenTest {
             onNodeWithText("新しいバージョン 2.0.0").assertExists()
             onNodeWithTag(TAG_UPDATE_INSTALL).performScrollTo().performClick()
 
-            assertEquals(UpdateStatus.Available("2.0.0", "http://h/d.msi", "abc"), installed)
+            assertEquals(UpdateStatus.Available("2.0.0", releaseAssetUrl("peranta.msi"), "abc"), installed)
         } finally {
             scope.cancel()
         }
@@ -981,7 +982,7 @@ class SettingsScreenTest {
         val settingsController = SettingsController(repo)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val manifestJson = """
-            { "desktop": { "versionCode": 20, "versionName": "2.0.0", "url": "http://h/d.msi" } }
+            { "desktop": { "versionCode": 20, "versionName": "2.0.0", "sha256": "abc" } }
         """.trimIndent()
         val engine = MockEngine {
             respond(

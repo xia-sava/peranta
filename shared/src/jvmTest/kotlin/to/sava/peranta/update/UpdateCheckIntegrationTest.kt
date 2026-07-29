@@ -10,6 +10,7 @@ import kotlin.test.assertTrue
 /**
  * ローカルの静的配信口（docker-compose の dist サービス、localhost:8091）に対する実 check。
  * server/dist/latest.json は versionCode を高く設定してあるため Available を期待する。
+ * マニフェストは sha256 を必須とするので、配信する latest.json にも入れておく。
  * PERANTA_IT=1 のときだけ実行する。
  */
 class UpdateCheckIntegrationTest {

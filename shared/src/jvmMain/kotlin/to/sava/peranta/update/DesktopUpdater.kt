@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import to.sava.peranta.net.createNtfyHttpClient
+import to.sava.peranta.net.createUpdateHttpClient
 import to.sava.peranta.platform.ioDispatcher
 import java.io.File
 
@@ -27,7 +27,7 @@ class DesktopUpdater(
     downloadRelease: (suspend (url: String, onProgress: (received: Long, total: Long) -> Unit) -> File)? = null,
     launchInstaller: ((msi: File) -> Unit)? = null,
 ) {
-    private val httpClient = createNtfyHttpClient()
+    private val httpClient = createUpdateHttpClient()
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val installer = DesktopUpdateInstaller(httpClient)
     private val downloadRelease = downloadRelease ?: installer::download
@@ -47,7 +47,7 @@ class DesktopUpdater(
         get() = installer.isSupported
 
     /** 照合まで済んだ配布物。適用の確認を待つあいだ保持する。 */
-    private var verified: File? = null
+    private var verified: VerifiedRelease? = null
 
     /**
      * 配布物を落として照合する。照合まで済むと [UpdateInstallState.ReadyToApply] で止まり、
@@ -66,12 +66,12 @@ class DesktopUpdater(
                 }
                 _installState.value = UpdateInstallState.Verifying
                 if (!matchesSha256(msi, available.sha256)) {
-                    msi.delete()
+                    discardDownload(msi)
                     log.w { "downloaded update rejected: sha256 mismatch" }
                     _installState.value = UpdateInstallState.Failed("ダウンロードした更新の照合に失敗しました")
                     return@launch
                 }
-                verified = msi
+                verified = VerifiedRelease(msi, available.sha256)
                 _installState.value = UpdateInstallState.ReadyToApply
             } catch (cancellation: CancellationException) {
                 throw cancellation
@@ -85,11 +85,21 @@ class DesktopUpdater(
     /**
      * 照合済みの配布物を適用スクリプトへ引き渡し、[onReadyToExit] を呼ぶ。スクリプトは自プロセスの
      * 終了を待ってからインストールを始めるため、呼び出し側はここでアプリを終了させる。
+     *
+     * 引き渡す直前にもう一度照合する。適用の確認を待つあいだに中身が入れ替われば、
+     * 照合を通ったバイト列とインストーラへ渡すバイト列が食い違うため。
      */
     fun applyNow(onReadyToExit: () -> Unit) {
-        val msi = verified ?: return
+        val release = verified ?: return
+        if (!matchesSha256(release.file, release.sha256)) {
+            discardDownload(release.file)
+            verified = null
+            log.w { "verified update rejected before apply: sha256 mismatch" }
+            _installState.value = UpdateInstallState.Failed("適用する更新の照合に失敗しました")
+            return
+        }
         try {
-            launchInstaller(msi)
+            launchInstaller(release.file)
             _installState.value = UpdateInstallState.Launching
             onReadyToExit()
         } catch (error: Exception) {
@@ -100,7 +110,7 @@ class DesktopUpdater(
 
     /** 適用を取りやめ、ダウンロード済みの配布物を捨てる。 */
     fun cancelApply() {
-        verified?.delete()
+        verified?.let { discardDownload(it.file) }
         verified = null
         _installState.value = null
     }
@@ -116,4 +126,7 @@ class DesktopUpdater(
         scope.cancel()
         httpClient.close()
     }
+
+    /** 照合を通った配布物と、その照合に使った期待値。適用の直前の再照合に使う。 */
+    private data class VerifiedRelease(val file: File, val sha256: String)
 }

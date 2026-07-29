@@ -75,6 +75,31 @@ class DesktopUpdaterTest {
         }
     }
 
+    /** 適用の確認を待つあいだに中身が入れ替わった配布物は、引き渡す直前の再照合で弾く。 */
+    @Test
+    fun tamperedReleaseIsRejectedBeforeApplying() = runBlocking {
+        val release = downloadedRelease()
+        val launched = mutableListOf<File>()
+        val updater = updater(release, launched)
+        try {
+            updater.install(available(sha256HexOf(release)))
+            withTimeout(AWAIT_TIMEOUT_MILLIS) {
+                updater.installState.first { it == UpdateInstallState.ReadyToApply }
+            }
+
+            release.writeText("tampered-$RELEASE_CONTENT")
+            val exitRequested = AtomicBoolean(false)
+            updater.applyNow { exitRequested.set(true) }
+
+            assertTrue(launched.isEmpty(), "tampered release reached the installer")
+            assertFalse(exitRequested.get())
+            assertFalse(release.exists(), "tampered release was left on disk")
+            assertTrue(updater.installState.value is UpdateInstallState.Failed)
+        } finally {
+            updater.close()
+        }
+    }
+
     /** 照合に成功した配布物は ReadyToApply で止まり、applyNow で初めてインストーラへ引き渡される。 */
     @Test
     fun matchingDigestWaitsForApplyRequest() = runBlocking {

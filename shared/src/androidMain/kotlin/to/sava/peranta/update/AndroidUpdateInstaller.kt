@@ -47,7 +47,7 @@ class AndroidUpdateInstaller(
     suspend fun download(url: String, onProgress: (received: Long, total: Long) -> Unit = { _, _ -> }): File {
         val dir = File(context.cacheDir, DOWNLOAD_DIR).apply { mkdirs() }
         val file = File(dir, APK_FILE_NAME)
-        httpClient.downloadToFile(url, file, onProgress)
+        httpClient.downloadToFile(url, file, onProgress = onProgress)
         return file
     }
 
@@ -55,7 +55,7 @@ class AndroidUpdateInstaller(
      * ダウンロード物が配布元の意図した実体で、かつ自アプリの APK であることを確かめる。
      * どちらかが食い違えば破棄して中断する。
      */
-    fun verify(apk: File, expectedSha256: String?) {
+    fun verify(apk: File, expectedSha256: String) {
         if (!matchesSha256(apk, expectedSha256)) {
             apk.delete()
             throw IOException("apk digest mismatch")
