@@ -109,7 +109,8 @@ class KtorNtfyClient(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                log.w(e) { "websocket disconnected: ${topicForLog(topic)}, retrying in $backoff" }
+                // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§16）。
+                log.w { "websocket disconnected: ${topicForLog(topic)} (${e::class.simpleName}), retrying in $backoff" }
             }
             _connectionState.value = NtfyConnectionState.DISCONNECTED
             delay(backoff)

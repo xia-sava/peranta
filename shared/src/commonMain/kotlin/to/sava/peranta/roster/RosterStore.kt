@@ -71,7 +71,8 @@ class RosterStore(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            log.w(error) { "failed to fetch control topic history" }
+            // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な control topic）が載る（§16）。
+            log.w { "failed to fetch control topic history (${error::class.simpleName})" }
             null
         }
 
