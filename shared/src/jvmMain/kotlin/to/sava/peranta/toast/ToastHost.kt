@@ -9,6 +9,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -24,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import kotlinx.coroutines.CoroutineScope
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
@@ -39,6 +41,7 @@ import java.awt.Rectangle
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /** トーストの横幅。 */
@@ -115,6 +118,18 @@ private fun ToastWindow(toast: ActiveToast, stack: ToastStack, order: List<Activ
             onDispose { window.removeComponentListener(listener) }
         }
 
+        // ウィンドウの高さに縛られずに測った内容の高さ（Compose の px）。
+        var contentHeight by remember { mutableStateOf(0) }
+        // 画像や送信者アイコンが後から届くと内容が伸びるため、測り直すたびに高さを合わせる。
+        // ウィンドウが伸びないままだと、内容を縦に並べる際の残り高さが尽き、下端のボタンが潰される。
+        LaunchedEffect(contentHeight) {
+            if (contentHeight <= 0) return@LaunchedEffect
+            // Compose の px と AWT のユーザ空間座標は HiDPI で倍率が異なる。WindowState の寸法は
+            // 後者に対応するため、画面の変換倍率で割ってから渡す。
+            val scale = window.graphicsConfiguration.defaultTransform.scaleY
+            state.size = DpSize(TOAST_WIDTH.dp, ceil(contentHeight / scale).toFloat().dp)
+        }
+
         LaunchedEffect(windowHeight) { stack.report(toast, windowHeight) }
         DisposableEffect(Unit) { onDispose { stack.forget(toast) } }
 
@@ -147,6 +162,9 @@ private fun ToastWindow(toast: ActiveToast, stack: ToastStack, order: List<Activ
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    // ウィンドウの高さを内容から決めるため、その高さを制約に測らないようにする。
+                    .wrapContentHeight(align = Alignment.Top, unbounded = true)
+                    .onSizeChanged { contentHeight = it.height }
                     .padding(TOAST_SHADOW_MARGIN.dp)
                     .hoverable(interactionSource)
                     .graphicsLayer {
