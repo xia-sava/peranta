@@ -28,10 +28,25 @@ import to.sava.peranta.ui.TAG_PORT
 import to.sava.peranta.ui.TAG_TIMELINE_RETENTION_DAYS
 import to.sava.peranta.ui.TAG_TOKEN
 
+/** QR の自動非表示までの既定時間（§6: 表示は時間制限つき）。フラット画面とウィザードで共有する。 */
+internal const val DEFAULT_QR_VISIBLE_MILLIS: Long = 60_000L
+
 /** QR 表示ブロックの案内文（§10.3）。 */
 private const val QR_HINT: String =
     "この QR を新しい端末のカメラで読み取ってください。読み取りにくいときは QR を押すと拡大します。" +
         "時間が経つと自動的に隠れます。"
+
+/**
+ * ペアリング文字列のコピーに添える注意（§10.3）。QR と違いクリップボードには時間制限が無く、
+ * 貼り付け先・クリップボード履歴・クラウド同期に残りうるため、後始末を利用者に委ねる旨を明示する。
+ */
+internal const val PAIRING_COPY_CAUTION: String =
+    "コピーする文字列には共有鍵とアクセストークンが入ります。ほかのアプリからも読めるので、" +
+        "取り込みが済んだらクリップボードとその履歴を消してください。"
+
+/** コピー完了メッセージ（§10.3）。[PAIRING_COPY_CAUTION] と同じ後始末を促す。 */
+internal const val PAIRING_COPIED_MESSAGE: String =
+    "ペアリング文字列をコピーしました。取り込みが済んだらクリップボードとその履歴を消してください。"
 
 /**
  * 「SMS を直接受信して転送する」トグルの下に添える説明文（§3.1: SMS アプリの通知経由の弱点）。
@@ -175,6 +190,11 @@ internal fun PairingQrSection(
     )
     qrContent(uri)
     if (onCopyPairingUri != null) {
+        Text(
+            text = PAIRING_COPY_CAUTION,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
         OutlinedButton(
             onClick = {
                 onCopyPairingUri(uri)

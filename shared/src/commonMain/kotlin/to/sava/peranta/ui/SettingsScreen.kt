@@ -37,10 +37,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import to.sava.peranta.pairing.SettingsController
+import to.sava.peranta.ui.setup.DEFAULT_QR_VISIBLE_MILLIS
 import to.sava.peranta.ui.setup.DeviceNameField
 import to.sava.peranta.ui.setup.HostPortFields
 import to.sava.peranta.ui.setup.KeyStatusText
 import to.sava.peranta.ui.setup.LabeledCheckbox
+import to.sava.peranta.ui.setup.PAIRING_COPIED_MESSAGE
 import to.sava.peranta.ui.setup.PairingQrSection
 import to.sava.peranta.ui.setup.SMS_DIRECT_RECEIVE_DESCRIPTION
 import to.sava.peranta.ui.setup.SetupItemUi
@@ -54,9 +56,6 @@ import to.sava.peranta.ui.setup.setupOverview
 import to.sava.peranta.update.UpdateController
 import to.sava.peranta.update.UpdateInstallState
 import to.sava.peranta.update.UpdateStatus
-
-/** QR の自動非表示までの既定時間（§6: 表示は時間制限つき）。 */
-private const val DEFAULT_QR_VISIBLE_MILLIS: Long = 60_000L
 
 /** 鍵を作り直すと全端末で QR の読み直しが必要になる旨の警告文（§6）。 */
 private const val ROTATE_WARNING_BODY: String =
@@ -455,7 +454,7 @@ fun SettingsScreen(
                         uri = uri,
                         qrContent = qrContent,
                         onCopyPairingUri = onCopyPairingUri,
-                        onCopied = { statusMessage = "ペアリング文字列をコピーしました。" },
+                        onCopied = { statusMessage = PAIRING_COPIED_MESSAGE },
                         onHide = { pairingUri = null },
                     )
                 }

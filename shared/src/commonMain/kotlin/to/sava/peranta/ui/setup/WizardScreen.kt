@@ -46,9 +46,6 @@ import to.sava.peranta.ui.TAG_HOST
 import to.sava.peranta.ui.TAG_PORT
 import to.sava.peranta.ui.TAG_TOKEN
 
-/** QR の自動非表示までの既定時間。 */
-private const val DEFAULT_QR_VISIBLE_MILLIS: Long = 60_000L
-
 /** 操作直後に反映を追いかける自動再チェックの回数と間隔（[ReceiveSetupScreen] と同じ型）。 */
 private const val RECHECK_COUNT: Int = 3
 private const val RECHECK_INTERVAL_MILLIS: Long = 2_000L

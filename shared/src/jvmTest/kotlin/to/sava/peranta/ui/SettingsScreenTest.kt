@@ -32,6 +32,8 @@ import to.sava.peranta.pairing.SettingsController
 import to.sava.peranta.ui.setup.OVERVIEW_ROW_CONNECTION
 import to.sava.peranta.ui.setup.OVERVIEW_ROW_FORWARD
 import to.sava.peranta.ui.setup.OVERVIEW_ROW_RECEIVE
+import to.sava.peranta.ui.setup.PAIRING_COPIED_MESSAGE
+import to.sava.peranta.ui.setup.PAIRING_COPY_CAUTION
 import to.sava.peranta.ui.setup.SMS_DIRECT_RECEIVE_DESCRIPTION
 import to.sava.peranta.update.PLATFORM_DESKTOP
 import to.sava.peranta.update.TestSigningKey
@@ -530,7 +532,26 @@ class SettingsScreenTest {
         onNodeWithTag(TAG_COPY_PAIRING_URI).performScrollTo().performClick()
 
         assertEquals(controller.buildPairingUri(), copiedUri)
-        onNodeWithText("ペアリング文字列をコピーしました。").assertExists()
+        onNodeWithText(PAIRING_COPIED_MESSAGE).assertExists()
+    }
+
+    /** コピー導線があるときは、押す前から「秘密が入る・後始末が要る」注意が添えられている。 */
+    @Test
+    fun copyButtonIsAccompaniedByCaution() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent {
+            SettingsScreen(
+                controller = controller,
+                onCopyPairingUri = {},
+            )
+        }
+
+        onNodeWithTag(TAG_ADD_DEVICE).performScrollTo().performClick()
+
+        onNodeWithText(PAIRING_COPY_CAUTION).assertExists()
     }
 
     // --- 端末の追加（鍵なし）: 作成と QR 表示の一気通貫 ---
