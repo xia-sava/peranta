@@ -41,6 +41,9 @@ private const val OPEN_BUTTON_LABEL = "開く"
 /** 既読同期ボタンのラベル。押下は発出元の通知を消すコマンドになる（§3.4）。 */
 private const val DISMISS_BUTTON_LABEL = "送信元の通知を消す"
 
+/** 件名に出す最大行数。 */
+private const val TITLE_MAX_LINES = 2
+
 /** 本文に出す最大行数。 */
 private const val BODY_MAX_LINES = 4
 
@@ -101,6 +104,8 @@ internal fun ToastCard(
                 color = palette.title,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
+                maxLines = TITLE_MAX_LINES,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         Spacer(Modifier.height(3.dp))
