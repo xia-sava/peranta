@@ -15,6 +15,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -88,9 +90,18 @@ fun HealthCheckScreen(
     var manualRefresh by remember { mutableStateOf(0) }
     var followUpRechecks by remember { mutableStateOf(0) }
     var items by remember { mutableStateOf<List<HealthCheckItem>?>(null) }
+    // 全項目が合格のときは点検し直しても画面が変わらず、押しても何も起きなかったように見えるため、
+    // 手動の再チェックに限って結果を短く知らせる。
+    val snackbarHostState = remember { SnackbarHostState() }
+    var announceRecheck by remember { mutableStateOf(false) }
 
     LaunchedEffect(externalRefreshKey, manualRefresh) {
-        items = checker.check()
+        val checked = checker.check()
+        items = checked
+        if (announceRecheck) {
+            announceRecheck = false
+            snackbarHostState.showSnackbar(recheckResultMessage(checked))
+        }
     }
 
     // 「直す」の結果が非同期に反映される項目（UnifiedPush 登録など）を追いかけて数回だけ再チェックする。
@@ -143,13 +154,20 @@ fun HealthCheckScreen(
                 }
 
                 OutlinedButton(
-                    onClick = { manualRefresh++ },
+                    onClick = {
+                        announceRecheck = true
+                        manualRefresh++
+                    },
                     modifier = Modifier.testTag(TAG_HEALTH_RECHECK),
                 ) {
                     Text(text = "今すぐ再チェック")
                 }
             }
             scrollbarContent(scrollState)
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.align(Alignment.BottomCenter).testTag(TAG_HEALTH_RECHECK_RESULT),
+            )
         }
     }
 }

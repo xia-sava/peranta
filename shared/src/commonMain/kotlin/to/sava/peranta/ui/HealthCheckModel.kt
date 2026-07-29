@@ -71,11 +71,35 @@ fun interface HealthChecker {
 fun failingHealthCheckIds(items: List<HealthCheckItem>): Set<String> =
     items.filter { it.state == HealthCheckState.FAILING }.map { it.id }.toSet()
 
+/** 「今すぐ再チェック」の結果を知らせる文の書き出し。 */
+private const val HEALTH_RECHECK_DONE: String = "点検しました。"
+
+/** 再チェックで未達が無かったときに続ける文。 */
+private const val HEALTH_RECHECK_NO_PROBLEM: String = "問題はありません。"
+
+/**
+ * 「今すぐ再チェック」の結果を 1 行で伝える（§10.5）。未達（[HealthCheckState.FAILING]）と
+ * 要確認（[HealthCheckState.INFO]）を合わせて数え、全項目合格の案内を出す条件と同じ見方で
+ * 「問題なし」を判断する。対象外の項目は数えない。
+ */
+fun recheckResultMessage(items: List<HealthCheckItem>): String =
+    items.count { it.state == HealthCheckState.FAILING || it.state == HealthCheckState.INFO }
+        .let { unmet ->
+            if (unmet == 0) {
+                HEALTH_RECHECK_DONE + HEALTH_RECHECK_NO_PROBLEM
+            } else {
+                "${HEALTH_RECHECK_DONE}未達の項目が $unmet 件あります。"
+            }
+        }
+
 /** 画面見出しのタグ。 */
 const val TAG_HEALTH_TITLE: String = "health-title"
 
 /** 「今すぐ再チェック」ボタンのタグ。 */
 const val TAG_HEALTH_RECHECK: String = "health-recheck"
+
+/** 「今すぐ再チェック」の結果を知らせる表示のタグ。 */
+const val TAG_HEALTH_RECHECK_RESULT: String = "health-recheck-result"
 
 /** チェック実行中のインジケータのタグ。 */
 const val TAG_HEALTH_LOADING: String = "health-loading"

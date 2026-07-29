@@ -62,4 +62,23 @@ class HealthCheckModelTest {
         )
         assertEquals(setOf("x"), failingHealthCheckIds(listOf(item)))
     }
+
+    /** 未達も要確認も無ければ問題なしとして伝える。対象外の項目は数に入れない。 */
+    @Test
+    fun recheckResultMessageReportsNoProblemWhenNothingUnmet() {
+        val items = listOf(item("a", HealthCheckState.PASS), item("b", HealthCheckState.NOT_APPLICABLE))
+        assertEquals("点検しました。問題はありません。", recheckResultMessage(items))
+    }
+
+    /** 未達と要確認は合わせて数え、件数を添えて伝える。 */
+    @Test
+    fun recheckResultMessageCountsFailingAndInfo() {
+        val items = listOf(
+            item("a", HealthCheckState.PASS),
+            item("b", HealthCheckState.FAILING),
+            item("c", HealthCheckState.INFO),
+            item("d", HealthCheckState.NOT_APPLICABLE),
+        )
+        assertEquals("点検しました。未達の項目が 2 件あります。", recheckResultMessage(items))
+    }
 }
