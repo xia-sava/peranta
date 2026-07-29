@@ -16,12 +16,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.jetbrains.skia.Image as SkiaImage
+import kotlinx.coroutines.withTimeoutOrNull
+import to.sava.peranta.blob.AttachmentOpenDecision
+import to.sava.peranta.blob.AutoFetchRole
 import to.sava.peranta.blob.DesktopAttachmentCache
 import to.sava.peranta.blob.KtorBlobTransport
+import to.sava.peranta.blob.MAX_THUMBNAIL_DECODE_BYTES
 import to.sava.peranta.blob.TransferProgress
 import to.sava.peranta.blob.TransferState
+import to.sava.peranta.blob.attachmentOpenDecision
+import to.sava.peranta.blob.decodeImageWithinPixelLimit
 import to.sava.peranta.blob.exceedsFullTextAutoFetchLimit
+import to.sava.peranta.blob.shouldAutoFetch
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.isDevMode
@@ -307,20 +313,38 @@ class DesktopReceiver(
      * どちらも取得できなければ何もしない。トーストが既に消えていれば [Toaster.update] が空振りする。
      */
     private suspend fun updateToastImages(item: ReceivedNotification) {
-        val image = if (config.autoDisplayImages) fetchThumbnail(item.payload.toastImage()) else null
-        val senderIcon = fetchThumbnail(item.payload.senderIcon())
+        val image = fetchThumbnail(item.payload.toastImage(), AutoFetchRole.DISPLAY_IMAGE)
+        val senderIcon = fetchThumbnail(item.payload.senderIcon(), AutoFetchRole.SENDER_ICON)
         if (image == null && senderIcon == null) return
         toastContentFor(item)?.let { toaster.update(it.copy(image = image, senderIcon = senderIcon)) }
     }
 
     /**
-     * [ref] のサムネイルを返す。取得済みならそれを、未取得ならダウンロードの完了を待って返す。
-     * 参照が無い・取得やデコードに失敗した場合は null。
+     * [ref] のサムネイルを返す。取得済みならそれを、未取得なら [shouldAutoFetch] が許すときだけ
+     * ダウンロードを起こす。参照が無い・自動取得の対象外・取得やデコードに失敗した場合は null。
+     *
+     * 待ちには上限を置く（[TOAST_IMAGE_WAIT_MILLIS]）。トーストは速報として先に出ており、
+     * 取得が長引く間ここで待ち続けると差し込み以降の更新が止まる。待ちを打ち切っても
+     * ダウンロード自体は続き、タイムラインの添付カードには反映される。
      */
-    private suspend fun fetchThumbnail(ref: AttachmentRef?): ImageBitmap? {
+    private suspend fun fetchThumbnail(ref: AttachmentRef?, role: AutoFetchRole): ImageBitmap? {
         if (ref == null) return null
-        attachmentStates.value[ref.blobId]?.thumbnail?.let { return it }
-        startDownload(ref).join()
+        val state = attachmentStates.value[ref.blobId]
+        state?.thumbnail?.let { return it }
+        val running = downloadJobs[ref.blobId]?.takeIf { it.isActive }
+        val job = running ?: run {
+            val autoFetch = shouldAutoFetch(
+                ref = ref,
+                role = role,
+                autoDisplayImages = config.autoDisplayImages,
+                now = nowEpochMillis(),
+                alreadyFetched = state?.cached == true,
+                transferStarted = state?.progress != null,
+            )
+            if (!autoFetch) return null
+            startDownload(ref)
+        }
+        withTimeoutOrNull(TOAST_IMAGE_WAIT_MILLIS) { job.join() }
         return attachmentStates.value[ref.blobId]?.thumbnail
     }
 
@@ -508,7 +532,8 @@ class DesktopReceiver(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            log.w(error) { "full text fetch failed blobId=${ref.blobId}" }
+            // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§16）。
+            log.w { "full text fetch failed blobId=${ref.blobId} (${error::class.simpleName})" }
             null
         }
     }
@@ -535,7 +560,8 @@ class DesktopReceiver(
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
-                log.w(error) { "attachment download failed blobId=${ref.blobId}" }
+                // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§16）。
+                log.w { "attachment download failed blobId=${ref.blobId} (${error::class.simpleName})" }
                 attachmentStates.update {
                     it + (ref.blobId to AttachmentDownloadState(
                         progress = TransferProgress(0, ref.sizeBytes, TransferState.FAILED),
@@ -572,20 +598,31 @@ class DesktopReceiver(
         }
     }
 
-    /** 画像添付を復号済みファイルからデコードしてサムネイルにする。失敗時は null（種別アイコンにフォールバック）。 */
+    /**
+     * 画像添付を復号済みファイルからデコードしてサムネイルにする。失敗時は null（種別アイコンにフォールバック）。
+     * 符号化サイズと展開後の画素数の双方に上限を掛ける（[decodeImageWithinPixelLimit]）。
+     */
     private fun decodeThumbnail(ref: AttachmentRef, file: File): ImageBitmap? {
         if (ref.kind != AttachmentKind.IMAGE) return null
         if (file.length() > MAX_THUMBNAIL_DECODE_BYTES) return null
         return try {
-            SkiaImage.makeFromEncoded(file.readBytes()).toComposeImageBitmap()
+            decodeImageWithinPixelLimit(file.readBytes())?.toComposeImageBitmap()
         } catch (error: Exception) {
             log.w(error) { "thumbnail decode failed blobId=${ref.blobId}" }
             null
         }
     }
 
-    /** 復号済みファイルを OS 既定アプリで開く（§4.3）。 */
+    /**
+     * 復号済みファイルを OS 既定アプリで開く（§4.3）。
+     * 添付カードは [attachmentOpenDecision] で導線を出し分けているが、OS へ渡す直前でも当て直す。
+     */
     private fun openAttachment(blobId: String) {
+        val ref = knownRefs[blobId] ?: return
+        if (attachmentOpenDecision(ref.mimeType, ref.fileName) == AttachmentOpenDecision.REFUSE) {
+            log.w { "attachment open refused blobId=$blobId" }
+            return
+        }
         val file = cachedFileFor(blobId) ?: return
         if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
             log.w { "Desktop open not supported" }
@@ -634,8 +671,8 @@ class DesktopReceiver(
     }
 
     private companion object {
-        /** サムネイルデコードを試みる添付の上限バイト（巨大画像で OOM しないため）。 */
-        const val MAX_THUMBNAIL_DECODE_BYTES: Long = 25L * 1024 * 1024
+        /** トーストへ画像を差し込むために取得完了を待つ上限。 */
+        const val TOAST_IMAGE_WAIT_MILLIS: Long = 10_000
     }
 }
 

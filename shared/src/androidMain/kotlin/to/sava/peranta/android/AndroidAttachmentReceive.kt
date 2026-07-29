@@ -13,15 +13,20 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import to.sava.peranta.blob.AutoFetchRole
 import to.sava.peranta.blob.BlobTransport
 import to.sava.peranta.blob.KtorBlobTransport
+import to.sava.peranta.blob.MAX_THUMBNAIL_DECODE_BYTES
 import to.sava.peranta.blob.TransferProgress
 import to.sava.peranta.blob.TransferState
 import to.sava.peranta.blob.attachmentKindForMimeType
+import to.sava.peranta.blob.exceedsDecodedPixelLimit
 import to.sava.peranta.blob.exceedsFullTextAutoFetchLimit
+import to.sava.peranta.blob.shouldAutoFetch
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
+import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.timeline.TimelineItem
@@ -37,9 +42,6 @@ import kotlin.math.roundToInt
 
 /** 復号済み添付キャッシュのディレクトリ名（res/xml/file_paths.xml の cache-path と一致させる）。 */
 const val ATTACHMENTS_CACHE_DIR: String = "attachments"
-
-/** サムネイルのデコードを試みる添付の上限バイト（巨大画像で OOM しないため）。 */
-private const val MAX_THUMBNAIL_DECODE_BYTES: Long = 25L * 1024 * 1024
 
 /** サムネイルの目標一辺（dp）。この寸法に収まるよう縮小デコードして OOM を防ぐ（カード表示は最大 220dp）。 */
 private const val THUMBNAIL_TARGET_DP: Int = 220
@@ -154,17 +156,35 @@ object AndroidAttachmentReceive {
      * 通知に後から付いた画像（§4.3.1）を取得・復号し、OS 通知に載せられる [Bitmap] にして返す。
      * 併せてダウンロード状態を「取得済み」にするため、タイムラインのカードにも同じ画像が出る。
      * 設定不足・取得失敗・デコード失敗では null を返し、通知は本文だけのまま据え置く。
+     *
+     * キャッシュに無いときだけネットワークへ出るため、自動取得の判断（[shouldAutoFetch]）は
+     * ダウンロードの直前に当てる。[role] は取りに行く表示面（本文画像か送信者アイコンか）。
      */
-    suspend fun notificationImage(context: Context, config: PerantaConfig, ref: AttachmentRef): Bitmap? {
+    suspend fun notificationImage(
+        context: Context,
+        config: PerantaConfig,
+        ref: AttachmentRef,
+        role: AutoFetchRole,
+    ): Bitmap? {
         if (!config.hasSharedKey) return null
         val cache = cache(context, config)
-        val file = cache.cachedFile(ref) ?: try {
-            withContext(ioDispatcher) { cache.download(ref) }.also { markCached(ref, it) }
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (error: Exception) {
-            log.w(error) { "notification image fetch failed blobId=${ref.blobId}" }
-            return null
+        val file = cache.cachedFile(ref) ?: run {
+            val autoFetch = shouldAutoFetch(
+                ref = ref,
+                role = role,
+                autoDisplayImages = config.autoDisplayImages,
+                now = nowEpochMillis(),
+            )
+            if (!autoFetch) return null
+            try {
+                withContext(ioDispatcher) { cache.download(ref) }.also { markCached(ref, it) }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§16）。
+                log.w { "notification image fetch failed blobId=${ref.blobId} (${error::class.simpleName})" }
+                return null
+            }
         }
         return decodeSampled(file, notificationImageTargetPixels())
     }
@@ -189,15 +209,21 @@ object AndroidAttachmentReceive {
      * [file] の画像を [targetPixels] に収まる解像度まで間引いてデコードする。
      * まず [BitmapFactory.Options.inJustDecodeBounds] で寸法だけ読み、[decodeSampleSize] を掛けて縮小する。
      * フルサイズのビットマップを抱えて OOM するのを避けるための AOSP 標準パターン。
+     *
+     * 縮小しても [exceedsDecodedPixelLimit] を超える寸法はデコードへ進ませない。間引きは 2 の累乗で、
+     * 極端な縦横比の画像では短辺が目標に達した時点で止まるため、長辺だけが残ることがある。
+     * 上限は Desktop の等倍デコードと同じものを見る。
      */
     private fun decodeSampled(file: File, targetPixels: Int): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        val options = BitmapFactory.Options().apply {
-            inSampleSize = decodeSampleSize(bounds.outWidth, bounds.outHeight, targetPixels, targetPixels)
+        val sampleSize = decodeSampleSize(bounds.outWidth, bounds.outHeight, targetPixels, targetPixels)
+        if (exceedsDecodedPixelLimit(bounds.outWidth / sampleSize, bounds.outHeight / sampleSize)) {
+            log.w { "image exceeds decoded pixel limit; skipping decode" }
+            return null
         }
-        return BitmapFactory.decodeFile(file.absolutePath, options)
+        return BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inSampleSize = sampleSize })
     }
 
     /** サムネイルの目標一辺（ピクセル）。端末の表示密度を掛けて dp をピクセルへ変換する。 */
@@ -252,7 +278,8 @@ object AndroidAttachmentReceive {
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            log.w(error) { "full text fetch failed blobId=${ref.blobId}" }
+            // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§16）。
+            log.w { "full text fetch failed blobId=${ref.blobId} (${error::class.simpleName})" }
             null
         }
     }

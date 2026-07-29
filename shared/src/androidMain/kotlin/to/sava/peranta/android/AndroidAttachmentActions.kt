@@ -8,8 +8,11 @@ import androidx.core.content.FileProvider
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
+import to.sava.peranta.blob.AttachmentOpenDecision
+import to.sava.peranta.blob.attachmentOpenDecision
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.platform.ioDispatcher
+import to.sava.peranta.ui.REFUSED_OPEN_MESSAGE
 import java.io.File
 
 /** 添付共有・保存に使う FileProvider の authority 接尾辞（自己更新と同じ provider を流用、§4.3）。 */
@@ -65,9 +68,17 @@ class AndroidAttachmentActions(
     /** 保存ランチャーが返す Uri と対応づけるため、保存要求中の blobId を覚える。 */
     private var pendingSaveBlobId: String? = null
 
-    /** 復号済みファイルを OS 既定アプリで開く。ハンドラ不在は案内表示にフォールバックする。 */
+    /**
+     * 復号済みファイルを OS 既定アプリで開く。ハンドラ不在は案内表示にフォールバックする。
+     * 添付カードは [attachmentOpenDecision] で導線を出し分けているが、OS へ渡す直前でも当て直す。
+     */
     fun open(blobId: String) {
         val (ref, file) = resolve(blobId) ?: return
+        if (attachmentOpenDecision(ref.mimeType, ref.fileName) == AttachmentOpenDecision.REFUSE) {
+            log.w { "attachment open refused blobId=$blobId" }
+            reportError(REFUSED_OPEN_MESSAGE)
+            return
+        }
         val uri = uriFor(file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, ref.mimeType)

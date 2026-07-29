@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -15,6 +16,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -23,9 +27,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.StateFlow
 import to.sava.peranta.blob.AttachmentCategory
+import to.sava.peranta.blob.AttachmentOpenDecision
+import to.sava.peranta.blob.AutoFetchRole
 import to.sava.peranta.blob.TransferProgress
 import to.sava.peranta.blob.TransferState
 import to.sava.peranta.blob.attachmentCategoryFor
+import to.sava.peranta.blob.attachmentOpenDecision
+import to.sava.peranta.blob.isBlobExpired
+import to.sava.peranta.blob.shouldAutoFetch
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.nowEpochMillis
 
@@ -37,6 +46,15 @@ const val TAG_ATTACHMENT_CANCEL_PREFIX: String = "attachment-cancel-"
 
 /** 添付カードの「開く」ボタンのタグ接頭辞。 */
 const val TAG_ATTACHMENT_OPEN_PREFIX: String = "attachment-open-"
+
+/** 開く前の確認ダイアログの「開く」ボタンのタグ接頭辞。 */
+const val TAG_ATTACHMENT_OPEN_CONFIRM_PREFIX: String = "attachment-open-confirm-"
+
+/** 開く前の確認ダイアログの「キャンセル」ボタンのタグ接頭辞。 */
+const val TAG_ATTACHMENT_OPEN_CANCEL_PREFIX: String = "attachment-open-cancel-"
+
+/** 開く導線を出さない添付に添える案内のタグ接頭辞。 */
+const val TAG_ATTACHMENT_OPEN_REFUSED_PREFIX: String = "attachment-open-refused-"
 
 /** 添付カードの「保存」ボタンのタグ接頭辞。 */
 const val TAG_ATTACHMENT_SAVE_PREFIX: String = "attachment-save-"
@@ -119,12 +137,15 @@ internal fun AttachmentCard(ref: AttachmentRef, ui: AttachmentUi) {
     val expired = !state.cached && isBlobExpired(ref, ui.now())
 
     LaunchedEffect(ref.blobId) {
-        val shouldAutoDisplay = ui.autoDisplayImages &&
-            attachmentCategoryFor(ref.mimeType, ref.fileName) == AttachmentCategory.IMAGE &&
-            !state.cached &&
-            state.progress == null &&
-            !expired
-        if (shouldAutoDisplay) ui.onDownload(ref)
+        val autoFetch = shouldAutoFetch(
+            ref = ref,
+            role = AutoFetchRole.DISPLAY_IMAGE,
+            autoDisplayImages = ui.autoDisplayImages,
+            now = ui.now(),
+            alreadyFetched = state.cached,
+            transferStarted = state.progress != null,
+        )
+        if (autoFetch) ui.onDownload(ref)
     }
 
     Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
@@ -171,6 +192,12 @@ private fun openLabelFor(ref: AttachmentRef): String =
 /** 添付を保存するボタンのラベル。開くボタンと同じ理由で、対象を含める。 */
 private const val ATTACHMENT_SAVE_LABEL: String = "ファイルに保存"
 
+/** 開く導線を出さない添付に添える案内。保存という代替の導線を示す。 */
+internal const val REFUSED_OPEN_MESSAGE: String = "この種類のファイルは開けません。保存してから開いてください。"
+
+/** 開く前の確認ダイアログの見出し。 */
+private const val CONFIRM_OPEN_TITLE: String = "他の端末から届いたファイルです"
+
 @Composable
 private fun AttachmentControls(
     ref: AttachmentRef,
@@ -180,22 +207,7 @@ private fun AttachmentControls(
 ) {
     val progress = state.progress
     when {
-        state.cached -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(
-                onClick = { ui.onOpen(ref.blobId) },
-                modifier = Modifier.testTag("$TAG_ATTACHMENT_OPEN_PREFIX${ref.blobId}"),
-            ) { Text(openLabelFor(ref)) }
-            TextButton(
-                onClick = { ui.onSave(ref.blobId) },
-                modifier = Modifier.testTag("$TAG_ATTACHMENT_SAVE_PREFIX${ref.blobId}"),
-            ) { Text(ATTACHMENT_SAVE_LABEL) }
-            if (ui.canShare) {
-                TextButton(
-                    onClick = { ui.onShare(ref.blobId) },
-                    modifier = Modifier.testTag("$TAG_ATTACHMENT_SHARE_PREFIX${ref.blobId}"),
-                ) { Text("共有") }
-            }
-        }
+        state.cached -> CachedAttachmentControls(ref, ui)
 
         progress?.state == TransferState.RUNNING || progress?.state == TransferState.PENDING -> Column {
             LinearProgressIndicator(
@@ -231,8 +243,84 @@ private fun AttachmentControls(
     }
 }
 
-/** サーバ側の添付保持期限を過ぎているか（過ぎているとダウンロード不可）。 */
-internal fun isBlobExpired(ref: AttachmentRef, now: Long): Boolean {
-    val expiresAt = ref.blobExpiresAtEpochMillis ?: return false
-    return expiresAt < now
+/**
+ * 取得済みの添付に出す操作（§4.3）。「開く」は復号済みファイルを OS の既定アプリへ渡すため、
+ * 渡してよいかを [attachmentOpenDecision] で決めてから出し分ける（§4.3.2）。
+ * 保存・共有は OS のダイアログでユーザーが宛先を選ぶ経路なので、判定に関わらず常に出す。
+ */
+@Composable
+private fun CachedAttachmentControls(ref: AttachmentRef, ui: AttachmentUi) {
+    var confirming by remember(ref.blobId) { mutableStateOf(false) }
+    val decision = attachmentOpenDecision(ref.mimeType, ref.fileName)
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            when (decision) {
+                AttachmentOpenDecision.OPEN -> OpenButton(ref) { ui.onOpen(ref.blobId) }
+                AttachmentOpenDecision.CONFIRM -> OpenButton(ref) { confirming = true }
+                AttachmentOpenDecision.REFUSE -> Unit
+            }
+            TextButton(
+                onClick = { ui.onSave(ref.blobId) },
+                modifier = Modifier.testTag("$TAG_ATTACHMENT_SAVE_PREFIX${ref.blobId}"),
+            ) { Text(ATTACHMENT_SAVE_LABEL) }
+            if (ui.canShare) {
+                TextButton(
+                    onClick = { ui.onShare(ref.blobId) },
+                    modifier = Modifier.testTag("$TAG_ATTACHMENT_SHARE_PREFIX${ref.blobId}"),
+                ) { Text("共有") }
+            }
+        }
+        if (decision == AttachmentOpenDecision.REFUSE) {
+            Text(
+                text = REFUSED_OPEN_MESSAGE,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("$TAG_ATTACHMENT_OPEN_REFUSED_PREFIX${ref.blobId}"),
+            )
+        }
+    }
+    if (confirming) {
+        ExternalOriginDialog(
+            ref = ref,
+            onConfirm = {
+                confirming = false
+                ui.onOpen(ref.blobId)
+            },
+            onDismiss = { confirming = false },
+        )
+    }
+}
+
+@Composable
+private fun OpenButton(ref: AttachmentRef, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.testTag("$TAG_ATTACHMENT_OPEN_PREFIX${ref.blobId}"),
+    ) { Text(openLabelFor(ref)) }
+}
+
+/**
+ * 素性を確かめられない種別の添付を開く前に、外部由来である旨を示す確認（§4.3.2）。
+ * 種別が判っていて表示するだけの添付（画像・PDF 等）はこの確認を通らないため、
+ * 日常の操作で問われ続けて確認が読み飛ばされる状態にはならない。
+ */
+@Composable
+private fun ExternalOriginDialog(ref: AttachmentRef, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(CONFIRM_OPEN_TITLE) },
+        text = { Text("「${ref.fileName}」を既定のアプリで開きます。心当たりの無いファイルは開かないでください。") },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                modifier = Modifier.testTag("$TAG_ATTACHMENT_OPEN_CONFIRM_PREFIX${ref.blobId}"),
+            ) { Text("開く") }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("$TAG_ATTACHMENT_OPEN_CANCEL_PREFIX${ref.blobId}"),
+            ) { Text("キャンセル") }
+        },
+    )
 }

@@ -269,7 +269,8 @@ class DesktopComposer(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            log.w(error) { "file send failed" }
+            // 例外そのものは流さない。ktor の例外メッセージには blob の送り先 URL（＝ホスト）が載る（§16）。
+            log.w { "file send failed (${error::class.simpleName})" }
             runCatching { sendPipeline.recordError(FILE_SEND_FAILED_MESSAGE) }
             false
         } finally {

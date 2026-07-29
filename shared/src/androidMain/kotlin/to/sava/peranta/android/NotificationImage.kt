@@ -9,6 +9,8 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Bundle
+import to.sava.peranta.blob.MAX_NOTIFICATION_IMAGE_BYTES
+import to.sava.peranta.blob.MAX_SENDER_ICON_BYTES
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import kotlin.math.roundToInt
@@ -30,12 +32,6 @@ private const val IMAGE_JPEG_QUALITY: Int = 85
 
 /** PNG は可逆のため品質指定を使わないが、[Bitmap.compress] が引数を要求する。 */
 private const val ICON_PNG_QUALITY: Int = 100
-
-/** 符号化後の通知画像として許容する上限バイト数。超えるものは添付しない（§4.3.1）。 */
-private const val MAX_ENCODED_IMAGE_BYTES: Int = 2 * 1024 * 1024
-
-/** 符号化後の送信者アイコンとして許容する上限バイト数（§4.3.1）。 */
-private const val MAX_ENCODED_ICON_BYTES: Int = 64 * 1024
 
 /**
  * 通知が持つ本文画像（BigPictureStyle）を取り出す（§4.3.1）。持たない通知では null。
@@ -64,22 +60,26 @@ fun senderIconOf(context: Context, notification: Notification): Bitmap? =
  * 符号化しても上限バイト数に収まらない場合は null を返し、呼び出し側は添付を諦める。
  */
 fun encodeNotificationImage(image: Bitmap): ByteArray? =
-    encodeScaled(image, MAX_IMAGE_LONG_EDGE, Bitmap.CompressFormat.JPEG, IMAGE_JPEG_QUALITY, MAX_ENCODED_IMAGE_BYTES)
+    encodeScaled(image, MAX_IMAGE_LONG_EDGE, Bitmap.CompressFormat.JPEG, IMAGE_JPEG_QUALITY, MAX_NOTIFICATION_IMAGE_BYTES)
 
 /**
  * 送信者アイコンを配送用のバイト列へ符号化する（§4.3.1）。挙動は [encodeNotificationImage] と同じで、
  * 円に切り抜かれた輪郭の透過を残すため PNG にする。
  */
 fun encodeSenderIcon(icon: Bitmap): ByteArray? =
-    encodeScaled(icon, MAX_ICON_LONG_EDGE, Bitmap.CompressFormat.PNG, ICON_PNG_QUALITY, MAX_ENCODED_ICON_BYTES)
+    encodeScaled(icon, MAX_ICON_LONG_EDGE, Bitmap.CompressFormat.PNG, ICON_PNG_QUALITY, MAX_SENDER_ICON_BYTES)
 
-/** 長辺を [maxLongEdge] まで縮めて符号化する。[maxBytes] に収まらなければ null。 */
+/**
+ * 長辺を [maxLongEdge] まで縮めて符号化する。[maxBytes] に収まらなければ null。
+ * [maxBytes] は受信側の自動取得の判断と同じ定義（[MAX_NOTIFICATION_IMAGE_BYTES] /
+ * [MAX_SENDER_ICON_BYTES]）を渡す。
+ */
 private fun encodeScaled(
     bitmap: Bitmap,
     maxLongEdge: Int,
     format: Bitmap.CompressFormat,
     quality: Int,
-    maxBytes: Int,
+    maxBytes: Long,
 ): ByteArray? {
     val source = bitmap.toSoftwareBitmap()
     val scaled = source.scaleToLongEdge(maxLongEdge)
@@ -87,7 +87,7 @@ private fun encodeScaled(
     scaled.compress(format, quality, buffer)
     if (scaled !== source) scaled.recycle()
     if (source !== bitmap) source.recycle()
-    return buffer.toByteArray().takeIf { it.size <= maxBytes }
+    return buffer.toByteArray().takeIf { it.size.toLong() <= maxBytes }
 }
 
 /** [bytes] の SHA-256 を 16 進表記で返す。同一画像の再アップロードを避ける照合キーに使う（§4.3.1）。 */

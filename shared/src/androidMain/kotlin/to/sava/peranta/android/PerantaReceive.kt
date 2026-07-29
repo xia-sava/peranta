@@ -11,6 +11,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.PipelineKey
+import to.sava.peranta.blob.AutoFetchRole
 import to.sava.peranta.blob.attachmentKindForMimeType
 import to.sava.peranta.config.toPipelineKey
 import to.sava.peranta.model.AttachmentKind
@@ -198,9 +199,9 @@ object PerantaReceive {
         commandScope.launch {
             val config = androidConfigRepository(context).load()
             val image = imageRef
-                ?.takeIf { config.autoDisplayImages }
-                ?.let { AndroidAttachmentReceive.notificationImage(context, config, it) }
-            val senderIcon = senderIconRef?.let { AndroidAttachmentReceive.notificationImage(context, config, it) }
+                ?.let { AndroidAttachmentReceive.notificationImage(context, config, it, AutoFetchRole.DISPLAY_IMAGE) }
+            val senderIcon = senderIconRef
+                ?.let { AndroidAttachmentReceive.notificationImage(context, config, it, AutoFetchRole.SENDER_ICON) }
             if (image == null && senderIcon == null) return@launch
             presenter.update(item, image, senderIcon)
         }

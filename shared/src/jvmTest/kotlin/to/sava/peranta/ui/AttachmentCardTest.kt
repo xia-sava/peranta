@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import kotlinx.coroutines.flow.MutableStateFlow
+import to.sava.peranta.blob.MAX_NOTIFICATION_IMAGE_BYTES
 import to.sava.peranta.blob.TransferProgress
 import to.sava.peranta.blob.TransferState
 import to.sava.peranta.model.AttachmentKind
@@ -30,12 +31,13 @@ class AttachmentCardTest {
         fileName: String = "photo.jpg",
         mimeType: String = "image/jpeg",
         kind: AttachmentKind = AttachmentKind.IMAGE,
+        sizeBytes: Long = 2048,
     ) = AttachmentRef(
         blobId = blobId,
         url = "https://peranta.example.com/file/abc",
         fileName = fileName,
         mimeType = mimeType,
-        sizeBytes = 2048,
+        sizeBytes = sizeBytes,
         kind = kind,
         blobExpiresAtEpochMillis = expiresAt,
         enc = BlobEnc(keyId = "k1", saltBase64 = "AAAAAAAAAAAAAAAAAAAAAA==", chunkSize = 1_048_576, totalChunks = 1),
@@ -294,5 +296,92 @@ class AttachmentCardTest {
         }
         waitForIdle()
         assertEquals(null, requested)
+    }
+
+    /**
+     * 自動表示の上限を超える画像は自動発火しない（§4.3.1）。
+     * 手動の導線は残るので、押せば従来どおり取得できる。
+     */
+    @Test
+    fun autoDisplayDoesNotTriggerAboveTheSizeLimit() = runComposeUiTest {
+        val states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+        var requested: String? = null
+        setContent {
+            TimelineScreen(
+                items(ref = ref(sizeBytes = MAX_NOTIFICATION_IMAGE_BYTES + 1)),
+                attachments = ui(states, onDownload = { requested = it.blobId }, autoDisplayImages = true),
+            )
+        }
+        waitForIdle()
+        assertEquals(null, requested)
+        onNodeWithTag("$TAG_ATTACHMENT_DOWNLOAD_PREFIX$blobId").performClick()
+        assertEquals(blobId, requested)
+    }
+
+    /** 表示するだけの種別（画像・PDF 等）は確認なしで開ける。確認が読み飛ばされる状態を作らない（§4.3.2）。 */
+    @Test
+    fun viewableAttachmentOpensWithoutConfirmation() = runComposeUiTest {
+        val states = MutableStateFlow(mapOf(blobId to AttachmentDownloadState(cached = true)))
+        var opened: String? = null
+        setContent { TimelineScreen(items(), attachments = ui(states, onOpen = { opened = it })) }
+
+        onNodeWithTag("$TAG_ATTACHMENT_OPEN_PREFIX$blobId").performClick()
+        assertEquals(blobId, opened)
+        onAllNodesWithTag("$TAG_ATTACHMENT_OPEN_CONFIRM_PREFIX$blobId").assertCountEquals(0)
+    }
+
+    /** 素性を確かめられない種別は、確認を経てからでないと開かない（§4.3.2）。 */
+    @Test
+    fun unknownTypeAsksBeforeOpening() = runComposeUiTest {
+        val states = MutableStateFlow(mapOf(blobId to AttachmentDownloadState(cached = true)))
+        var opened: String? = null
+        val archive = ref(fileName = "backup.zip", mimeType = "application/zip", kind = AttachmentKind.FILE)
+        setContent { TimelineScreen(items(ref = archive), attachments = ui(states, onOpen = { opened = it })) }
+
+        onNodeWithTag("$TAG_ATTACHMENT_OPEN_PREFIX$blobId").performClick()
+        assertEquals(null, opened)
+
+        onNodeWithTag("$TAG_ATTACHMENT_OPEN_CONFIRM_PREFIX$blobId").performClick()
+        assertEquals(blobId, opened)
+    }
+
+    /** 確認をキャンセルすれば OS へは渡さない。 */
+    @Test
+    fun cancellingTheConfirmationDoesNotOpen() = runComposeUiTest {
+        val states = MutableStateFlow(mapOf(blobId to AttachmentDownloadState(cached = true)))
+        var opened: String? = null
+        val archive = ref(fileName = "backup.zip", mimeType = "application/zip", kind = AttachmentKind.FILE)
+        setContent { TimelineScreen(items(ref = archive), attachments = ui(states, onOpen = { opened = it })) }
+
+        onNodeWithTag("$TAG_ATTACHMENT_OPEN_PREFIX$blobId").performClick()
+        onNodeWithTag("$TAG_ATTACHMENT_OPEN_CANCEL_PREFIX$blobId").performClick()
+        assertEquals(null, opened)
+        onAllNodesWithTag("$TAG_ATTACHMENT_OPEN_CONFIRM_PREFIX$blobId").assertCountEquals(0)
+    }
+
+    /**
+     * 画像を名乗る実行ファイルには開く導線を出さず、保存へ誘導する（§4.3.2）。
+     * 保存は OS のダイアログを通るため残す。
+     */
+    @Test
+    fun executableDisguisedAsImageHasNoOpenButton() = runComposeUiTest {
+        val states = MutableStateFlow(mapOf(blobId to AttachmentDownloadState(cached = true)))
+        val disguised = ref(fileName = "invoice.pdf.exe", mimeType = "image/png", kind = AttachmentKind.IMAGE)
+        setContent { TimelineScreen(items(ref = disguised), attachments = ui(states)) }
+
+        onAllNodesWithTag("$TAG_ATTACHMENT_OPEN_PREFIX$blobId").assertCountEquals(0)
+        onNodeWithTag("$TAG_ATTACHMENT_OPEN_REFUSED_PREFIX$blobId").assertExists()
+        onNodeWithTag("$TAG_ATTACHMENT_SAVE_PREFIX$blobId").assertExists()
+    }
+
+    /** mimeType と拡張子が食い違う添付も開く導線を出さない（§4.3.2）。 */
+    @Test
+    fun mismatchedMimeAndExtensionHasNoOpenButton() = runComposeUiTest {
+        val states = MutableStateFlow(mapOf(blobId to AttachmentDownloadState(cached = true)))
+        val mismatched = ref(fileName = "report.pdf", mimeType = "image/png", kind = AttachmentKind.IMAGE)
+        setContent { TimelineScreen(items(ref = mismatched), attachments = ui(states)) }
+
+        onAllNodesWithTag("$TAG_ATTACHMENT_OPEN_PREFIX$blobId").assertCountEquals(0)
+        onNodeWithTag("$TAG_ATTACHMENT_OPEN_REFUSED_PREFIX$blobId").assertExists()
     }
 }

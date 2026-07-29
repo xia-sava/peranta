@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.runComposeUiTest
 import kotlinx.coroutines.flow.MutableStateFlow
+import to.sava.peranta.blob.MAX_SENDER_ICON_BYTES
 import to.sava.peranta.blob.TransferProgress
 import to.sava.peranta.blob.TransferState
 import to.sava.peranta.model.AttachmentKind
@@ -25,12 +26,12 @@ class SenderIconTest {
 
     private val blobId = "blob-icon"
 
-    private fun iconRef(expiresAt: Long? = null) = AttachmentRef(
+    private fun iconRef(expiresAt: Long? = null, sizeBytes: Long = 512) = AttachmentRef(
         blobId = blobId,
         url = "https://peranta.example.com/file/icon",
         fileName = "sender-icon-1000.png",
         mimeType = "image/png",
-        sizeBytes = 512,
+        sizeBytes = sizeBytes,
         kind = AttachmentKind.IMAGE,
         blobExpiresAtEpochMillis = expiresAt,
         enc = BlobEnc(keyId = "k1", saltBase64 = "AAAAAAAAAAAAAAAAAAAAAA==", chunkSize = 1_048_576, totalChunks = 1),
@@ -116,6 +117,48 @@ class SenderIconTest {
         }
 
         assertNull(requested)
+    }
+
+    /**
+     * 上限を超える大きさを宣言したアイコンは取りに行かない（§4.3.1）。
+     * 送信側の符号化上限（64 KiB）と同じ値で、正しく作られたアイコンは常に収まる。
+     */
+    @Test
+    fun oversizedIconIsNotFetched() = runComposeUiTest {
+        val states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+        var requested: String? = null
+        setContent {
+            TimelineScreen(
+                items(iconRef(sizeBytes = MAX_SENDER_ICON_BYTES + 1)),
+                attachments = ui(states, onDownload = { requested = it.blobId }, autoDisplayImages = true),
+            )
+        }
+
+        assertNull(requested)
+    }
+
+    /**
+     * 取りに行かなかったアイコンは跡を残す（§4.3.1）。
+     * 送信者アイコンには手動取得の導線が無く、何も描かないと
+     * 「アイコンを持たない通知」と区別が付かなくなる。
+     */
+    @Test
+    fun skippedIconLeavesAMark() = runComposeUiTest {
+        val states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+        setContent {
+            TimelineScreen(items(iconRef(sizeBytes = MAX_SENDER_ICON_BYTES + 1)), attachments = ui(states))
+        }
+
+        onNodeWithTag("$TAG_SENDER_ICON_SKIPPED_PREFIX$blobId").assertExists()
+    }
+
+    /** 上限に収まるアイコンが未取得の間は跡を出さない（本文の位置をずらさない）。 */
+    @Test
+    fun pendingIconLeavesNoMark() = runComposeUiTest {
+        val states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+        setContent { TimelineScreen(items(), attachments = ui(states)) }
+
+        onAllNodesWithTag("$TAG_SENDER_ICON_SKIPPED_PREFIX$blobId").assertCountEquals(0)
     }
 
     /** 取得に失敗した後は自動で再取得しない（無限リトライを避ける）。 */
