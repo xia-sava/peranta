@@ -442,7 +442,22 @@ class DesktopReceiver(
             }
         },
         hideFromTimeline = { item -> toastScope.launch { pipeline.hideFromTimeline(item.id) } },
+        dismissAll = { items -> dismissAllFromTimeline(items) },
     )
+
+    /**
+     * 元通知が生きている通知をまとめて消す（§10.1）。同じ元通知を指すアイテムが複数あっても
+     * コマンドは 1 通知につき 1 回にまとめ、表示済みトーストはアイテムごとに取り下げる。
+     */
+    private fun dismissAllFromTimeline(items: List<ReceivedNotification>) {
+        toastScope.launch {
+            items.forEach { toaster.close(it.payload.id) }
+            items.mapNotNull { it.payload.notificationKeyOrNull() }.distinct().forEach { notificationKey ->
+                commandSender.dismiss(notificationKey)
+                pipeline.markSourceDismissed(notificationKey)
+            }
+        }
+    }
 
     /**
      * 受信専用端末のアプリフィルタ画面（§10.4-1）向けコントローラを組む。

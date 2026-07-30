@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +48,7 @@ import to.sava.peranta.model.Payload
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.actionKindAt
+import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.model.MAX_REPLY_TEXT_BYTES
 import to.sava.peranta.timeline.ErrorItem
@@ -73,6 +75,12 @@ const val TAG_TIMELINE_MENU_DISMISS: String = "timeline-menu-dismiss"
 
 /** コンテキストメニューの「タイムラインから消す」項目のタグ。 */
 const val TAG_TIMELINE_MENU_HIDE: String = "timeline-menu-hide"
+
+/** 元通知が生きている通知をまとめて消すボタンのタグ。 */
+const val TAG_TIMELINE_DISMISS_ALL: String = "timeline-dismiss-all"
+
+/** まとめて消す確認ダイアログの実行ボタンのタグ。 */
+const val TAG_TIMELINE_DISMISS_ALL_CONFIRM: String = "timeline-dismiss-all-confirm"
 
 /** コンテキストメニューの「このアプリからの通知を非表示」項目のタグ。 */
 const val TAG_TIMELINE_MENU_MUTE: String = "timeline-menu-mute"
@@ -142,6 +150,7 @@ class TimelineActions(
     val muteApp: (payload: NotificationPayload) -> Unit = {},
     val reply: (payload: NotificationPayload, actionIndex: Int, text: String) -> Unit = { _, _, _ -> },
     val hideFromTimeline: (item: ReceivedNotification) -> Unit = {},
+    val dismissAll: (items: List<ReceivedNotification>) -> Unit = {},
 )
 
 /**
@@ -236,25 +245,90 @@ fun TimelineScreen(
         if (visible.isEmpty()) {
             EmptyState(emptyStateMessage)
         } else {
-            Box(modifier = Modifier.fillMaxSize()) {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(visible, key = { it.id }) { item ->
-                        TimelineRow(
-                            item = item,
-                            actions = actions,
-                            attachments = attachments,
-                            fullText = fullText,
-                        )
+            Column(modifier = Modifier.fillMaxSize()) {
+                actions?.let { DismissAllBar(dismissableSources(visible), it.dismissAll) }
+                Box(modifier = Modifier.weight(1f)) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(visible, key = { it.id }) { item ->
+                            TimelineRow(
+                                item = item,
+                                actions = actions,
+                                attachments = attachments,
+                                fullText = fullText,
+                            )
+                        }
                     }
+                    lazyScrollbarContent(listState)
                 }
-                lazyScrollbarContent(listState)
             }
         }
+    }
+}
+
+/**
+ * 表示中のうち「元通知がまだ生きていて、消す対象を指せる」受信通知（§10.1）。
+ * まとめて消す操作の対象で、同じ元通知の再投稿（同一 notificationKey）が複数並んでいても
+ * 1 件として数える。
+ */
+private fun dismissableSources(visible: List<TimelineItem>): List<ReceivedNotification> =
+    visible.asSequence()
+        .filterIsInstance<ReceivedNotification>()
+        .filterNot { it.sourceDismissed }
+        .filter { it.payload.notificationKeyOrNull() != null }
+        .distinctBy { it.payload.notificationKeyOrNull() }
+        .toList()
+
+/**
+ * 元通知が生きている通知をまとめて消すバー（§10.1）。対象が無いときは出さない。
+ * 全端末へ及んで取り消せない操作のため、確認を挟んでから実行する。
+ */
+@Composable
+private fun DismissAllBar(
+    targets: List<ReceivedNotification>,
+    onDismissAll: (items: List<ReceivedNotification>) -> Unit,
+) {
+    if (targets.isEmpty()) return
+    var confirming by remember { mutableStateOf(false) }
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(
+                onClick = { confirming = true },
+                modifier = Modifier.testTag(TAG_TIMELINE_DISMISS_ALL),
+            ) { Text("$SOURCE_ALIVE_GLYPH の通知をまとめて消す（${targets.size}）") }
+        }
+    }
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text("送信元の通知をまとめて消す") },
+            text = {
+                Text(
+                    "${targets.size} 件の元通知を消します。" +
+                        "元端末と他の受信端末からも消え、取り消せません。",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDismissAll(targets)
+                        confirming = false
+                    },
+                    modifier = Modifier.testTag(TAG_TIMELINE_DISMISS_ALL_CONFIRM),
+                ) { Text("消す") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) { Text("キャンセル") }
+            },
+        )
     }
 }
 

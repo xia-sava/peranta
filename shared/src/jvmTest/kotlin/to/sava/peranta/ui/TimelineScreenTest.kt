@@ -186,6 +186,31 @@ class TimelineScreenTest {
         assertEquals("n1", hiddenId)
     }
 
+    /** まとめて消すバーは確認を挟んでから、対象を一括で渡す（§10.1）。 */
+    @Test
+    fun dismissAllPassesTargetsAfterConfirmation() = runComposeUiTest {
+        var dismissedAll: List<String>? = null
+        setContent {
+            TimelineScreen(
+                items(),
+                actions = TimelineActions(dismissAll = { list -> dismissedAll = list.map { it.id } }),
+            )
+        }
+        onNodeWithTag(TAG_TIMELINE_DISMISS_ALL).performClick()
+        assertNull(dismissedAll)
+        onNodeWithTag(TAG_TIMELINE_DISMISS_ALL_CONFIRM).performClick()
+        assertEquals(listOf("n1"), dismissedAll)
+    }
+
+    /** 元通知が消えたアイテムしか無ければ、まとめて消すバーを出さない。 */
+    @Test
+    fun dismissAllBarHiddenWhenNoLiveSources() = runComposeUiTest {
+        setContent {
+            TimelineScreen(items(sourceDismissed = true), actions = TimelineActions())
+        }
+        onAllNodesWithTag(TAG_TIMELINE_DISMISS_ALL).assertCountEquals(0)
+    }
+
     /** タイムラインから消したアイテムは表示に出ない（§10.1）。 */
     @Test
     fun hiddenFromTimelineItemIsNotShown() = runComposeUiTest {

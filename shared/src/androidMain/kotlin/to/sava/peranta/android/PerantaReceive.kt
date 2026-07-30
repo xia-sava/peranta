@@ -246,7 +246,28 @@ object PerantaReceive {
                 launchCommand(appContext) { it.reply(payload.from, payload.notificationKey, index, text) }
             },
             hideFromTimeline = { item -> commandScope.launch { hideFromTimeline(item.id) } },
+            dismissAll = { items -> dismissAllFromTimeline(appContext, items) },
         )
+    }
+
+    /**
+     * 元通知が生きている通知をまとめて消す（§10.1）。同じ元通知を指すアイテムが複数あっても
+     * コマンドは 1 通知につき 1 回にまとめ、ミラー通知はアイテムごとに取り下げる。
+     */
+    private fun dismissAllFromTimeline(appContext: Context, items: List<ReceivedNotification>) {
+        commandScope.launch {
+            try {
+                val presenter = AndroidNotificationPresenter(appContext)
+                items.forEach { presenter.cancel(it.payload.id) }
+                items.mapNotNull { it.payload.notificationKeyOrNull() }.distinct().forEach { notificationKey ->
+                    dismissSourceNotification(appContext, notificationKey)
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                log.w(error) { "failed to dismiss all from timeline" }
+            }
+        }
     }
 
     /**
