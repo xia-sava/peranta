@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# 既定では GITHUB_TOKEN に何の権限も与えない。必要なジョブが必要な分だけ宣言する。
+permissions: {}
+
+# 同じ参照への連続 push では最新のものだけ検証する。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "23"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      # リポジトリに置いている gradle-wrapper.jar が公式のものであることを確かめる。
+      - uses: gradle/actions/wrapper-validation@v4
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # check は androidMain のコンパイルを含まないため、対象を明示して補う。
+      - name: Run tests
+        run: >
+          ./gradlew check :shared:compileAndroidMain :androidApp:compileDebugKotlin
+          --console=plain

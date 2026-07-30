@@ -2,16 +2,16 @@ name: Release
 
 on:
   push:
-    branches: [master]
+    tags: ["v*"]
   workflow_dispatch: {}
 
 # 既定では GITHUB_TOKEN に何の権限も与えない。必要なジョブが必要な分だけ宣言する。
 permissions: {}
 
-# 連続 push で古いビルドが後勝ちしないよう、同時実行を1本に絞る。
+# 連続して打ったタグを取りこぼさないよう、キャンセルせず順に流す。
 concurrency:
   group: release
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   JAVA_VERSION: "23"
@@ -33,20 +33,49 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          # versionCode をコミット数で決めるため全履歴を取る（既定の浅い取得では 1 になる）。
+          fetch-depth: 0
 
-      # versionCode は単調増加する run number、versionName は gradle.properties の
-      # major.minor に run number を patch として付ける（版を上げる時はそちらを書き換える）。
+      # versionCode はコミット数（単調増加し、タグの打ち方に左右されない）、
+      # versionName はタグ名から v を除いたもの。配布しない手動実行は識別できる名前を付ける。
       - name: Compute version
         id: compute
         run: |
           set -euo pipefail
-          major_minor=$(sed -n 's/^peranta\.versionName=\([0-9]\+\.[0-9]\+\).*/\1/p' gradle.properties)
-          if [ -z "$major_minor" ]; then
-            echo "peranta.versionName を gradle.properties から読めません" >&2
+          code=$(git rev-list --count HEAD)
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            name="${GITHUB_REF_NAME#v}"
+            # MSI の版数は major.minor.patch しか受け付けないため、接尾辞つきのタグも弾く。
+            if ! printf '%s' "$name" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "タグは vMAJOR.MINOR.PATCH の形で打つこと（受け取った値: $GITHUB_REF_NAME）" >&2
+              exit 1
+            fi
+          else
+            name="dev-$(git rev-parse --short HEAD)"
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "versionCode=$code versionName=$name"
+
+      # 配布中の版より versionCode が増えていることを確かめる。履歴の取得漏れやタグの打ち直しに
+      # 気づかないまま公開すると、以後どの端末にも更新が降りなくなる。
+      - name: Verify version code increases
+        if: github.ref_type == 'tag'
+        env:
+          VERSION_CODE: ${{ steps.compute.outputs.code }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          url="https://github.com/${REPOSITORY}/releases/download/latest/latest.json"
+          published=$(curl -fsSL "$url" | jq -r '.android.versionCode') || {
+            echo "::warning::配布中の latest.json を取得できませんでした。版の比較を省きます"
+            exit 0
+          }
+          if [ "$VERSION_CODE" -le "$published" ]; then
+            echo "versionCode が増えていません（配布中 $published → 今回 $VERSION_CODE）" >&2
             exit 1
           fi
-          echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
-          echo "name=${major_minor}.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "versionCode: $published → $VERSION_CODE"
 
   # 配布物を作る前にテストとカバレッジ検証を通す。ここが落ちればリリースまで進まない。
   check:
@@ -74,7 +103,9 @@ jobs:
           ./gradlew check :shared:compileAndroidMain :androidApp:compileDebugKotlin
           --console=plain
 
+  # MSI の版数は major.minor.patch しか受け付けないため、タグを打ったときだけ組む。
   desktop:
+    if: github.ref_type == 'tag'
     needs: [version, check]
     runs-on: windows-latest
     permissions:
@@ -127,6 +158,7 @@ jobs:
           path: artifacts/peranta.msi
           if-no-files-found: error
 
+  # 手動実行でも組む。配布はしないが、実機で試すための署名済み APK を成果物として残す。
   android:
     needs: [version, check]
     runs-on: ubuntu-latest
@@ -258,7 +290,7 @@ jobs:
 
   # 成果物を公開するだけのジョブ。contents: write を持つのはここだけ。
   release:
-    needs: [desktop, android, manifest]
+    needs: [version, desktop, android, manifest]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -268,14 +300,31 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Publish latest release
-        # 配布物を書き込む唯一の外部コードなので、可変タグではなくコミットで固定する。
+      # 版ごとのリリース。配布物の実物が残るので、後からどの版で何を配ったかを辿れる。
+      # 配布物を書き込む唯一の外部コードなので、可変タグではなくコミットで固定する。
+      - name: Publish versioned release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ needs.version.outputs.name }}
+          body: |
+            Peranta ${{ needs.version.outputs.name }}
+
+            配布中の版として `latest` にも同じ配布物を置いている。
+            アプリの設定画面「アプリの更新」から確認・適用できる。
+          files: |
+            artifacts/peranta.msi
+            artifacts/peranta.apk
+
+      # 更新経路。配布済みのアプリは latest からマニフェストと配布物を引くため、
+      # 置き場を動かさずに中身だけ差し替える。
+      - name: Update latest release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: latest
           name: "Latest build"
           body: |
-            master への push のたびに更新される最新ビルド。
+            配布中の版（${{ needs.version.outputs.name }}）。
             アプリの設定画面「アプリの更新」から確認・適用できる。
           prerelease: true
           files: |

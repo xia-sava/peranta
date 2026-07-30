@@ -23,7 +23,7 @@ dependencies {
 // 配布物の名前。インストール先ディレクトリ・ランチャー exe・スタートメニューの表示名になる。
 val perantaPackageName = "Peranta"
 
-// 版数の単一ソース（gradle プロパティ）。配布時は -Pperanta.versionCode / -Pperanta.versionName で上書きする。
+// 版数は配布時に -Pperanta.versionCode / -Pperanta.versionName で渡す。渡されない手元のビルドは既定値を使う。
 val perantaVersionCode = providers.gradleProperty("peranta.versionCode").getOrElse("1")
 val perantaVersionName = providers.gradleProperty("peranta.versionName").getOrElse("0.0.0")
 val versionResourceDir = layout.buildDirectory.dir("generated/version")
