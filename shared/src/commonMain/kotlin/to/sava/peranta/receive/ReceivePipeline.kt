@@ -282,6 +282,21 @@ class ReceivePipeline(
         log.i { "notification marked source-dismissed key=$notificationKey count=${targets.size}" }
     }
 
+    /**
+     * [itemId] の受信通知をこの端末のタイムラインから消す（§10.1）。伏せ字処理（[persistItemFor]）を
+     * 通して再記録し、表示から外す。実体は剪定で落ちる（§11）。
+     * 在メモリには残すため、他端末からの dismiss（§3.4）は消したあとも自端末の通知へ届く。
+     * 対象が見つからない、または既に消し済みなら何もしない。
+     */
+    suspend fun hideFromTimeline(itemId: String) {
+        val target = items.value.asSequence()
+            .filterIsInstance<ReceivedNotification>()
+            .firstOrNull { it.id == itemId && !it.hiddenFromTimeline } ?: return
+        val hidden = target.copy(hiddenFromTimeline = true)
+        record(displayItem = hidden, persistItem = persistItemFor(hidden, hidden.payload))
+        log.i { "notification hidden from timeline id=$itemId" }
+    }
+
     private fun requireKey(payload: CommandPayload): String =
         payload.targetNotificationKey
             ?: throw CommandExecutionException("${payload.command} コマンドに対象通知キーがありません")

@@ -15,11 +15,13 @@ class JsonlTimelineStoreTest {
         timestamp: Long,
         expiresAt: Long? = null,
         sourceDismissed: Boolean = false,
+        hiddenFromTimeline: Boolean = false,
     ): ReceivedNotification = ReceivedNotification(
         id = id,
         timestampEpochMillis = timestamp,
         expiresAtEpochMillis = expiresAt,
         sourceDismissed = sourceDismissed,
+        hiddenFromTimeline = hiddenFromTimeline,
         payload = NotificationPayload(
             id = id,
             from = "phone",
@@ -112,6 +114,16 @@ class JsonlTimelineStoreTest {
         store.append(received("permanent", 300, expiresAt = null))
         store.prune(now = 1_000)
         assertEquals(listOf("alive", "permanent"), store.loadAll().map { it.id })
+    }
+
+    /** prune はタイムラインから消したアイテム（§10.1）を、失効前でも落とす。 */
+    @Test
+    fun pruneDropsItemsHiddenFromTimeline() = runTest {
+        val store = JsonlTimelineStore(FakeTimelineFile())
+        store.append(received("hidden", 100, hiddenFromTimeline = true))
+        store.append(received("shown", 200))
+        store.prune(now = 1_000)
+        assertEquals(listOf("shown"), store.loadAll().map { it.id })
     }
 
     /** prune は上限を超えた分を落とし、新しい maxItems 件を残す。 */

@@ -441,6 +441,7 @@ class DesktopReceiver(
                 commandSender.reply(payload.from, payload.notificationKey, index, text)
             }
         },
+        hideFromTimeline = { item -> toastScope.launch { pipeline.hideFromTimeline(item.id) } },
     )
 
     /**

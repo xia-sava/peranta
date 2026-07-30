@@ -32,6 +32,11 @@ data class ReceivedNotification(
     override val expiresAtEpochMillis: Long? = null,
     /** 発出元の元通知が既に消えているか（dismiss コマンド受信でマーク、§3.4）。 */
     val sourceDismissed: Boolean = false,
+    /**
+     * この端末のタイムラインから消したか（§10.1）。表示から外し、実体は剪定で落とす。
+     * 他端末には及ばない自端末だけの状態で、他端末からの操作（[sourceDismissed]）とは独立する。
+     */
+    val hiddenFromTimeline: Boolean = false,
 ) : TimelineItem()
 
 /**

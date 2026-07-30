@@ -74,6 +74,7 @@ class TimelineScreenTest {
     private fun items(
         payload: NotificationPayload = notification(),
         sourceDismissed: Boolean = false,
+        hiddenFromTimeline: Boolean = false,
     ): MutableStateFlow<List<TimelineItem>> =
         MutableStateFlow(
             listOf(
@@ -82,6 +83,7 @@ class TimelineScreenTest {
                     timestampEpochMillis = 1000L,
                     payload = payload,
                     sourceDismissed = sourceDismissed,
+                    hiddenFromTimeline = hiddenFromTimeline,
                 ),
             ),
         )
@@ -123,31 +125,51 @@ class TimelineScreenTest {
         assertEquals(Triple("phone", "0|com.example|1|null|10", 1), invoked)
     }
 
-    /** × ボタン押下で dismiss を発火し、往復を待たず自分の表示から取り下げる。 */
+    /** × ボタン押下で dismiss を送り、あわせてこの端末のタイムラインからも消す。 */
     @Test
-    fun dismissButtonDismissesAndHidesLocally() = runComposeUiTest {
+    fun dismissButtonDismissesAndHidesFromTimeline() = runComposeUiTest {
         var dismissedId: String? = null
-        setContent {
-            TimelineScreen(items(), actions = TimelineActions(dismiss = { dismissedId = it.payload.id }))
-        }
-        onNodeWithTag(TAG_TIMELINE_DISMISS_BUTTON).performClick()
-        assertEquals("n1", dismissedId)
-        onAllNodesWithTag(TAG_TIMELINE_RECEIVED).assertCountEquals(0)
-    }
-
-    /** 長押しで開くコンテキストメニューの「消す」は dismiss を送り、表示からも消す。 */
-    @Test
-    fun contextMenuDismissSendsDismissAndHides() = runComposeUiTest {
-        var dismissedKey: String? = null
+        var hiddenId: String? = null
         setContent {
             TimelineScreen(
                 items(),
-                actions = TimelineActions(dismiss = { dismissedKey = (it.payload as NotificationPayload).notificationKey }),
+                actions = TimelineActions(
+                    dismiss = { dismissedId = it.payload.id },
+                    hideFromTimeline = { hiddenId = it.id },
+                ),
+            )
+        }
+        onNodeWithTag(TAG_TIMELINE_DISMISS_BUTTON).performClick()
+        assertEquals("n1", dismissedId)
+        assertEquals("n1", hiddenId)
+    }
+
+    /** 長押しで開くコンテキストメニューの「消す」も × ボタンと同じ 2 つを行う。 */
+    @Test
+    fun contextMenuDismissSendsDismissAndHidesFromTimeline() = runComposeUiTest {
+        var dismissedKey: String? = null
+        var hiddenId: String? = null
+        setContent {
+            TimelineScreen(
+                items(),
+                actions = TimelineActions(
+                    dismiss = { dismissedKey = (it.payload as NotificationPayload).notificationKey },
+                    hideFromTimeline = { hiddenId = it.id },
+                ),
             )
         }
         onNodeWithTag(TAG_TIMELINE_RECEIVED).performMouseInput { rightClick() }
         onNodeWithTag(TAG_TIMELINE_MENU_DISMISS).performClick()
         assertEquals("0|com.example|1|null|10", dismissedKey)
+        assertEquals("n1", hiddenId)
+    }
+
+    /** タイムラインから消したアイテムは表示に出ない（§10.1）。 */
+    @Test
+    fun hiddenFromTimelineItemIsNotShown() = runComposeUiTest {
+        setContent {
+            TimelineScreen(items(hiddenFromTimeline = true), actions = TimelineActions())
+        }
         onAllNodesWithTag(TAG_TIMELINE_RECEIVED).assertCountEquals(0)
     }
 
@@ -425,15 +447,19 @@ class TimelineScreenTest {
     @Test
     fun sourceDismissedItemStillHasDismissButton() = runComposeUiTest {
         var dismissedId: String? = null
+        var hiddenId: String? = null
         setContent {
             TimelineScreen(
                 items(sourceDismissed = true),
-                actions = TimelineActions(dismiss = { dismissedId = it.payload.id }),
+                actions = TimelineActions(
+                    dismiss = { dismissedId = it.payload.id },
+                    hideFromTimeline = { hiddenId = it.id },
+                ),
             )
         }
         onNodeWithTag(TAG_TIMELINE_DISMISS_BUTTON).performClick()
         assertEquals("n1", dismissedId)
-        onAllNodesWithTag(TAG_TIMELINE_RECEIVED).assertCountEquals(0)
+        assertEquals("n1", hiddenId)
     }
 
     private fun attachmentRef(fileName: String = "photo.jpg", sizeBytes: Long = 2048) = AttachmentRef(

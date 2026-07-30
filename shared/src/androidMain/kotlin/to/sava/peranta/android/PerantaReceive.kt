@@ -245,6 +245,7 @@ object PerantaReceive {
             reply = { payload, index, text ->
                 launchCommand(appContext) { it.reply(payload.from, payload.notificationKey, index, text) }
             },
+            hideFromTimeline = { item -> commandScope.launch { hideFromTimeline(item.id) } },
         )
     }
 
@@ -322,6 +323,15 @@ object PerantaReceive {
     private suspend fun markSourceDismissed(notificationKey: String) {
         val current = mutex.withLock { pipeline } ?: return
         current.markSourceDismissed(notificationKey)
+    }
+
+    /**
+     * 保持中のパイプラインへタイムラインからの非表示（§10.1）を依頼する。
+     * パイプライン未生成（未 prime）なら何もしない。
+     */
+    private suspend fun hideFromTimeline(itemId: String) {
+        val current = mutex.withLock { pipeline } ?: return
+        current.hideFromTimeline(itemId)
     }
 
     private fun launchCommand(appContext: Context, block: suspend (CommandSender) -> Unit) {

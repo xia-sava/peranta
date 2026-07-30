@@ -43,6 +43,7 @@ class JsonlTimelineStore(
                 val kept = readAllLocked()
                     .filter { it.expiresAtEpochMillis == null || it.expiresAtEpochMillis!! >= now }
                     .filter { cutoff == null || it.timestampEpochMillis >= cutoff }
+                    .filterNot { it is ReceivedNotification && it.hiddenFromTimeline }
                     .takeLast(maxItems)
                 file.overwrite(kept.map { json.encodeToString<TimelineItem>(it) })
             }

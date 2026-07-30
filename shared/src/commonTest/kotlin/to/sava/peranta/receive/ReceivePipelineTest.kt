@@ -286,6 +286,37 @@ class ReceivePipelineTest {
         assertTrue(seen.single() is ReceivedNotification)
     }
 
+    /**
+     * hideFromTimeline は対象を表示から外すマークだけを付け、在メモリには残す。
+     * 残すことで、消したあとに届く他端末からの dismiss（§3.4）が自端末の通知へ届く。
+     */
+    @Test
+    fun hideFromTimelineMarksItemAndKeepsItInMemory() = runTest {
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName,
+            commandExecutor = NoOpCommandExecutor(), now = { now },
+        )
+        p.handleEvent(eventFor(notification()))
+        p.hideFromTimeline(p.items.value.filterIsInstance<ReceivedNotification>().single().id)
+        val received = p.items.value.filterIsInstance<ReceivedNotification>().single()
+        assertTrue(received.hiddenFromTimeline)
+    }
+
+    /** 対象が無い、または既に消し済みの hideFromTimeline は何も変えない。 */
+    @Test
+    fun hideFromTimelineIgnoresUnknownAndAlreadyHidden() = runTest {
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName,
+            commandExecutor = NoOpCommandExecutor(), now = { now },
+        )
+        p.handleEvent(eventFor(notification()))
+        val id = p.items.value.filterIsInstance<ReceivedNotification>().single().id
+        p.hideFromTimeline("no-such-id")
+        p.hideFromTimeline(id)
+        p.hideFromTimeline(id)
+        assertEquals(1, p.items.value.filterIsInstance<ReceivedNotification>().size)
+    }
+
     /** 画像添付を足した改版（§4.3.1）。同じ id・改版番号だけが異なる。 */
     private fun revisedNotification(): NotificationPayload = notification().copy(
         attachments = listOf(

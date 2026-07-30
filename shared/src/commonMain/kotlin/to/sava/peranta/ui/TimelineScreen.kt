@@ -26,7 +26,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -126,8 +125,9 @@ private fun actionLabel(payload: NotificationPayload, index: Int, name: String):
     }
 
 /**
- * 受信通知アイテムに対する操作（§3.4 / §10.1）。受信端末から送信元へ command を返送する。
- * すべて fire-and-forget で、呼び出し側（プラットフォーム配線）がコルーチンで実際の送信を行う。
+ * 受信通知アイテムに対する操作（§3.4 / §10.1）。送信元へ command を返送するものと、この端末の
+ * タイムラインだけを変える [hideFromTimeline] からなる。
+ * すべて fire-and-forget で、呼び出し側（プラットフォーム配線）がコルーチンで実際の処理を行う。
  * 既定は no-op で、コマンド送信能力を持たない画面（送信ロール・空状態）では操作 UI を出さない。
  */
 class TimelineActions(
@@ -135,6 +135,7 @@ class TimelineActions(
     val dismiss: (item: ReceivedNotification) -> Unit = {},
     val muteApp: (payload: NotificationPayload) -> Unit = {},
     val reply: (payload: NotificationPayload, actionIndex: Int, text: String) -> Unit = { _, _, _ -> },
+    val hideFromTimeline: (item: ReceivedNotification) -> Unit = {},
 )
 
 /**
@@ -147,7 +148,8 @@ fun timelineScrollTargetIndex(visible: List<TimelineItem>, targetId: String): In
 /**
  * チャット風タイムライン（§10.1）。受信通知は左寄せ、エラー・送信通知は右寄せに並べる。
  * [actions] が渡されると受信通知にアクションボタン・右上の × ボタン・長押し/右クリックメニューを付ける。
- * 「送信元の通知を消す」はブロードキャスト送信と同時に、往復を待たず自端末の表示から即座に取り下げる。
+ * 「送信元の通知を消す」は command のブロードキャストと同時に、この端末のタイムラインからも消す。
+ * 消したアイテムは [ReceivedNotification.hiddenFromTimeline] で表示から外れ、実体は剪定で落ちる（§11）。
  * 並び順は時系列順（古い→新しい、上→下）で最新が最下部。起動時は最下部へジャンプし、
  * 最下部表示中の新着だけ追従する（§10.1）。[listState] を呼び出し側から注入でき、
  * [lazyScrollbarContent] スロットで Desktop 用スクロールバー等を注入できる（`AppFilterScreen` と同型）。
@@ -169,8 +171,7 @@ fun TimelineScreen(
     onScrollToItemHandled: () -> Unit = {},
 ) {
     val list by items.collectAsState()
-    val locallyDismissed = remember { mutableStateListOf<String>() }
-    val visible = list.filterNot { it.id in locallyDismissed }
+    val visible = list.filterNot { it is ReceivedNotification && it.hiddenFromTimeline }
 
     // 起動時は最下部（最新）へアニメーション無しでジャンプする。以降は、末尾アイテムの itemCount が
     // 変わっていない間のスクロール／レイアウト変化を常時観測して「最下部にいるか」を wasAtBottom
@@ -241,7 +242,6 @@ fun TimelineScreen(
                             actions = actions,
                             attachments = attachments,
                             fullText = fullText,
-                            onLocalDismiss = { locallyDismissed.add(item.id) },
                         )
                     }
                 }
@@ -267,14 +267,13 @@ private fun TimelineRow(
     actions: TimelineActions?,
     attachments: AttachmentUi?,
     fullText: FullTextUi?,
-    onLocalDismiss: () -> Unit,
 ) {
     when (item) {
         is ReceivedNotification ->
             if (actions == null) {
                 ReceivedBubble(item, attachments, fullText)
             } else {
-                InteractiveReceivedBubble(item, actions, attachments, fullText, onLocalDismiss)
+                InteractiveReceivedBubble(item, actions, attachments, fullText)
             }
 
         is ReceivedFile -> ReceivedFileBubble(item, attachments)
@@ -346,7 +345,7 @@ private fun ReceivedBubble(item: ReceivedNotification, attachments: AttachmentUi
  * 開き、それ以外は押すと送信元へ invokeAction を返送する（§10.1）。
  * 元通知が既に消えている（[ReceivedNotification.sourceDismissed]）アイテムはアクションボタン・
  * 返信入力・コンテキストメニューのアクション項目を出さず、代わりに注記を表示する。
- * × ボタン・「送信元の通知を消す」（ローカル非表示）は引き続き行える。
+ * × ボタン・コンテキストメニューの「送信元の通知を消す」は引き続き行える。
  */
 @Composable
 private fun InteractiveReceivedBubble(
@@ -354,7 +353,6 @@ private fun InteractiveReceivedBubble(
     actions: TimelineActions,
     attachments: AttachmentUi?,
     fullText: FullTextUi?,
-    onLocalDismiss: () -> Unit,
 ) {
     val payload = item.payload
     var replyingIndex by remember { mutableStateOf<Int?>(null) }
@@ -369,7 +367,7 @@ private fun InteractiveReceivedBubble(
     }
     val dismiss: () -> Unit = {
         actions.dismiss(item)
-        onLocalDismiss()
+        actions.hideFromTimeline(item)
     }
     var menuOpen by remember { mutableStateOf(false) }
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
