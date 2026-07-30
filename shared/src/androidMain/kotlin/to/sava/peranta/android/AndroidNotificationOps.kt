@@ -17,9 +17,9 @@ private const val NLS_NOT_CONNECTED_MESSAGE =
  * 通知操作（dismiss / invokeAction / reply）は生存中の [PerantaNotificationListenerService] へ委ね、
  * muteApp / unmuteApp は [androidConfigRepository] のフィルタルール部分更新で denylist へ反映する（§7）。
  */
-class AndroidCommandExecutor(
+class AndroidNotificationOps(
     context: Context,
-    private val log: Logger = Logger.withTag("CommandExec"),
+    private val log: Logger = Logger.withTag("NotificationOps"),
 ) : NotificationOps {
 
     private val appContext = context.applicationContext

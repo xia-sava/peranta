@@ -162,7 +162,7 @@ object PerantaReceive {
             isNlsConnected = { PerantaNotificationListenerService.activeInstance != null },
             isForwardingIntended = { androidConfigRepository(appContext).load().sendEnabled },
             items = { PerantaSend.timelineFeed.items.value },
-            notificationOps = AndroidCommandExecutor(appContext),
+            notificationOps = AndroidNotificationOps(appContext),
             localDismiss = LocalDismissCommandExecutor(
                 items = { PerantaSend.timelineFeed.items.value },
                 dismissLocal = { payloadId -> presenter.cancel(payloadId) },
