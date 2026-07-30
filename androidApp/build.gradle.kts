@@ -58,6 +58,7 @@ android {
     }
     buildTypes {
         getByName("release") {
+            // Compose Multiplatform と kotlinx.serialization がリフレクションに依存するため、縮小と難読化は行わない。
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release")
         }
