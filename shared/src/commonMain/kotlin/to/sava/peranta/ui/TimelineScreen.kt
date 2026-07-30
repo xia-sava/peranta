@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -18,6 +19,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -111,11 +113,14 @@ const val TAG_TIMELINE_REPLY_SEND: String = "timeline-reply-send"
 /** 返信本文が上限バイト数を超えているときの警告表示のタグ。 */
 const val TAG_TIMELINE_REPLY_LIMIT_WARNING: String = "timeline-reply-limit-warning"
 
-/** 元通知が生きていることを示し、押すと元端末と他の受信端末から消す記号（§10.1）。 */
-const val SOURCE_ALIVE_GLYPH: String = "✓"
+/** 元通知が生きていることを示すボタンの説明（§10.1）。押すと元端末と他の受信端末から消す。 */
+const val SOURCE_ALIVE_DESCRIPTION: String = "送信元の通知を消す"
 
-/** 元通知が消えていることを示し、押すとこの端末のタイムラインから消す記号（§10.1）。 */
-const val SOURCE_DISMISSED_GLYPH: String = "×"
+/** 元通知が消えていることを示すボタンの説明（§10.1）。押すとこの端末のタイムラインから消す。 */
+const val SOURCE_DISMISSED_DESCRIPTION: String = "タイムラインから消す"
+
+/** バブル右上の状態兼ボタンの大きさ。本文の邪魔をしない控えめな寸法にする。 */
+private val SOURCE_STATE_ICON_SIZE = 18.dp
 
 /** 輪郭線で示す吹き出しの線幅。 */
 private val BUBBLE_BORDER_WIDTH = 1.dp
@@ -306,7 +311,7 @@ private fun DismissAllBar(
             TextButton(
                 onClick = { confirming = true },
                 modifier = Modifier.testTag(TAG_TIMELINE_DISMISS_ALL),
-            ) { Text("$SOURCE_ALIVE_GLYPH の通知をまとめて消す（${targets.size}）") }
+            ) { Text("元通知が残っているものをまとめて消す（${targets.size}）") }
         }
     }
     if (confirming) {
@@ -512,13 +517,14 @@ private fun SourceStateButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Text(
-        text = if (sourceDismissed) SOURCE_DISMISSED_GLYPH else SOURCE_ALIVE_GLYPH,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+    Icon(
+        imageVector = if (sourceDismissed) CloseIcon else CheckIcon,
+        contentDescription = if (sourceDismissed) SOURCE_DISMISSED_DESCRIPTION else SOURCE_ALIVE_DESCRIPTION,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
         modifier = modifier
             .clickable(onClick = onClick)
             .padding(6.dp)
+            .size(SOURCE_STATE_ICON_SIZE)
             .testTag(
                 if (sourceDismissed) TAG_TIMELINE_SOURCE_DISMISSED_BUTTON else TAG_TIMELINE_SOURCE_ALIVE_BUTTON,
             ),

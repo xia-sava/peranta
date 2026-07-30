@@ -14,7 +14,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -478,23 +478,23 @@ class TimelineScreenTest {
         onAllNodesWithTag("${TAG_TIMELINE_ACTION_PREFIX}1").assertCountEquals(0)
     }
 
-    /** 元通知の状態は右上のボタンの記号で示す。生きていれば ✓、消えていれば ×（§10.1）。 */
+    /** 元通知の状態は右上のボタンの図柄で示す。生きていればチェック、消えていれば罰点（§10.1）。 */
     @Test
     fun sourceStateIsShownByButtonGlyph() = runComposeUiTest {
         setContent {
             TimelineScreen(items(), actions = TimelineActions())
         }
-        onNodeWithTag(TAG_TIMELINE_SOURCE_ALIVE_BUTTON).assertTextEquals(SOURCE_ALIVE_GLYPH)
+        onNodeWithTag(TAG_TIMELINE_SOURCE_ALIVE_BUTTON).assertContentDescriptionEquals(SOURCE_ALIVE_DESCRIPTION)
         onAllNodesWithTag(TAG_TIMELINE_SOURCE_DISMISSED_BUTTON).assertCountEquals(0)
     }
 
-    /** sourceDismissed のアイテムは × を出し、✓ は出さない。 */
+    /** sourceDismissed のアイテムは罰点を出し、チェックは出さない。 */
     @Test
     fun sourceDismissedItemShowsDismissedGlyph() = runComposeUiTest {
         setContent {
             TimelineScreen(items(sourceDismissed = true), actions = TimelineActions())
         }
-        onNodeWithTag(TAG_TIMELINE_SOURCE_DISMISSED_BUTTON).assertTextEquals(SOURCE_DISMISSED_GLYPH)
+        onNodeWithTag(TAG_TIMELINE_SOURCE_DISMISSED_BUTTON).assertContentDescriptionEquals(SOURCE_DISMISSED_DESCRIPTION)
         onAllNodesWithTag(TAG_TIMELINE_SOURCE_ALIVE_BUTTON).assertCountEquals(0)
     }
 
