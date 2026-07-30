@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.crypto.MessageCipher
+import to.sava.peranta.model.AppRuleSettings
 import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.MAX_REPLY_TEXT_BYTES
@@ -95,6 +96,16 @@ class CommandSender(
             packageName = packageName,
         )
 
+    /** [targetDeviceId] の端末へアプリごとの扱いの更新を送る（§3.4 / §7）。 */
+    suspend fun setAppRule(targetDeviceId: String, packageName: String, settings: AppRuleSettings): Boolean =
+        publish(
+            command = CommandType.SET_APP_RULE,
+            to = targetDeviceId,
+            topics = singleTargetTopics(targetDeviceId),
+            packageName = packageName,
+            appRule = settings,
+        )
+
     /**
      * 一点指定コマンドの宛先 topic を解決する。ロスター（control topic）から [targetDeviceId] の
      * エンドポイントを引く。control topic 未設定・取得失敗・対象不在なら空を返す。
@@ -116,6 +127,7 @@ class CommandSender(
         actionIndex: Int? = null,
         replyText: String? = null,
         packageName: String? = null,
+        appRule: AppRuleSettings? = null,
     ): Boolean {
         if (topics.isEmpty()) {
             log.w { "no delivery topics resolved for command=$command to=$to" }
@@ -130,6 +142,7 @@ class CommandSender(
             actionIndex = actionIndex,
             replyText = replyText,
             packageName = packageName,
+            appRule = appRule,
         )
         return try {
             val body = encodeEnvelope(pipeline.seal(payload))

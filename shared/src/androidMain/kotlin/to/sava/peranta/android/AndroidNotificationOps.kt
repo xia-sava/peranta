@@ -2,8 +2,10 @@ package to.sava.peranta.android
 
 import android.content.Context
 import co.touchlab.kermit.Logger
+import to.sava.peranta.filter.applyAppRule
 import to.sava.peranta.filter.mutePackage
 import to.sava.peranta.filter.unmutePackage
+import to.sava.peranta.model.AppRuleSettings
 import to.sava.peranta.receive.AuthorizedNotificationKey
 import to.sava.peranta.receive.CommandExecutionException
 import to.sava.peranta.receive.NotificationOps
@@ -34,6 +36,15 @@ class AndroidNotificationOps(
 
     override suspend fun reply(notificationKey: AuthorizedNotificationKey, actionIndex: Int, text: String) {
         listenerService().replyByKey(notificationKey.raw, actionIndex, text)
+    }
+
+    override suspend fun setAppRule(packageName: String, settings: AppRuleSettings) {
+        val repository = androidConfigRepository(appContext)
+        val mode = repository.load().filterMode
+        repository.updateFilterRules { rules ->
+            applyAppRule(rules, packageName, settings, mode, isSystemPackage = false)
+        }
+        log.i { "app rule updated: $packageName" }
     }
 
     override suspend fun muteApp(packageName: String) {

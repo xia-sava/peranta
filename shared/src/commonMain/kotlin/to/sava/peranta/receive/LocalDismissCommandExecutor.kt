@@ -1,6 +1,7 @@
 package to.sava.peranta.receive
 
 import co.touchlab.kermit.Logger
+import to.sava.peranta.model.AppRuleSettings
 import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineItem
@@ -50,5 +51,9 @@ class LocalDismissCommandExecutor(
 
     override suspend fun unmuteApp(packageName: String) {
         log.d { "unmuteApp ignored on display-only device package=$packageName" }
+    }
+
+    override suspend fun setAppRule(packageName: String, settings: AppRuleSettings) {
+        log.d { "setAppRule ignored on display-only device package=$packageName" }
     }
 }

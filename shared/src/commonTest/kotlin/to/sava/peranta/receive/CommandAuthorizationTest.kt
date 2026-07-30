@@ -1,5 +1,6 @@
 package to.sava.peranta.receive
 
+import to.sava.peranta.model.AppRuleSettings
 import kotlinx.coroutines.test.runTest
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.crypto.generateKey
@@ -44,6 +45,7 @@ class CommandAuthorizationTest {
         }
         override suspend fun muteApp(packageName: String) { calls.add("muteApp") }
         override suspend fun unmuteApp(packageName: String) { calls.add("unmuteApp") }
+        override suspend fun setAppRule(packageName: String, settings: AppRuleSettings) { calls.add("setAppRule") }
     }
 
     /** 呼ばれたメソッドを記録する自端末表示用のフェイク。 */
@@ -53,6 +55,7 @@ class CommandAuthorizationTest {
         override suspend fun reply(notificationKey: String, actionIndex: Int, text: String) { calls.add("reply") }
         override suspend fun muteApp(packageName: String) { calls.add("muteApp") }
         override suspend fun unmuteApp(packageName: String) { calls.add("unmuteApp") }
+        override suspend fun setAppRule(packageName: String, settings: AppRuleSettings) { calls.add("setAppRule") }
     }
 
     private fun notification(id: String = "n1") = NotificationPayload(

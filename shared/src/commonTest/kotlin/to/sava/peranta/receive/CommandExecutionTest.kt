@@ -1,5 +1,6 @@
 package to.sava.peranta.receive
 
+import to.sava.peranta.model.AppRuleSettings
 import kotlinx.coroutines.test.runTest
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.crypto.generateKey
@@ -37,6 +38,8 @@ class CommandExecutionTest {
         var replied: Triple<String, Int, String>? = null
         var mutedPackage: String? = null
         var unmutedPackage: String? = null
+        var ruledPackage: String? = null
+        var appRule: AppRuleSettings? = null
 
         override suspend fun dismiss(notificationKey: String) {
             failWith?.let { throw it }
@@ -60,6 +63,13 @@ class CommandExecutionTest {
             failWith?.let { throw it }
             mutedPackage = packageName
             calls.add("muteApp")
+        }
+
+        override suspend fun setAppRule(packageName: String, settings: AppRuleSettings) {
+            failWith?.let { throw it }
+            ruledPackage = packageName
+            appRule = settings
+            calls.add("setAppRule")
         }
 
         override suspend fun unmuteApp(packageName: String) {
@@ -87,6 +97,7 @@ class CommandExecutionTest {
         actionIndex: Int? = 0,
         replyText: String? = "了解",
         packageName: String? = "com.example.noisy",
+        appRule: AppRuleSettings? = null,
         expiresAt: Long? = null,
         id: String = "cmd1",
     ): CommandPayload = CommandPayload(
@@ -95,6 +106,7 @@ class CommandExecutionTest {
         to = to,
         sentAtEpochMillis = now - 100,
         command = command,
+        appRule = appRule,
         targetNotificationKey = targetNotificationKey,
         actionIndex = actionIndex,
         replyText = replyText,
@@ -139,6 +151,29 @@ class CommandExecutionTest {
         pipeline(executor).handleEvent(eventFor(command(CommandType.MUTE_APP, packageName = "com.spam")))
         assertEquals(listOf("muteApp"), executor.calls)
         assertEquals("com.spam", executor.mutedPackage)
+    }
+
+    /** setAppRule コマンドはアプリごとの扱いをそのまま executor へ渡す（§7）。 */
+    @Test
+    fun setAppRuleIsDispatched() = runTest {
+        val executor = FakeCommandExecutor()
+        val settings = AppRuleSettings(forward = true, redact = true, swipeDismissesSource = true)
+        pipeline(executor).handleEvent(
+            eventFor(command(CommandType.SET_APP_RULE, packageName = "com.spam", appRule = settings)),
+        )
+        assertEquals(listOf("setAppRule"), executor.calls)
+        assertEquals("com.spam", executor.ruledPackage)
+        assertEquals(settings, executor.appRule)
+    }
+
+    /** 扱いを運ばない setAppRule は実行できず、理由をタイムラインへ残す。 */
+    @Test
+    fun setAppRuleWithoutSettingsIsRejected() = runTest {
+        val executor = FakeCommandExecutor()
+        val p = pipeline(executor)
+        p.handleEvent(eventFor(command(CommandType.SET_APP_RULE, packageName = "com.spam", appRule = null)))
+        assertTrue(executor.calls.isEmpty())
+        assertTrue(p.items.value.filterIsInstance<ErrorItem>().isNotEmpty())
     }
 
     /** unmuteApp コマンドは executor.unmuteApp をパッケージ名で呼ぶ。 */

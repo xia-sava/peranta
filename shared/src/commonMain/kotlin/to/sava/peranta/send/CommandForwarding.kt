@@ -1,5 +1,6 @@
 package to.sava.peranta.send
 
+import to.sava.peranta.model.AppRuleSettings
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.newPayloadId
@@ -24,6 +25,7 @@ fun deliveryOf(command: CommandType): CommandDelivery = when (command) {
     CommandType.DISMISS,
     CommandType.MUTE_APP,
     CommandType.UNMUTE_APP,
+    CommandType.SET_APP_RULE,
     -> CommandDelivery.STATE_SYNC
 
     CommandType.INVOKE_ACTION,
@@ -44,6 +46,7 @@ fun buildCommandPayload(
     actionIndex: Int? = null,
     replyText: String? = null,
     packageName: String? = null,
+    appRule: AppRuleSettings? = null,
     idGen: () -> String = ::newPayloadId,
 ): CommandPayload = CommandPayload(
     id = idGen(),
@@ -55,5 +58,6 @@ fun buildCommandPayload(
     actionIndex = actionIndex,
     replyText = replyText,
     packageName = packageName,
+    appRule = appRule,
     expiresAtEpochMillis = now + deliveryOf(command).ttlMillis,
 )

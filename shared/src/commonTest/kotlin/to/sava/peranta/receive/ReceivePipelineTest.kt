@@ -1,5 +1,6 @@
 package to.sava.peranta.receive
 
+import to.sava.peranta.model.AppRuleSettings
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import to.sava.peranta.crypto.MessageCipher
@@ -93,6 +94,7 @@ class ReceivePipelineTest {
         override suspend fun reply(notificationKey: String, actionIndex: Int, text: String) {}
         override suspend fun muteApp(packageName: String) {}
         override suspend fun unmuteApp(packageName: String) {}
+        override suspend fun setAppRule(packageName: String, settings: AppRuleSettings) {}
     }
 
     private fun dismissCommand(targetNotificationKey: String, id: String = "cmd1"): CommandPayload = CommandPayload(

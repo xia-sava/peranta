@@ -1,5 +1,7 @@
 package to.sava.peranta.receive
 
+import to.sava.peranta.model.AppRuleSettings
+
 /**
  * 受信した command ペイロード（§4.1）を実行する [ReceivePipeline] 側の窓口（§3.4）。
  * [ReceivePipeline] は宛先・失効・必須フィールドの検証まで済ませてから呼ぶため、
@@ -30,6 +32,12 @@ interface CommandExecutor {
 
     /** [packageName] を転送対象へ戻す（denylist の除外ルールを取り除く、§7）。 */
     suspend fun unmuteApp(packageName: String)
+
+    /**
+     * [packageName] のアプリごとの扱いを [settings] の内容へ更新する（§7）。
+     * 転送可否・優先度上書き・伏せ字・払いのけの扱いをまとめて置き換える。
+     */
+    suspend fun setAppRule(packageName: String, settings: AppRuleSettings)
 }
 
 /** コマンド実行が失敗したことを、タイムライン表示用の理由付きで表す例外。 */

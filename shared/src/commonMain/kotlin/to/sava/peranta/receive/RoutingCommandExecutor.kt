@@ -1,5 +1,7 @@
 package to.sava.peranta.receive
 
+import to.sava.peranta.model.AppRuleSettings
+
 import co.touchlab.kermit.Logger
 import to.sava.peranta.timeline.TimelineItem
 
@@ -73,6 +75,9 @@ class RoutingCommandExecutor(
     override suspend fun muteApp(packageName: String) = notificationOps.muteApp(packageName)
 
     override suspend fun unmuteApp(packageName: String) = notificationOps.unmuteApp(packageName)
+
+    override suspend fun setAppRule(packageName: String, settings: AppRuleSettings) =
+        notificationOps.setAppRule(packageName, settings)
 
     /**
      * 元通知への操作（invokeAction / reply）を [notificationOps] へ委ねるべきか。

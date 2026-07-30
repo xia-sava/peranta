@@ -11,6 +11,7 @@ import to.sava.peranta.filter.payloadForPersistence
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BROADCAST_TARGET
+import to.sava.peranta.model.AppRuleSettings
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.FilePayload
@@ -258,6 +259,9 @@ class ReceivePipeline(
             CommandType.MUTE_APP -> executor.muteApp(requirePackageName(payload))
 
             CommandType.UNMUTE_APP -> executor.unmuteApp(requirePackageName(payload))
+
+            CommandType.SET_APP_RULE ->
+                executor.setAppRule(requirePackageName(payload), requireAppRule(payload))
         }
     }
 
@@ -308,6 +312,10 @@ class ReceivePipeline(
     private fun requireReplyText(payload: CommandPayload): String =
         payload.replyText
             ?: throw CommandExecutionException("${payload.command} コマンドに返信本文がありません")
+
+    private fun requireAppRule(payload: CommandPayload): AppRuleSettings =
+        payload.appRule
+            ?: throw CommandExecutionException("${'$'}{payload.command} コマンドにアプリの扱いがありません")
 
     private fun requirePackageName(payload: CommandPayload): String =
         payload.packageName

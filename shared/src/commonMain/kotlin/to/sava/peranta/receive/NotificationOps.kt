@@ -1,5 +1,7 @@
 package to.sava.peranta.receive
 
+import to.sava.peranta.model.AppRuleSettings
+
 /**
  * 他アプリの通知を操作する実行系（§3.4）。元通知を握っているプラットフォーム機構
  * （Android の NLS 等）へ橋渡しする実装がこれを担う。
@@ -33,4 +35,10 @@ interface NotificationOps {
      * [muteApp] と同じく認可の対象外とする。
      */
     suspend fun unmuteApp(packageName: String)
+
+    /**
+     * [packageName] のアプリごとの扱いを [settings] の内容へ更新する（§7）。
+     * [muteApp] と同じく自端末の転送設定を変える操作のため、認可の対象外とする。
+     */
+    suspend fun setAppRule(packageName: String, settings: AppRuleSettings)
 }

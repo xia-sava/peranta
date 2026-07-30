@@ -119,7 +119,26 @@ enum class CommandType {
 
     @SerialName("unmuteApp")
     UNMUTE_APP,
+
+    @SerialName("setAppRule")
+    SET_APP_RULE,
 }
+
+/**
+ * アプリごとの転送の扱い（§7）。発信側の設定そのものを値として運び、受信端末からの変更に使う。
+ * 項目が増えてもコマンドを増やさずに済むよう、扱いをまとめて 1 つの値として送る。
+ */
+@Serializable
+data class AppRuleSettings(
+    /** 転送するか。フィルタモードに依らない意味で持ち、受信側がモードに応じたルールへ写す。 */
+    val forward: Boolean,
+    /** 優先度の上書き。null なら推定した基準優先度のまま。 */
+    val priorityOverride: Priority? = null,
+    /** タイトル・本文を伏せて転送するか。 */
+    val redact: Boolean = false,
+    /** 受信端末で払いのけたら元通知も消すか（§3.3）。 */
+    val swipeDismissesSource: Boolean = false,
+)
 
 /** 端末間で転送されるメッセージ本体。type フィールドで種別を判別する。 */
 @Serializable
@@ -243,6 +262,8 @@ data class CommandPayload(
     val actionIndex: Int? = null,
     val replyText: String? = null,
     val packageName: String? = null,
+    /** SET_APP_RULE が運ぶアプリごとの扱い（§7）。他の種別では未設定。 */
+    val appRule: AppRuleSettings? = null,
     val expiresAtEpochMillis: Long? = null,
 ) : Payload()
 

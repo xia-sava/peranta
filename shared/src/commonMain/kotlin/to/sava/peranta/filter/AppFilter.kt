@@ -1,5 +1,6 @@
 package to.sava.peranta.filter
 
+import to.sava.peranta.model.AppRuleSettings
 import to.sava.peranta.model.Priority
 
 /**
@@ -29,9 +30,9 @@ private fun defaultForwardWithoutRule(mode: FilterMode, isSystemPackage: Boolean
         FilterMode.ALLOWLIST -> false
     }
 
-/** 優先度上書き・伏せ字のいずれかが設定されているか（mute↔unmute でルールを残す判定に使う）。 */
+/** 詳細設定のいずれかが入っているか（mute↔unmute でルールを残す判定に使う）。 */
 private val FilterRule.hasDetailOverride: Boolean
-    get() = priorityOverride != null || redact
+    get() = priorityOverride != null || redact || swipeDismissesSource
 
 /**
  * [packageName] に対する目標アクション（null は「ルール不要」）を、既存ルールを保ったまま適用する。
@@ -160,6 +161,47 @@ fun updatePackageDetail(
         existing == updated -> rules
         else -> rules.map { if (it === existing) updated else it }
     }
+}
+
+/**
+ * [packageName] のルールを [settings] の内容へまとめて置き換える（§7）。
+ * 受信端末から届いた設定変更（`setAppRule` コマンド、§3.4）と、発信端末の画面での編集が
+ * 同じ規則を通るようにするための入口。
+ * 詳細を先に入れてから転送可否を決めることで、既定の転送に戻す指定でも詳細が残るルールは保たれる。
+ */
+fun applyAppRule(
+    rules: List<FilterRule>,
+    packageName: String,
+    settings: AppRuleSettings,
+    mode: FilterMode,
+    isSystemPackage: Boolean,
+): List<FilterRule> {
+    val withDetail = updatePackageDetail(
+        rules = rules,
+        packageName = packageName,
+        priorityOverride = settings.priorityOverride,
+        redact = settings.redact,
+        swipeDismissesSource = settings.swipeDismissesSource,
+        mode = mode,
+        isSystemPackage = isSystemPackage,
+    )
+    return setPackageForwarded(withDetail, packageName, settings.forward, mode, isSystemPackage)
+}
+
+/** [packageName] の現在の扱いを [AppRuleSettings] として読み出す（§7）。 */
+fun appRuleSettingsFor(
+    rules: List<FilterRule>,
+    packageName: String,
+    mode: FilterMode,
+    isSystemPackage: Boolean,
+): AppRuleSettings {
+    val rule = rules.firstOrNull { it.packageName == packageName }
+    return AppRuleSettings(
+        forward = isPackageForwarded(rules, packageName, mode, isSystemPackage),
+        priorityOverride = rule?.priorityOverride,
+        redact = rule?.redact ?: false,
+        swipeDismissesSource = rule?.swipeDismissesSource ?: false,
+    )
 }
 
 /** [packageNames] 全体のチェック状態を集約する（システムアプリ折りたたみグループの TriState 用、§10.4）。 */

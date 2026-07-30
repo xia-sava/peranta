@@ -1,5 +1,6 @@
 package to.sava.peranta.receive
 
+import to.sava.peranta.model.AppRuleSettings
 import kotlinx.coroutines.test.runTest
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.SmsPayload
@@ -22,6 +23,7 @@ class RoutingCommandExecutorTest {
         override suspend fun reply(notificationKey: String, actionIndex: Int, text: String) { log.add("local.reply") }
         override suspend fun muteApp(packageName: String) { log.add("local.muteApp") }
         override suspend fun unmuteApp(packageName: String) { log.add("local.unmuteApp") }
+        override suspend fun setAppRule(packageName: String, settings: AppRuleSettings) { log.add("local.setAppRule") }
     }
 
     /** 呼ばれたメソッドを記録する通知操作のフェイク。任意で通知操作を失敗させられる。 */
@@ -40,6 +42,7 @@ class RoutingCommandExecutorTest {
         }
         override suspend fun muteApp(packageName: String) { log.add("ops.muteApp") }
         override suspend fun unmuteApp(packageName: String) { log.add("ops.unmuteApp") }
+        override suspend fun setAppRule(packageName: String, settings: AppRuleSettings) { log.add("ops.setAppRule") }
     }
 
     private fun notification(key: String, id: String = "n1") = NotificationPayload(
