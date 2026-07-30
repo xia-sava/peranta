@@ -108,6 +108,7 @@ class AndroidNotificationPresenter(
             .applyLockScreenVisibility(display, channelId)
             .applyContentIntent(notificationId, display.id)
             .applyExpiry(display)
+            .applyDismissSourceAction(notificationId, display)
             .applyOpenUrlAction(display)
             .build()
         notify(notificationId, notification)
@@ -200,6 +201,27 @@ class AndroidNotificationPresenter(
         return this
     }
 
+    /**
+     * 元通知を指せる通知に「送信元の通知を消す」アクションを付ける（§3.2 / §3.4）。
+     * 押すと [NotificationDismissReceiver] が既読同期を発火し、元端末と他の受信端末から消える。
+     * 対応づいていない SMS・受信メッセージは対象を指せないため付けない。
+     * [requestCode] は「開く」やタップと同じ理由で通知ごとに異なる値を渡す。
+     */
+    private fun Notification.Builder.applyDismissSourceAction(
+        requestCode: Int,
+        display: NotificationDisplay,
+    ): Notification.Builder {
+        val notificationKey = display.notificationKey ?: return this
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            NotificationDismissReceiver.intent(context, notificationKey, display.id),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val icon = Icon.createWithResource(context, R.drawable.ic_notification)
+        return addAction(Notification.Action.Builder(icon, DISMISS_SOURCE_ACTION_LABEL, pendingIntent).build())
+    }
+
     /** 本文から URL が抽出できたとき、ACTION_VIEW で開く「開く」アクションを 1 個付ける（§3.2）。 */
     private fun Notification.Builder.applyOpenUrlAction(display: NotificationDisplay): Notification.Builder {
         val url = display.openUrl ?: return this
@@ -256,6 +278,9 @@ class AndroidNotificationPresenter(
 
         /** 「開く」アクションのラベル（§3.2）。 */
         private const val OPEN_ACTION_LABEL = "開く"
+
+        /** 「送信元の通知を消す」アクションのラベル（§3.2 / §3.4）。Desktop のトーストと同じ文言。 */
+        private const val DISMISS_SOURCE_ACTION_LABEL = "送信元の通知を消す"
 
         /** 通知 ID 対応表を保持する SharedPreferences 名。 */
         const val PREFS_NOTIFICATION_IDS = "peranta-notification-ids"

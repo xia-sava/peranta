@@ -5,6 +5,7 @@ import to.sava.peranta.model.NotificationVisibility
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
+import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.ui.firstUrl
@@ -37,6 +38,11 @@ data class NotificationDisplay(
     val openUrl: String? = null,
     /** 発信元の表示名（§3.2）。タイトルだけでは何の通知か分からないため添える。 */
     val source: String? = null,
+    /**
+     * 元通知のキー。既読同期（§3.4）の対象を指す。これを持つ通知にだけ「送信元の通知を消す」
+     * アクションを付ける。対応づいていない SMS・受信メッセージは null で、消す対象を指せない。
+     */
+    val notificationKey: String? = null,
     /**
      * ロック画面で見せてよい範囲（§3.2）。元通知が運んでこなかった（旧バージョン由来の）ときと、
      * 元通知を持たない受信メッセージは [NotificationVisibility.PRIVATE] とする。
@@ -74,6 +80,7 @@ fun displayFor(item: ReceivedNotification): NotificationDisplay? =
             expiresAtEpochMillis = payload.expiresAtEpochMillis,
             openUrl = firstUrl("${payload.title} ${payload.text}"),
             source = sourceLabelFor(payload),
+            notificationKey = payload.notificationKeyOrNull(),
             visibility = payload.visibility ?: NotificationVisibility.PRIVATE,
         )
 
@@ -85,6 +92,7 @@ fun displayFor(item: ReceivedNotification): NotificationDisplay? =
             expiresAtEpochMillis = payload.expiresAtEpochMillis,
             openUrl = firstUrl(payload.text),
             source = sourceLabelFor(payload),
+            notificationKey = payload.notificationKeyOrNull(),
         )
 
         else -> null

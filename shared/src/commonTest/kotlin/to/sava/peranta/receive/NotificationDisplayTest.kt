@@ -104,6 +104,44 @@ class NotificationDisplayTest {
         assertNull(display.openUrl)
     }
 
+    /** 元通知のキーは表示へ写す。「送信元の通知を消す」アクションの対象になる（§3.4）。 */
+    @Test
+    fun notificationCarriesNotificationKey() {
+        val display = displayFor(received(notification()))!!
+        assertEquals("0|com.example.bank|1|null|10", display.notificationKey)
+    }
+
+    /** 対応づいていない SMS は元通知を指せないため notificationKey は null。 */
+    @Test
+    fun smsWithoutMatchedNotificationHasNoNotificationKey() {
+        val sms = SmsPayload(
+            id = "s4",
+            from = "phone",
+            to = "*",
+            sentAtEpochMillis = 900L,
+            senderNumber = "+81900000000",
+            text = "コードは 123456 です",
+            postedAtEpochMillis = 900L,
+        )
+        assertNull(displayFor(received(sms))!!.notificationKey)
+    }
+
+    /** SMS アプリの通知と対応づいた SMS は、その notificationKey を表示へ写す（§3.1）。 */
+    @Test
+    fun matchedSmsCarriesNotificationKey() {
+        val sms = SmsPayload(
+            id = "s5",
+            from = "phone",
+            to = "*",
+            sentAtEpochMillis = 900L,
+            senderNumber = "+81900000000",
+            text = "コードは 123456 です",
+            postedAtEpochMillis = 900L,
+            notificationKey = "0|com.android.messaging|7|null|10",
+        )
+        assertEquals("0|com.android.messaging|7|null|10", displayFor(received(sms))!!.notificationKey)
+    }
+
     /** SMS payload は送信者名（無ければ番号）をタイトルにする。 */
     @Test
     fun smsMapsSenderToTitle() {

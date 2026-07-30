@@ -90,6 +90,11 @@
             </intent-filter>
         </receiver>
 
+        <!-- ミラー通知の「送信元の通知を消す」の受け口。アプリの通知からのみ起こされる。 -->
+        <receiver
+                android:name="to.sava.peranta.android.NotificationDismissReceiver"
+                android:exported="false"/>
+
         <receiver
                 android:name="to.sava.peranta.android.PerantaUnifiedPushReceiver"
                 android:enabled="true"

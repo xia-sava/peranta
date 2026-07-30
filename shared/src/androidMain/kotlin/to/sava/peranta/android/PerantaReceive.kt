@@ -297,6 +297,17 @@ object PerantaReceive {
         )
     }
 
+    /**
+     * 既読同期（§3.4）の dismiss を全端末へ送り、自端末のタイムラインにもマークを反映する。
+     * ミラー通知の「送信元の通知を消す」（[NotificationDismissReceiver]）とタイムラインの操作の
+     * 共通経路。ブロードキャストは自端末を除外するため、マークは自分で付ける。
+     */
+    suspend fun dismissSourceNotification(context: Context, notificationKey: String) {
+        val appContext = context.applicationContext
+        commandSender(appContext)?.dismiss(notificationKey)
+        markSourceDismissed(notificationKey)
+    }
+
     private fun dismissFromTimeline(appContext: Context, item: ReceivedNotification) {
         commandScope.launch {
             try {
@@ -305,8 +316,7 @@ object PerantaReceive {
                     log.i { "dismiss ignored (no notification key) payload=${item.payload.id}" }
                     return@launch
                 }
-                commandSender(appContext)?.dismiss(notificationKey)
-                markSourceDismissed(notificationKey)
+                dismissSourceNotification(appContext, notificationKey)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
