@@ -95,8 +95,9 @@ const val DEFAULT_EMPTY_TIMELINE_MESSAGE: String = "まだ通知はありませ�
  * 通知アクションのボタンラベルに付ける接頭辞（§10.1）。同じバブルには添付を操作するボタンも
  * 並ぶが、そちらはこの端末で完結する。通知アクションは送信元の端末で実行されるため、
  * 名前が同じでも別物であることを示す。
+ * 送信元は端末名（[deviceLabel]）で名指す。転送元はスマホとは限らず、どの端末も送信側になれる（§2）。
  */
-const val ACTION_RUNS_ON_SENDER_PREFIX: String = "スマホ: "
+fun actionRunsOnSenderPrefix(deviceLabel: String): String = "$deviceLabel: "
 
 /** 発出元で画面が開くアクションのボタンラベルに付ける注記（§10.1）。押しても手元には何も出ない。 */
 const val ACTION_OPENS_ON_SENDER_SUFFIX: String = "（画面が開きます）"
@@ -131,12 +132,14 @@ private fun exceedsReplyLimit(text: String): Boolean =
  * [payload] の [index] 番アクションの表示ラベル。どれも送信元の端末で実行されるため接頭辞を付け、
  * さらに画面が開くものには注記を添える。
  */
-private fun actionLabel(payload: NotificationPayload, index: Int, name: String): String =
-    if (payload.actionKindAt(index) == ActionExecutionKind.OPENS_ON_SENDER) {
-        "$ACTION_RUNS_ON_SENDER_PREFIX$name$ACTION_OPENS_ON_SENDER_SUFFIX"
+private fun actionLabel(payload: NotificationPayload, index: Int, name: String): String {
+    val prefix = actionRunsOnSenderPrefix(payload.speakerName())
+    return if (payload.actionKindAt(index) == ActionExecutionKind.OPENS_ON_SENDER) {
+        "$prefix$name$ACTION_OPENS_ON_SENDER_SUFFIX"
     } else {
-        "$ACTION_RUNS_ON_SENDER_PREFIX$name"
+        "$prefix$name"
     }
+}
 
 /**
  * 受信通知アイテムに対する操作（§3.4 / §10.1）。送信元へ command を返送するものと、この端末の

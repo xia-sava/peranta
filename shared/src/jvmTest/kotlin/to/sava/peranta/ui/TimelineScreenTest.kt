@@ -257,7 +257,7 @@ class TimelineScreenTest {
         setContent {
             TimelineScreen(items(payload), actions = TimelineActions())
         }
-        onNodeWithText("${ACTION_RUNS_ON_SENDER_PREFIX}地図$ACTION_OPENS_ON_SENDER_SUFFIX").assertExists()
+        onNodeWithText("${actionRunsOnSenderPrefix("phone")}地図$ACTION_OPENS_ON_SENDER_SUFFIX").assertExists()
     }
 
     /**
@@ -276,8 +276,29 @@ class TimelineScreenTest {
         setContent {
             TimelineScreen(items(payload), actions = TimelineActions())
         }
-        onNodeWithText("${ACTION_RUNS_ON_SENDER_PREFIX}アーカイブ").assertExists()
-        onNodeWithText("${ACTION_RUNS_ON_SENDER_PREFIX}開く").assertExists()
+        onNodeWithText("${actionRunsOnSenderPrefix("phone")}アーカイブ").assertExists()
+        onNodeWithText("${actionRunsOnSenderPrefix("phone")}開く").assertExists()
+    }
+
+    /**
+     * アクションのラベルは実行先を送信元の端末名で名指す（§10.1）。
+     * 転送元はスマホとは限らず、どの端末も送信側になれるため固定の呼び名を使わない。
+     */
+    @Test
+    fun actionLabelNamesSenderDevice() = runComposeUiTest {
+        setContent {
+            TimelineScreen(items(notification().copy(fromName = "タブレット")), actions = TimelineActions())
+        }
+        onNodeWithText("タブレット: アーカイブ").assertExists()
+    }
+
+    /** 端末名を運ばないペイロードは deviceId で名指す（発信元表示と同じ規則）。 */
+    @Test
+    fun actionLabelFallsBackToDeviceId() = runComposeUiTest {
+        setContent {
+            TimelineScreen(items(notification()), actions = TimelineActions())
+        }
+        onNodeWithText("phone: アーカイブ").assertExists()
     }
 
     /** 付記付きボタンを押しても、従来どおり invokeAction が対応する index で送信される。 */
@@ -425,8 +446,8 @@ class TimelineScreenTest {
         setContent {
             TimelineScreen(items(payload), actions = TimelineActions())
         }
-        onNodeWithText("${ACTION_RUNS_ON_SENDER_PREFIX}アーカイブ").assertExists()
-        onNodeWithText("${ACTION_RUNS_ON_SENDER_PREFIX}地図").assertExists()
+        onNodeWithText("${actionRunsOnSenderPrefix("phone")}アーカイブ").assertExists()
+        onNodeWithText("${actionRunsOnSenderPrefix("phone")}地図").assertExists()
     }
 
     /** actions を渡さない画面（送信ロール・空状態）では操作アフォーダンスを出さない。 */
