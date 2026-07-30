@@ -7,6 +7,7 @@ import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.NotificationVisibility
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
+import to.sava.peranta.model.SwipeBehavior
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import kotlin.test.Test
@@ -29,6 +30,7 @@ class NotificationDisplayTest {
         priority: Priority = Priority.HIGH,
         expiresAt: Long? = 5_000L,
         visibility: NotificationVisibility? = null,
+        swipeBehavior: SwipeBehavior? = null,
     ) = NotificationPayload(
         id = "n1",
         from = "phone",
@@ -43,6 +45,7 @@ class NotificationDisplayTest {
         expiresAtEpochMillis = expiresAt,
         priority = priority,
         visibility = visibility,
+        swipeBehavior = swipeBehavior,
     )
 
     /** 通知 payload はタイトル・本文・優先度・失効時刻を表示内容へ写す。 */
@@ -140,6 +143,21 @@ class NotificationDisplayTest {
             notificationKey = "0|com.android.messaging|7|null|10",
         )
         assertEquals("0|com.android.messaging|7|null|10", displayFor(received(sms))!!.notificationKey)
+    }
+
+    /** 払いのけの扱いは送信端末の指示をそのまま写す（§3.3）。 */
+    @Test
+    fun notificationCarriesSwipeBehavior() {
+        assertEquals(
+            SwipeBehavior.DISMISS_SOURCE,
+            displayFor(received(notification(swipeBehavior = SwipeBehavior.DISMISS_SOURCE)))!!.swipeBehavior,
+        )
+    }
+
+    /** 指示を運ばない（旧バージョン由来の）通知は、払いのけで元通知を消さない既定になる。 */
+    @Test
+    fun notificationWithoutSwipeBehaviorDefaultsToLocalOnly() {
+        assertEquals(SwipeBehavior.LOCAL_ONLY, displayFor(received(notification()))!!.swipeBehavior)
     }
 
     /** SMS payload は送信者名（無ければ番号）をタイトルにする。 */

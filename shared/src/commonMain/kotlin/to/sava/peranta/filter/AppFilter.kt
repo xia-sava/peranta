@@ -138,13 +138,14 @@ fun updatePackageDetail(
     packageName: String,
     priorityOverride: Priority?,
     redact: Boolean,
+    swipeDismissesSource: Boolean,
     mode: FilterMode,
     isSystemPackage: Boolean,
 ): List<FilterRule> {
     val existing = rules.firstOrNull { it.packageName == packageName }
     val forwarded = isPackageForwarded(rules, packageName, mode, isSystemPackage)
     val defaultForward = defaultForwardWithoutRule(mode, isSystemPackage)
-    val hasOverride = priorityOverride != null || redact
+    val hasOverride = priorityOverride != null || redact || swipeDismissesSource
     val targetAction = when {
         !hasOverride && forwarded == defaultForward -> null
         forwarded -> RuleAction.INCLUDE
@@ -153,7 +154,7 @@ fun updatePackageDetail(
     if (targetAction == null) {
         return if (existing == null) rules else rules.filterNot { it === existing }
     }
-    val updated = FilterRule(packageName, targetAction, priorityOverride, redact)
+    val updated = FilterRule(packageName, targetAction, priorityOverride, redact, swipeDismissesSource)
     return when {
         existing == null -> rules + updated
         existing == updated -> rules

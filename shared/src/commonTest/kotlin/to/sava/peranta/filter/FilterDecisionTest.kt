@@ -1,6 +1,7 @@
 package to.sava.peranta.filter
 
 import to.sava.peranta.model.Priority
+import to.sava.peranta.model.SwipeBehavior
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -89,6 +90,19 @@ class FilterDecisionTest {
         val rules = listOf(FilterRule(normalPkg, RuleAction.INCLUDE, redact = true))
         assertTrue(decide(normalPkg, FilterMode.ALLOWLIST, rules).redact)
         assertFalse(decide(normalPkg).redact)
+    }
+
+    /** 払いのけの扱いは、既定では受信端末の表示を引っ込めるだけの指示になる。 */
+    @Test
+    fun swipeBehaviorDefaultsToLocalOnly() {
+        assertEquals(SwipeBehavior.LOCAL_ONLY, decide(normalPkg).swipeBehavior)
+    }
+
+    /** 設定したアプリの通知には、払いのけで元通知も消す指示を載せる。 */
+    @Test
+    fun swipeDismissesSourceRulePropagates() {
+        val rules = listOf(FilterRule(normalPkg, RuleAction.INCLUDE, swipeDismissesSource = true))
+        assertEquals(SwipeBehavior.DISMISS_SOURCE, decide(normalPkg, FilterMode.ALLOWLIST, rules).swipeBehavior)
     }
 
     private fun decide(

@@ -128,6 +128,7 @@ fun prepareForwardedNotification(
             postedAtEpochMillis = input.postedAtEpochMillis,
             expiresAtEpochMillis = if (isOtp) now + OTP_TTL_MILLIS else null,
             priority = decision.priority,
+            swipeBehavior = decision.swipeBehavior,
             fromName = deviceName,
             visibility = input.visibility,
         ),

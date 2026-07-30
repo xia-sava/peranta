@@ -5,7 +5,9 @@ import to.sava.peranta.model.NotificationVisibility
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
+import to.sava.peranta.model.SwipeBehavior
 import to.sava.peranta.model.notificationKeyOrNull
+import to.sava.peranta.model.swipeBehaviorOrDefault
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.ui.firstUrl
@@ -44,6 +46,11 @@ data class NotificationDisplay(
      */
     val notificationKey: String? = null,
     /**
+     * 払いのけたときの扱い（§3.3）。送信端末がアプリごとの設定から決めて運んできた指示で、
+     * 既定は表示を引っ込めるだけの [SwipeBehavior.LOCAL_ONLY]。
+     */
+    val swipeBehavior: SwipeBehavior = SwipeBehavior.LOCAL_ONLY,
+    /**
      * ロック画面で見せてよい範囲（§3.2）。元通知が運んでこなかった（旧バージョン由来の）ときと、
      * 元通知を持たない受信メッセージは [NotificationVisibility.PRIVATE] とする。
      */
@@ -81,6 +88,7 @@ fun displayFor(item: ReceivedNotification): NotificationDisplay? =
             openUrl = firstUrl("${payload.title} ${payload.text}"),
             source = sourceLabelFor(payload),
             notificationKey = payload.notificationKeyOrNull(),
+            swipeBehavior = payload.swipeBehaviorOrDefault(),
             visibility = payload.visibility ?: NotificationVisibility.PRIVATE,
         )
 

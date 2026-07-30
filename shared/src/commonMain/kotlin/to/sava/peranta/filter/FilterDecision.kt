@@ -1,15 +1,18 @@
 package to.sava.peranta.filter
 
 import to.sava.peranta.model.Priority
+import to.sava.peranta.model.SwipeBehavior
 
 /**
  * フィルタ判定の結果。
- * [forward] が false なら転送しない。true のとき [priority] と [redact] を適用する。
+ * [forward] が false なら転送しない。true のとき [priority] と [redact] を適用し、
+ * [swipeBehavior] を受信端末への指示としてペイロードへ載せる。
  */
 data class FilterDecision(
     val forward: Boolean,
     val priority: Priority,
     val redact: Boolean,
+    val swipeBehavior: SwipeBehavior,
 )
 
 /**
@@ -51,6 +54,11 @@ fun decideFilter(
         forward = forward,
         priority = priority,
         redact = rule?.redact ?: false,
+        swipeBehavior = if (rule?.swipeDismissesSource == true) {
+            SwipeBehavior.DISMISS_SOURCE
+        } else {
+            SwipeBehavior.LOCAL_ONLY
+        },
     )
 }
 

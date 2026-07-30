@@ -14,6 +14,7 @@ import android.net.Uri
 import android.os.Build
 import co.touchlab.kermit.Logger
 import to.sava.peranta.model.NotificationVisibility
+import to.sava.peranta.model.SwipeBehavior
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.receive.NotificationChannelKind
 import to.sava.peranta.receive.NotificationDisplay
@@ -108,6 +109,7 @@ class AndroidNotificationPresenter(
             .applyLockScreenVisibility(display, channelId)
             .applyContentIntent(notificationId, display.id)
             .applyExpiry(display)
+            .applySwipeBehavior(notificationId, display)
             .applyDismissSourceAction(notificationId, display)
             .applyOpenUrlAction(display)
             .build()
@@ -199,6 +201,29 @@ class AndroidNotificationPresenter(
             setTimeoutAfter(remaining)
         }
         return this
+    }
+
+    /**
+     * 送信端末が「払いのけたら元通知も消す」と指示した通知（§3.3 / §7）に、スワイプで発火する
+     * [Notification.Builder.setDeleteIntent] を付ける。指示が無ければ付けず、払いのけはこの端末の
+     * 表示を消すだけになる。
+     * `NotificationManager.cancel` による取り下げ（既読同期・出し直し）ではこの intent は発火しない。
+     * [requestCode] は他の [PendingIntent] と同じ通知 ID でよい（区別は Intent の action が持つ）。
+     */
+    private fun Notification.Builder.applySwipeBehavior(
+        requestCode: Int,
+        display: NotificationDisplay,
+    ): Notification.Builder {
+        if (display.swipeBehavior != SwipeBehavior.DISMISS_SOURCE) return this
+        val notificationKey = display.notificationKey ?: return this
+        return setDeleteIntent(
+            PendingIntent.getBroadcast(
+                context,
+                requestCode,
+                NotificationDismissReceiver.swipeIntent(context, notificationKey),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            ),
+        )
     }
 
     /**

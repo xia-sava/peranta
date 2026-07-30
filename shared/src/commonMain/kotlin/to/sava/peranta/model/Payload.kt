@@ -41,6 +41,22 @@ enum class NotificationVisibility {
     SECRET,
 }
 
+/**
+ * 受信端末でミラー表示を払いのけた（スワイプ・× ボタン）ときに、あわせて何をするか（§3.3）。
+ * 送信端末がアプリごとの設定（§7）から決めてペイロードに載せ、受信端末はこれに従う。
+ * 判断を運ぶことで、受信端末ごとに設定を持たずに全端末で挙動が揃う。
+ */
+@Serializable
+enum class SwipeBehavior {
+    /** この端末の表示を引っ込めるだけ。元通知は残る。 */
+    @SerialName("localOnly")
+    LOCAL_ONLY,
+
+    /** あわせて元端末と他の受信端末からも消す（既読同期、§3.4）。 */
+    @SerialName("dismissSource")
+    DISMISS_SOURCE,
+}
+
 /** 通知アクションの意味分類（Notification.Action#getSemanticAction の閉集合を写す、§3.4）。 */
 @Serializable
 enum class SemanticActionKind {
@@ -154,6 +170,11 @@ data class NotificationPayload(
      * 受信側は Android の既定と同じ [NotificationVisibility.PRIVATE] として扱う。
      */
     val visibility: NotificationVisibility? = null,
+    /**
+     * 受信端末で払いのけたときの扱い（§3.3 / §7）。旧バージョン由来のペイロードでは未設定（null）で、
+     * 受信側は既定の [SwipeBehavior.LOCAL_ONLY] として扱う。
+     */
+    val swipeBehavior: SwipeBehavior? = null,
 ) : Payload()
 
 /** 画像・ファイルの転送（§4.3）。本体は暗号化 blob として別送し、[attachments] で参照する。 */
@@ -244,6 +265,15 @@ fun Payload.notificationKeyOrNull(): String? = when (this) {
     is NotificationPayload -> notificationKey
     is SmsPayload -> notificationKey
     else -> null
+}
+
+/**
+ * 受信端末で払いのけたときの扱い（§3.3）。指示を運ばない（旧バージョン由来・元通知を持たない）
+ * ペイロードは既定の [SwipeBehavior.LOCAL_ONLY] として扱う。
+ */
+fun Payload.swipeBehaviorOrDefault(): SwipeBehavior = when (this) {
+    is NotificationPayload -> swipeBehavior ?: SwipeBehavior.LOCAL_ONLY
+    else -> SwipeBehavior.LOCAL_ONLY
 }
 
 /** 改版番号（§4.3.1）。改版を持たないペイロードでは 0。 */

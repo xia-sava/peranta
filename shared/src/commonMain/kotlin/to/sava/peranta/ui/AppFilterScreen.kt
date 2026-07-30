@@ -74,6 +74,9 @@ const val TAG_APP_FILTER_SYSTEM_TRISTATE: String = "app-filter-system-tristate"
 /** 詳細画面の伏せ字トグルのタグ。 */
 const val TAG_APP_FILTER_DETAIL_REDACT: String = "app-filter-detail-redact"
 
+/** 詳細設定の「払いのけたら元の通知も消す」チェックのタグ。 */
+const val TAG_APP_FILTER_DETAIL_SWIPE_DISMISS: String = "app-filter-detail-swipe-dismiss"
+
 /** 詳細画面の優先度ラジオのタグ接頭辞（末尾に優先度名または "default" を付ける）。 */
 const val TAG_APP_FILTER_DETAIL_PRIORITY_PREFIX: String = "app-filter-detail-priority-"
 
@@ -241,9 +244,17 @@ private fun SendRoleContent(
             app = app,
             rule = rules.firstOrNull { it.packageName == app.packageName },
             onDismiss = { detailApp = null },
-            onSave = { priorityOverride, redact ->
+            onSave = { priorityOverride, redact, swipeDismissesSource ->
                 rules = controller.updateRules { current ->
-                    updatePackageDetail(current, app.packageName, priorityOverride, redact, mode, app.isSystemApp)
+                    updatePackageDetail(
+                        current,
+                        app.packageName,
+                        priorityOverride,
+                        redact,
+                        swipeDismissesSource,
+                        mode,
+                        app.isSystemApp,
+                    )
                 }
                 detailApp = null
             },
@@ -323,10 +334,11 @@ private fun DetailDialog(
     app: InstalledApp,
     rule: FilterRule?,
     onDismiss: () -> Unit,
-    onSave: (priorityOverride: Priority?, redact: Boolean) -> Unit,
+    onSave: (priorityOverride: Priority?, redact: Boolean, swipeDismissesSource: Boolean) -> Unit,
 ) {
     var priorityOverride by remember(app.packageName) { mutableStateOf(rule?.priorityOverride) }
     var redact by remember(app.packageName) { mutableStateOf(rule?.redact ?: false) }
+    var swipeDismissesSource by remember(app.packageName) { mutableStateOf(rule?.swipeDismissesSource ?: false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -354,11 +366,19 @@ private fun DetailDialog(
                     )
                     Text(text = "タイトル・本文を伏せる")
                 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = swipeDismissesSource,
+                        onCheckedChange = { swipeDismissesSource = it },
+                        modifier = Modifier.testTag(TAG_APP_FILTER_DETAIL_SWIPE_DISMISS),
+                    )
+                    Text(text = "受信側で払いのけたらこの端末の通知も消す")
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onSave(priorityOverride, redact) },
+                onClick = { onSave(priorityOverride, redact, swipeDismissesSource) },
                 modifier = Modifier.testTag(TAG_APP_FILTER_DETAIL_SAVE),
             ) {
                 Text(text = "保存")

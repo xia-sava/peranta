@@ -100,7 +100,7 @@ class AppFilterTest {
     fun detailPriorityOnForwardedAppUsesInclude() {
         val result = updatePackageDetail(
             emptyList(), "com.app", priorityOverride = Priority.HIGH, redact = false,
-            FilterMode.DENYLIST, isSystemPackage = false,
+            swipeDismissesSource = false, mode = FilterMode.DENYLIST, isSystemPackage = false,
         )
         assertEquals(listOf(FilterRule("com.app", RuleAction.INCLUDE, priorityOverride = Priority.HIGH)), result)
     }
@@ -109,7 +109,10 @@ class AppFilterTest {
     @Test
     fun detailThenUnmuteKeepsOverridesAsInclude() {
         val muted = setPackageChecked(
-            updatePackageDetail(emptyList(), "com.app", Priority.HIGH, redact = true, FilterMode.DENYLIST, isSystemPackage = false),
+            updatePackageDetail(
+                emptyList(), "com.app", Priority.HIGH, redact = true,
+                swipeDismissesSource = false, mode = FilterMode.DENYLIST, isSystemPackage = false,
+            ),
             "com.app", checked = true, FilterMode.DENYLIST, isSystemPackage = false,
         )
         assertEquals(FilterRule("com.app", RuleAction.EXCLUDE, Priority.HIGH, redact = true), muted.single())
@@ -121,7 +124,10 @@ class AppFilterTest {
     @Test
     fun clearingDetailDropsRedundantRule() {
         val rules = listOf(FilterRule("com.app", RuleAction.INCLUDE, priorityOverride = Priority.HIGH))
-        val result = updatePackageDetail(rules, "com.app", priorityOverride = null, redact = false, FilterMode.DENYLIST, isSystemPackage = false)
+        val result = updatePackageDetail(
+            rules, "com.app", priorityOverride = null, redact = false,
+            swipeDismissesSource = false, mode = FilterMode.DENYLIST, isSystemPackage = false,
+        )
         assertTrue(result.isEmpty())
     }
 

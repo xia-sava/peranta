@@ -31,7 +31,8 @@ enum class RuleAction {
 /**
  * パッケージ単位のフィルタルール（§7）。
  * [action] でモードに応じた包含/除外を、[priorityOverride] で優先度上書きを、
- * [redact] でタイトル・本文の伏せ字を指定する。
+ * [redact] でタイトル・本文の伏せ字を、[swipeDismissesSource] で受信端末が払いのけたときの
+ * 扱いを指定する。
  */
 @Serializable
 data class FilterRule(
@@ -39,6 +40,11 @@ data class FilterRule(
     val action: RuleAction,
     val priorityOverride: Priority? = null,
     val redact: Boolean = false,
+    /**
+     * 受信端末でミラー表示を払いのけたら元通知も消すか（§3.3）。判断はここ（送信端末）で決めて
+     * ペイロードへ載せ、全受信端末で同じ挙動になるようにする。既定は消さない。
+     */
+    val swipeDismissesSource: Boolean = false,
 )
 
 /**

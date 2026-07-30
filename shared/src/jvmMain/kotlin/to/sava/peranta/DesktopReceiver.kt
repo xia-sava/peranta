@@ -37,7 +37,9 @@ import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.Payload
+import to.sava.peranta.model.SwipeBehavior
 import to.sava.peranta.model.notificationKeyOrNull
+import to.sava.peranta.model.swipeBehaviorOrDefault
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.SelfTestProbe
@@ -375,8 +377,19 @@ class DesktopReceiver(
                 onToastClicked(item.id)
             }
 
+            ToastResult.Dismissed -> dismissSourceOnSwipe(currentPayload(item.id) ?: item.payload)
+
             else -> Unit
         }
+    }
+
+    /**
+     * トーストを払いのけた（スワイプ・× ボタン）ときの扱いを、送信端末が載せた指示（§3.3 / §7）で
+     * 決める。既定はこの端末の表示を引っ込めるだけで、指示があるときだけ既読同期も発火する。
+     */
+    private fun dismissSourceOnSwipe(payload: Payload) {
+        if (payload.swipeBehaviorOrDefault() != SwipeBehavior.DISMISS_SOURCE) return
+        requestDismiss(payload)
     }
 
     /**
