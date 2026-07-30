@@ -15,6 +15,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ClearAll
+import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -76,6 +80,15 @@ const val TAG_APP_FILTER_DETAIL_REDACT: String = "app-filter-detail-redact"
 
 /** 詳細設定の「払いのけたら元の通知も消す」チェックのタグ。 */
 const val TAG_APP_FILTER_DETAIL_SWIPE_DISMISS: String = "app-filter-detail-swipe-dismiss"
+
+/** 受信専用ロールの、払いのけの扱いを切り替えるトグルのタグ接頭辞。 */
+const val TAG_APP_FILTER_SWIPE_PREFIX: String = "app-filter-swipe-"
+
+/** 通知を止めるトグルの説明。 */
+const val MUTE_TOGGLE_DESCRIPTION: String = "このアプリの通知を送らせない"
+
+/** 払いのけの扱いを切り替えるトグルの説明。 */
+const val SWIPE_DISMISS_TOGGLE_DESCRIPTION: String = "払いのけたら発信側の通知も消す"
 
 /** 詳細画面の優先度ラジオのタグ接頭辞（末尾に優先度名または "default" を付ける）。 */
 const val TAG_APP_FILTER_DETAIL_PRIORITY_PREFIX: String = "app-filter-detail-priority-"
@@ -157,13 +170,17 @@ private fun ScreenHeader(mode: FilterMode, receiveOnly: Boolean, onBack: (() -> 
     )
 }
 
-/** 現在のモードとチェックの意味を説明する文言。 */
+/**
+ * 現在のモードと操作の意味を説明する文言（§10.4）。
+ * この画面の設定はどれも通知を出す側（発信側）の端末に効く。受信端末から操作したときも
+ * コマンドで発信側へ届いて発信側の設定が変わるため、そのことを常に明示する。
+ */
 private fun modeDescription(mode: FilterMode, receiveOnly: Boolean): String {
     val base = when (mode) {
-        FilterMode.DENYLIST -> "除外リスト: チェックしたアプリは転送しません"
-        FilterMode.ALLOWLIST -> "許可リスト: チェックしたアプリだけ転送します"
+        FilterMode.DENYLIST -> "除外リスト: 選んだアプリは転送しません"
+        FilterMode.ALLOWLIST -> "許可リスト: 選んだアプリだけ転送します"
     }
-    return if (receiveOnly) "$base（この端末が非表示にしたものを表示中）" else base
+    return if (receiveOnly) "$base。ここでの操作は発信側の端末の設定を変えます" else base
 }
 
 @Composable
@@ -390,6 +407,32 @@ private fun DetailDialog(
     )
 }
 
+/**
+ * 発信側の設定を切り替えるアイコントグル（§10.4）。入り切りは色の濃さで示す。
+ */
+@Composable
+private fun IconToggle(
+    on: Boolean,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    tag: String,
+    onChange: (Boolean) -> Unit,
+) {
+    Icon(
+        imageVector = icon,
+        contentDescription = description,
+        tint = if (on) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+        },
+        modifier = Modifier
+            .clickable { onChange(!on) }
+            .padding(8.dp)
+            .testTag(tag),
+    )
+}
+
 @Composable
 private fun ReceiveRoleContent(
     controller: AppFilterController,
@@ -430,13 +473,27 @@ private fun ReceiveRoleContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Checkbox(
-                        checked = isPackageChecked(rules, candidate.packageName, FilterMode.DENYLIST, isSystemPackage = false),
-                        onCheckedChange = { checked ->
-                            rules = controller.setMirroredMute(candidate.packageName, candidate.senderDeviceId, checked)
-                        },
-                        modifier = Modifier.testTag("$TAG_APP_FILTER_CHECKBOX_PREFIX${candidate.packageName}"),
-                    )
+                    val rule = controller.appRuleFor(candidate.packageName, rules)
+                    IconToggle(
+                        on = !rule.forward,
+                        icon = Icons.Default.NotificationsOff,
+                        description = MUTE_TOGGLE_DESCRIPTION,
+                        tag = "$TAG_APP_FILTER_CHECKBOX_PREFIX${candidate.packageName}",
+                    ) { on ->
+                        rules = controller.setMirroredMute(candidate.packageName, candidate.senderDeviceId, on)
+                    }
+                    IconToggle(
+                        on = rule.swipeDismissesSource,
+                        icon = Icons.Default.ClearAll,
+                        description = SWIPE_DISMISS_TOGGLE_DESCRIPTION,
+                        tag = "$TAG_APP_FILTER_SWIPE_PREFIX${candidate.packageName}",
+                    ) { on ->
+                        rules = controller.setMirroredAppRule(
+                            candidate.packageName,
+                            candidate.senderDeviceId,
+                            rule.copy(swipeDismissesSource = on),
+                        )
+                    }
                 }
             }
         }

@@ -493,6 +493,15 @@ class DesktopReceiver(
                 log.w(error) { "failed to send mute command for $packageName" }
             }
         },
+        sendAppRuleCommand = { packageName, senderDeviceId, settings ->
+            try {
+                commandSender.setAppRule(senderDeviceId, packageName, settings)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                log.w(error) { "failed to send app rule command for $packageName" }
+            }
+        },
     )
 
     /**

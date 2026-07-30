@@ -485,6 +485,7 @@ class TimelineScreenTest {
             TimelineScreen(items(), actions = TimelineActions())
         }
         onNodeWithTag(TAG_TIMELINE_SOURCE_ALIVE_BUTTON).assertContentDescriptionEquals(SOURCE_ALIVE_DESCRIPTION)
+        onNodeWithTag(TAG_TIMELINE_SOURCE_ALIVE_BUTTON).assertIsDisplayed()
         onAllNodesWithTag(TAG_TIMELINE_SOURCE_DISMISSED_BUTTON).assertCountEquals(0)
     }
 
@@ -495,6 +496,7 @@ class TimelineScreenTest {
             TimelineScreen(items(sourceDismissed = true), actions = TimelineActions())
         }
         onNodeWithTag(TAG_TIMELINE_SOURCE_DISMISSED_BUTTON).assertContentDescriptionEquals(SOURCE_DISMISSED_DESCRIPTION)
+        onNodeWithTag(TAG_TIMELINE_SOURCE_DISMISSED_BUTTON).assertIsDisplayed()
         onAllNodesWithTag(TAG_TIMELINE_SOURCE_ALIVE_BUTTON).assertCountEquals(0)
     }
 

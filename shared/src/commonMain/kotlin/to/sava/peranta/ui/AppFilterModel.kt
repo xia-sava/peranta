@@ -6,6 +6,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
+import to.sava.peranta.filter.applyAppRule
+import to.sava.peranta.filter.appRuleSettingsFor
+import to.sava.peranta.model.AppRuleSettings
 import to.sava.peranta.filter.FilterMode
 import to.sava.peranta.filter.FilterRule
 import to.sava.peranta.filter.setPackageChecked
@@ -63,14 +66,18 @@ fun historyPackagesFrom(items: List<TimelineItem>): List<HistoryPackage> {
 }
 
 /**
- * アプリフィルタ画面（§10.4）の永続化と、受信専用端末での送信元への mute/unmute 通知を担う。
+ * アプリフィルタ画面（§10.4）の永続化と、受信専用端末から発信側への設定変更の送信を担う。
  * ルール更新は [ConfigRepository.updateFilterRules] の排他更新に委ね、通知捕捉側の並行書き込みと競合しない。
- * [sendMuteCommand] と [commandScope] が揃うと、ローカルミラー反映と同時に送信元へコマンドを送る。
+ * [sendMuteCommand] / [sendAppRuleCommand] と [commandScope] が揃うと、ローカルミラー反映と同時に
+ * 発信側へコマンドを送る。
  */
 class AppFilterController(
     private val repository: ConfigRepository,
     private val commandScope: CoroutineScope? = null,
     private val sendMuteCommand: (suspend (packageName: String, senderDeviceId: String, mute: Boolean) -> Unit)? = null,
+    private val sendAppRuleCommand: (
+        suspend (packageName: String, senderDeviceId: String, settings: AppRuleSettings) -> Unit
+    )? = null,
 ) {
 
     /** 現在の設定（フィルタモード・ルール）を読み出す。 */
@@ -93,4 +100,26 @@ class AppFilterController(
         }
         return updated
     }
+
+    /**
+     * 受信専用端末で [packageName] の扱いを [settings] へ変え、発信側へも同じ内容を送る（§10.4-1）。
+     * アプリフィルタは発信側に効く設定なので、ここでの操作は自端末のミラーだけでなく発信側を変える。
+     */
+    fun setMirroredAppRule(
+        packageName: String,
+        senderDeviceId: String,
+        settings: AppRuleSettings,
+    ): List<FilterRule> {
+        val updated = updateRules { rules ->
+            applyAppRule(rules, packageName, settings, FilterMode.DENYLIST, isSystemPackage = false)
+        }
+        sendAppRuleCommand?.let { sender ->
+            commandScope?.launch { sender(packageName, senderDeviceId, settings) }
+        }
+        return updated
+    }
+
+    /** [packageName] の現在の扱いを読み出す（詳細ダイアログの初期値、§10.4）。 */
+    fun appRuleFor(packageName: String, rules: List<FilterRule>): AppRuleSettings =
+        appRuleSettingsFor(rules, packageName, FilterMode.DENYLIST, isSystemPackage = false)
 }
