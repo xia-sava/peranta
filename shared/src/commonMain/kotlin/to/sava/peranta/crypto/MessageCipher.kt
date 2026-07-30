@@ -22,6 +22,10 @@ private const val KEY_SIZE = 32
 class KeyIdMismatchException(val expected: String, val actual: String) :
     Exception("keyId mismatch: expected=$expected actual=$actual")
 
+/** 封筒の版が受信側の知る版より新しい場合に投げる。端末の更新を促すため復号失敗と区別する。 */
+class UnsupportedEnvelopeVersionException(val supported: Int, val actual: Int) :
+    Exception("unsupported envelope version: supported=$supported actual=$actual")
+
 /** 復号・認証タグ検証に失敗した場合に投げる。改竄や鍵違いを示す。 */
 class DecryptionException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
@@ -57,8 +61,18 @@ class MessageCipher(key: ByteArray, val keyId: String) {
         )
     }
 
+    /**
+     * 封筒を開いて Payload を取り出す。封筒の開け方・鍵・中身の順に確かめる。
+     *
+     * 自分の知る版より新しい封筒は開け方が分からないため拒む。古い版は受け入れる
+     * （新旧の端末が混在する間も、更新済みの端末が未更新の端末からの封筒を開けるようにする）。
+     * AAD は封筒が名乗る版で組む。封緘した版と同じ値でなければタグ検証が通らない。
+     */
     @OptIn(DelicateCryptographyApi::class)
     suspend fun open(envelope: Envelope): Payload {
+        if (envelope.v > ENVELOPE_VERSION) {
+            throw UnsupportedEnvelopeVersionException(supported = ENVELOPE_VERSION, actual = envelope.v)
+        }
         if (envelope.keyId != keyId) {
             throw KeyIdMismatchException(expected = keyId, actual = envelope.keyId)
         }

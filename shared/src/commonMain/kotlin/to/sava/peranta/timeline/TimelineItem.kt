@@ -92,6 +92,10 @@ enum class ErrorKind(val origin: ErrorOrigin) {
     @SerialName("envelopeDecode")
     ENVELOPE_DECODE(ErrorOrigin.UNTRUSTED_INPUT),
 
+    /** 送信側の封筒の版が自分の知る版より新しく開け方が分からない（§6）。復号失敗とは区別する。 */
+    @SerialName("unsupportedEnvelopeVersion")
+    UNSUPPORTED_ENVELOPE_VERSION(ErrorOrigin.UNTRUSTED_INPUT),
+
     @SerialName("keyIdMismatch")
     KEY_ID_MISMATCH(ErrorOrigin.UNTRUSTED_INPUT),
 

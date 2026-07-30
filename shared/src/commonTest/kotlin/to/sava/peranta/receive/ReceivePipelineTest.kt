@@ -9,6 +9,7 @@ import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BlobEnc
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
+import to.sava.peranta.model.ENVELOPE_VERSION
 import to.sava.peranta.model.Envelope
 import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.MAX_FORWARDED_ACTIONS
@@ -153,6 +154,17 @@ class ReceivePipelineTest {
         p.handleEvent(NtfyEvent("e", now, "t", "not-json-at-all"))
         val error = p.items.value.single() as ErrorItem
         assertEquals(ErrorKind.ENVELOPE_DECODE, error.kind)
+    }
+
+    /** 自分の知る版より新しい封筒は端末の更新を促す ErrorItem になり、通知は追加されない。 */
+    @Test
+    fun newerEnvelopeVersionProducesUpdatePromptError() = runTest {
+        val p = pipeline()
+        val newer = cipher.seal(notification()).copy(v = ENVELOPE_VERSION + 1)
+        p.handleEvent(NtfyEvent("e", now, "t", encodeEnvelope(newer)))
+        val error = p.items.value.single() as ErrorItem
+        assertEquals(ErrorKind.UNSUPPORTED_ENVELOPE_VERSION, error.kind)
+        assertTrue(error.message.contains("更新"))
     }
 
     /** 宛先が自端末でも全端末でもない通知は破棄され、何も追加されない。 */

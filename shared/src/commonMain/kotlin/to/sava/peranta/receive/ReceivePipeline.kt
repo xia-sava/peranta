@@ -6,6 +6,7 @@ import kotlinx.serialization.SerializationException
 import to.sava.peranta.crypto.DecryptionException
 import to.sava.peranta.crypto.KeyIdMismatchException
 import to.sava.peranta.crypto.MessageCipher
+import to.sava.peranta.crypto.UnsupportedEnvelopeVersionException
 import to.sava.peranta.filter.payloadForPersistence
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
@@ -37,6 +38,10 @@ import to.sava.peranta.timeline.TimelineItem
 /** keyId 不一致時にタイムラインへ出す文言。 */
 private const val KEY_MISMATCH_MESSAGE =
     "暗号鍵が一致しません。ペアリングをやり直してください"
+
+/** 送信側の封筒の版が新しく開けない場合にタイムラインへ出す文言。 */
+private const val UNSUPPORTED_ENVELOPE_VERSION_MESSAGE =
+    "送信側の端末が新しい版です。この端末を更新してください"
 
 /** 重複排除で記憶する payload.id の上限。剪定上限と揃える。 */
 private const val DEDUPE_CAPACITY = 1000
@@ -134,6 +139,13 @@ class ReceivePipeline(
 
         val decrypted = try {
             cipher.open(envelope)
+        } catch (e: UnsupportedEnvelopeVersionException) {
+            recordError(
+                ErrorKind.UNSUPPORTED_ENVELOPE_VERSION,
+                UNSUPPORTED_ENVELOPE_VERSION_MESSAGE,
+                causeLabel = e::class.simpleName,
+            )
+            return
         } catch (e: KeyIdMismatchException) {
             recordError(ErrorKind.KEY_ID_MISMATCH, KEY_MISMATCH_MESSAGE, causeLabel = e::class.simpleName)
             return

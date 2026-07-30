@@ -3,6 +3,7 @@ package to.sava.peranta.crypto
 import kotlinx.coroutines.test.runTest
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
+import to.sava.peranta.model.ENVELOPE_VERSION
 import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.NotificationPayload
@@ -121,12 +122,25 @@ class MessageCipherTest {
         assertFailsWith<DecryptionException> { other.open(envelope) }
     }
 
-    /** v の改竄が AAD 束縛を破り DecryptionException になることを検証する。 */
+    /**
+     * 古い版への v の改竄が AAD 束縛を破り DecryptionException になることを検証する。
+     * 古い版は復号まで進むため、版の判定ではなくタグ検証で落ちる。
+     */
     @Test
     fun tamperedVersionBreaksAadBinding() = runTest {
         val envelope = cipher.seal(notification())
-        val tampered = envelope.copy(v = envelope.v + 1)
+        val tampered = envelope.copy(v = envelope.v - 1)
         assertFailsWith<DecryptionException> { cipher.open(tampered) }
+    }
+
+    /** 自分の知る版より新しい封筒が復号を試みる前に拒まれることを検証する。 */
+    @Test
+    fun newerEnvelopeVersionIsRejectedBeforeDecryption() = runTest {
+        val envelope = cipher.seal(notification())
+        val newer = envelope.copy(v = ENVELOPE_VERSION + 1)
+        val error = assertFailsWith<UnsupportedEnvelopeVersionException> { cipher.open(newer) }
+        assertEquals(ENVELOPE_VERSION, error.supported)
+        assertEquals(ENVELOPE_VERSION + 1, error.actual)
     }
 
     /** keyId の改竄が AAD 束縛を破り DecryptionException になることを検証する。 */
