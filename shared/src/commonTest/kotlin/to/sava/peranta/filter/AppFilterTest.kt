@@ -1,5 +1,6 @@
 package to.sava.peranta.filter
 
+import to.sava.peranta.model.AppRuleSettings
 import to.sava.peranta.model.Priority
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -129,6 +130,49 @@ class AppFilterTest {
             swipeDismissesSource = false, mode = FilterMode.DENYLIST, isSystemPackage = false,
         )
         assertTrue(result.isEmpty())
+    }
+
+    // --- ルールをまとめて置き換える（受信端末からの設定変更、§3.4 / §7） ---
+
+    /** applyAppRule は転送可否と詳細をまとめて反映する。 */
+    @Test
+    fun applyAppRuleSetsForwardAndDetailTogether() {
+        val settings = AppRuleSettings(
+            forward = false,
+            priorityOverride = Priority.HIGH,
+            redact = true,
+            swipeDismissesSource = true,
+        )
+        val result = applyAppRule(emptyList(), "com.app", settings, FilterMode.DENYLIST, isSystemPackage = false)
+        assertEquals(
+            FilterRule("com.app", RuleAction.EXCLUDE, Priority.HIGH, redact = true, swipeDismissesSource = true),
+            result.single(),
+        )
+    }
+
+    /** 払いのけの扱いだけを持つルールは、転送が既定のままでも残る（設定が消えない）。 */
+    @Test
+    fun applyAppRuleKeepsRuleWithOnlySwipeSetting() {
+        val settings = AppRuleSettings(forward = true, swipeDismissesSource = true)
+        val result = applyAppRule(emptyList(), "com.app", settings, FilterMode.DENYLIST, isSystemPackage = false)
+        assertEquals(FilterRule("com.app", RuleAction.INCLUDE, swipeDismissesSource = true), result.single())
+    }
+
+    /** 扱いを全て既定に戻すと、不要になったルールは残らない。 */
+    @Test
+    fun applyAppRuleDropsRuleWhenEverythingIsDefault() {
+        val rules = listOf(FilterRule("com.app", RuleAction.EXCLUDE, redact = true))
+        val settings = AppRuleSettings(forward = true)
+        val result = applyAppRule(rules, "com.app", settings, FilterMode.DENYLIST, isSystemPackage = false)
+        assertTrue(result.isEmpty())
+    }
+
+    /** appRuleSettingsFor は現在の扱いをそのまま読み出す。 */
+    @Test
+    fun appRuleSettingsForReadsCurrentRule() {
+        val rules = listOf(FilterRule("com.app", RuleAction.EXCLUDE, Priority.LOW, redact = true))
+        val settings = appRuleSettingsFor(rules, "com.app", FilterMode.DENYLIST, isSystemPackage = false)
+        assertEquals(AppRuleSettings(forward = false, priorityOverride = Priority.LOW, redact = true), settings)
     }
 
     // --- グループ（システムアプリ折りたたみ）の TriState ---

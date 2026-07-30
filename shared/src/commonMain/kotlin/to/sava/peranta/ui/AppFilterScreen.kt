@@ -43,6 +43,9 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.StateFlow
+import to.sava.peranta.filter.appRuleSettingsFor
+import to.sava.peranta.filter.applyAppRule
+import to.sava.peranta.model.AppRuleSettings
 import to.sava.peranta.filter.FilterMode
 import to.sava.peranta.filter.FilterRule
 import to.sava.peranta.filter.GroupCheckState
@@ -258,20 +261,12 @@ private fun SendRoleContent(
 
     detailApp?.let { app ->
         DetailDialog(
-            app = app,
-            rule = rules.firstOrNull { it.packageName == app.packageName },
+            label = app.label,
+            settings = appRuleSettingsFor(rules, app.packageName, mode, app.isSystemApp),
             onDismiss = { detailApp = null },
-            onSave = { priorityOverride, redact, swipeDismissesSource ->
+            onSave = { settings ->
                 rules = controller.updateRules { current ->
-                    updatePackageDetail(
-                        current,
-                        app.packageName,
-                        priorityOverride,
-                        redact,
-                        swipeDismissesSource,
-                        mode,
-                        app.isSystemApp,
-                    )
+                    applyAppRule(current, app.packageName, settings, mode, app.isSystemApp)
                 }
                 detailApp = null
             },
@@ -348,18 +343,18 @@ private fun GroupCheckState.toToggleableState(): ToggleableState = when (this) {
 
 @Composable
 private fun DetailDialog(
-    app: InstalledApp,
-    rule: FilterRule?,
+    label: String,
+    settings: AppRuleSettings,
     onDismiss: () -> Unit,
-    onSave: (priorityOverride: Priority?, redact: Boolean, swipeDismissesSource: Boolean) -> Unit,
+    onSave: (settings: AppRuleSettings) -> Unit,
 ) {
-    var priorityOverride by remember(app.packageName) { mutableStateOf(rule?.priorityOverride) }
-    var redact by remember(app.packageName) { mutableStateOf(rule?.redact ?: false) }
-    var swipeDismissesSource by remember(app.packageName) { mutableStateOf(rule?.swipeDismissesSource ?: false) }
+    var priorityOverride by remember(label) { mutableStateOf(settings.priorityOverride) }
+    var redact by remember(label) { mutableStateOf(settings.redact) }
+    var swipeDismissesSource by remember(label) { mutableStateOf(settings.swipeDismissesSource) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(text = app.label) },
+        title = { Text(text = label) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(text = "優先度の上書き", style = MaterialTheme.typography.labelMedium)
@@ -395,7 +390,15 @@ private fun DetailDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onSave(priorityOverride, redact, swipeDismissesSource) },
+                onClick = {
+                    onSave(
+                        settings.copy(
+                            priorityOverride = priorityOverride,
+                            redact = redact,
+                            swipeDismissesSource = swipeDismissesSource,
+                        ),
+                    )
+                },
                 modifier = Modifier.testTag(TAG_APP_FILTER_DETAIL_SAVE),
             ) {
                 Text(text = "保存")
@@ -482,6 +485,7 @@ private fun ReceiveRoleContent(
     val timeline = items?.collectAsState()?.value ?: emptyList()
     val candidates = remember(timeline) { historyPackagesFrom(timeline) }
     var rules by remember { mutableStateOf(controller.load().filterRules) }
+    var detailCandidate by remember { mutableStateOf<HistoryPackage?>(null) }
 
     if (candidates.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -506,7 +510,13 @@ private fun ReceiveRoleContent(
                     modifier = Modifier.fillMaxWidth().padding(end = TOGGLE_ROW_END_PADDING),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { detailCandidate = candidate }
+                            .padding(vertical = 8.dp)
+                            .testTag("$TAG_APP_FILTER_LABEL_PREFIX${candidate.packageName}"),
+                    ) {
                         Text(text = candidate.appName, style = MaterialTheme.typography.bodyMedium)
                         Text(
                             text = candidate.packageName,
@@ -539,5 +549,17 @@ private fun ReceiveRoleContent(
             }
         }
         lazyScrollbarContent(listState)
+    }
+
+    detailCandidate?.let { candidate ->
+        DetailDialog(
+            label = candidate.appName,
+            settings = controller.appRuleFor(candidate.packageName, rules),
+            onDismiss = { detailCandidate = null },
+            onSave = { settings ->
+                rules = controller.setMirroredAppRule(candidate.packageName, candidate.senderDeviceId, settings)
+                detailCandidate = null
+            },
+        )
     }
 }

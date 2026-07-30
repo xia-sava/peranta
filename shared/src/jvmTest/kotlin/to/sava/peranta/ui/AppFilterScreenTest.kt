@@ -17,6 +17,7 @@ import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.filter.FilterMode
 import to.sava.peranta.filter.RuleAction
+import to.sava.peranta.model.AppRuleSettings
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Priority
 import to.sava.peranta.timeline.ReceivedNotification
@@ -166,6 +167,60 @@ class AppFilterScreenTest {
         onNodeWithTag("$TAG_APP_FILTER_CHECKBOX_PREFIX${"com.spam"}").performClick()
         assertEquals(RuleAction.EXCLUDE, repo.load().filterRules.single().action)
         assertEquals(Triple("com.spam", "phone", true), command)
+    }
+
+    /**
+     * 受信専用ロールの払いのけトグルは、ローカルミラーへ反映しつつ発信側へ設定変更を送る（§10.4-1）。
+     * アプリフィルタは発信側に効く設定なので、受信端末での操作も発信側へ届く必要がある。
+     */
+    @Test
+    fun receiveOnlySwipeToggleSendsAppRule() = runComposeUiTest {
+        val repo = repository()
+        var sent: Triple<String, String, AppRuleSettings>? = null
+        val controller = AppFilterController(
+            repository = repo,
+            commandScope = CoroutineScope(Dispatchers.Unconfined),
+            sendAppRuleCommand = { packageName, senderDeviceId, settings ->
+                sent = Triple(packageName, senderDeviceId, settings)
+            },
+        )
+        setContent { AppFilterScreen(controller = controller, items = historyItems()) }
+
+        onNodeWithTag("$TAG_APP_FILTER_SWIPE_PREFIX${"com.spam"}").performClick()
+        assertEquals(true, repo.load().filterRules.single().swipeDismissesSource)
+        assertEquals("com.spam" to "phone", sent?.first to sent?.second)
+        assertEquals(true, sent?.third?.swipeDismissesSource)
+    }
+
+    /** 受信専用ロールでもアプリ名から詳細を開き、伏せ字などの扱いを発信側へ送れる（§10.4-1）。 */
+    @Test
+    fun receiveOnlyDetailDialogSendsAppRule() = runComposeUiTest {
+        val repo = repository()
+        var sent: AppRuleSettings? = null
+        val controller = AppFilterController(
+            repository = repo,
+            commandScope = CoroutineScope(Dispatchers.Unconfined),
+            sendAppRuleCommand = { _, _, settings -> sent = settings },
+        )
+        setContent { AppFilterScreen(controller = controller, items = historyItems()) }
+
+        onNodeWithTag("$TAG_APP_FILTER_LABEL_PREFIX${"com.spam"}").performClick()
+        onNodeWithTag(TAG_APP_FILTER_DETAIL_REDACT).performClick()
+        onNodeWithTag(TAG_APP_FILTER_DETAIL_SAVE).performClick()
+        assertEquals(true, repo.load().filterRules.single().redact)
+        assertEquals(true, sent?.redact)
+    }
+
+    /** 受信専用ロールの候補 1 件を持つ履歴。 */
+    private fun historyItems(): MutableStateFlow<List<TimelineItem>> {
+        val payload = NotificationPayload(
+            id = "n1", from = "phone", to = "*", sentAtEpochMillis = 1L,
+            packageName = "com.spam", appName = "Spam", title = "t", text = "x",
+            notificationKey = "k", postedAtEpochMillis = 1L,
+        )
+        return MutableStateFlow(
+            listOf(ReceivedNotification(id = "n1", timestampEpochMillis = 1L, payload = payload)),
+        )
     }
 
     /** 受信専用ロールで履歴が空なら候補は出ず、案内文だけ出す。 */
