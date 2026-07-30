@@ -1,7 +1,7 @@
 package to.sava.peranta.receive
 
 import co.touchlab.kermit.Logger
-import to.sava.peranta.model.NotificationPayload
+import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineItem
 
@@ -13,6 +13,7 @@ import to.sava.peranta.timeline.TimelineItem
  * 再投稿されたもの全件）を探し、それぞれの payload.id で自端末が表示したローカル通知を取り下げる
  * （[dismissLocal]）。1 件も見つからない場合は、既に消えている／未受信とみなして非致命的に扱う
  * （他端末による削除と競合し得るため）。
+ * 対象の照合は SMS アプリの通知と対応づいた SMS アイテムにも及ぶ（§3.4）。
  */
 class LocalDismissCommandExecutor(
     private val items: () -> List<TimelineItem>,
@@ -23,7 +24,7 @@ class LocalDismissCommandExecutor(
     override suspend fun dismiss(notificationKey: String) {
         val targets = items().asSequence()
             .filterIsInstance<ReceivedNotification>()
-            .filter { (it.payload as? NotificationPayload)?.notificationKey == notificationKey }
+            .filter { it.payload.notificationKeyOrNull() == notificationKey }
             .toList()
         if (targets.isEmpty()) {
             log.i { "dismiss target not present (already gone?) key=$notificationKey" }

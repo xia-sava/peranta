@@ -60,26 +60,42 @@ class LocalDismissCommandExecutorTest {
         assertTrue(dismissed.isEmpty())
     }
 
-    /** notificationKey を持たない SMS 等は dismiss の対象にならない。 */
+    private fun receivedSms(key: String?, id: String): ReceivedNotification = ReceivedNotification(
+        id = id,
+        timestampEpochMillis = 1,
+        payload = SmsPayload(
+            id = id,
+            from = "phone",
+            to = "*",
+            sentAtEpochMillis = 1,
+            senderNumber = "123",
+            text = "code",
+            postedAtEpochMillis = 1,
+            notificationKey = key,
+        ),
+    )
+
+    /** 元通知に紐づかない受信アイテム（notificationKey を持たないもの）は dismiss の対象にならない。 */
     @Test
-    fun dismissIgnoresNonNotificationPayloads() = runTest {
+    fun dismissIgnoresPayloadsWithoutNotificationKey() = runTest {
         val dismissed = mutableListOf<String>()
-        val sms = ReceivedNotification(
-            id = "s",
-            timestampEpochMillis = 1,
-            payload = SmsPayload(
-                id = "s",
-                from = "phone",
-                to = "*",
-                sentAtEpochMillis = 1,
-                senderNumber = "123",
-                text = "code",
-                postedAtEpochMillis = 1,
-            ),
-        )
-        val executor = LocalDismissCommandExecutor(items = { listOf(sms) }, dismissLocal = { dismissed.add(it) })
+        val items = listOf<TimelineItem>(receivedSms(key = null, id = "s"))
+        val executor = LocalDismissCommandExecutor(items = { items }, dismissLocal = { dismissed.add(it) })
         executor.dismiss("anything")
         assertTrue(dismissed.isEmpty())
+    }
+
+    /**
+     * SMS アプリの通知と対応づいて notificationKey を持つ SMS アイテムも dismiss の対象になる（§3.4）。
+     * 通知アイテムだけを照合してミラー通知が消え残る不具合の回帰。
+     */
+    @Test
+    fun dismissDismissesSmsCarryingNotificationKey() = runTest {
+        val dismissed = mutableListOf<String>()
+        val items = listOf<TimelineItem>(receivedSms(key = "0|sms", id = "s"), received("0|k1", "id-1"))
+        val executor = LocalDismissCommandExecutor(items = { items }, dismissLocal = { dismissed.add(it) })
+        executor.dismiss("0|sms")
+        assertEquals(listOf("s"), dismissed)
     }
 
     /** invokeAction / reply / muteApp / unmuteApp は表示専用端末では no-op（例外も取り下げも起こさない）。 */
