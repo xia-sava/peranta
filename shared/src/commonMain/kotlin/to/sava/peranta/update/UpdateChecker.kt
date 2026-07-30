@@ -73,6 +73,7 @@ class UpdateChecker(
         val release = manifest.release(platformKey)
             ?: return UpdateStatus.Failed("latest.json にプラットフォーム '$platformKey' の項目がありません")
         if (release.versionCode <= currentVersionCode) {
+            log.i { "update check: up to date (code $currentVersionCode)" }
             return UpdateStatus.UpToDate
         }
         log.i { "update available: ${release.versionName} (code ${release.versionCode})" }
