@@ -299,7 +299,7 @@ class PerantaNotificationListenerService : NotificationListenerService() {
     /**
      * 直接受信済みの SMS と対応づいた元通知の key を、改版として受信端末へ送る（§3.1）。
      * これでその SMS アイテムが既読同期（§3.4）の対象になる。あわせて key を転送済みとして覚え、
-     * スマホ側で元通知が消えたときの追随（§3.4）も効くようにする。
+     * 送信元で元通知が消えたときの追随（§3.4）も効くようにする。
      * 転送内容が未確定（記憶の保持時間切れ・対応づけ済み）なら何もしない。
      */
     private fun forwardSmsNotificationKey(

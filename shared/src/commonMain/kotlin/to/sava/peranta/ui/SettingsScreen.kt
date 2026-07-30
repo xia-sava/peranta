@@ -132,7 +132,7 @@ private const val SECTION_SETUP_OVERVIEW: String = "セットアップ状況"
 private const val SECTION_CONNECTION: String = "ntfyサーバー接続設定"
 private const val SECTION_THIS_DEVICE: String = "この端末"
 private const val SECTION_NOTIFICATIONS: String = "通知と履歴"
-private const val SECTION_THIS_PC: String = "この PC での動作"
+private const val SECTION_AUTO_START: String = "自動起動"
 private const val SECTION_UPDATE: String = "アプリの更新"
 private const val SECTION_ADD_DEVICE: String = "端末の追加"
 private const val SECTION_DANGER: String = "危険な操作"
@@ -154,7 +154,7 @@ private const val SECTION_DANGER: String = "危険な操作"
  * [loadReceiveSetupItems] で受信のセットアップ項目を取得する。[onOpenHealthCheck] / [onOpenReceiveSetup] /
  * [onOpenPairingImport] は各行の導線で、null なら該当行の導線を出さない。
  * [update] が非 null のとき「アプリの更新」セクションを出し、ボタン押下時だけ更新確認を実行する（§12）。
- * [autoStart] が非 null のとき「この PC での動作」セクションを出し、ログオン時自動起動の登録を扱う（§3.3）。
+ * [autoStart] が非 null のとき「自動起動」セクションを出し、サインイン時の自動起動の登録を扱う（§3.3）。
  * [showHeader] が false のときは画面見出し行（タイトルと「タイムラインへ」）を出さない。外側のアプリバーが
  * 見出しと戻る導線を持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
  */
@@ -426,7 +426,7 @@ fun SettingsScreen(
                 )
 
                 if (autoStart != null) {
-                    SectionHeader(title = SECTION_THIS_PC)
+                    SectionHeader(title = SECTION_AUTO_START)
                     LabeledCheckbox(
                         checked = autoStartEnabled,
                         onCheckedChange = { autoStartEnabled = it; autoStart.onChange(it) },

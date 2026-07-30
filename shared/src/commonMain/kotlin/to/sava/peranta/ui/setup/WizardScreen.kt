@@ -684,7 +684,7 @@ private fun skipConsequence(pageId: String): String =
     when (pageId) {
         WizardFlow.PAGE_AUTOSTART -> "この設定を飛ばすと、サインイン後すぐには受信を始められないことがあります。"
         WizardFlow.PAGE_REVERSE_CHANNEL ->
-            "この設定を飛ばすと、他の端末からこのスマホの通知を消したり、既読にしたりできなくなります。"
+            "この設定を飛ばすと、他の端末からこの端末の通知を消したり、既読にしたりできなくなります。"
 
         ReceiveSetupSteps.NTFY_BATTERY_ID ->
             "この設定を飛ばすと、省電力設定によっては通知の受信が遅れたり止まったりすることがあります。"

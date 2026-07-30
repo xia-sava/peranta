@@ -18,7 +18,7 @@ import to.sava.peranta.roster.resolveTargetTopic
  * 受信端末・送信端末の双方から、通知への操作コマンドを配送する（§3.4）。
  * 宛先は command 種別で分類する:
  * - dismiss: 既読同期のため全端末へブロードキャスト（`to: "*"`、自分除外は [resolveSendTopics] に委ねる）。
- * - invokeAction / reply / muteApp: 実行できるのは元通知の送信元（スマホ）だけなので、その deviceId へ一点指定する。
+ * - invokeAction / reply / muteApp: 実行できるのは元通知の送信元だけなので、その deviceId へ一点指定する。
  *
  * 失効までの猶予とサーバのキャッシュ保持は、種別ごとの配送特性（[CommandDelivery]）から引く。
  *
@@ -77,7 +77,7 @@ class CommandSender(
             replyText = truncateToUtf8Bytes(text, MAX_REPLY_TEXT_BYTES),
         )
 
-    /** [targetDeviceId] のスマホへアプリ非表示（denylist 追加）コマンドを送る（§3.4 / §7）。 */
+    /** [targetDeviceId] の端末へアプリ非表示（denylist 追加）コマンドを送る（§3.4 / §7）。 */
     suspend fun muteApp(targetDeviceId: String, packageName: String): Boolean =
         publish(
             command = CommandType.MUTE_APP,
@@ -86,7 +86,7 @@ class CommandSender(
             packageName = packageName,
         )
 
-    /** [targetDeviceId] のスマホへアプリ非表示解除（denylist から除去）コマンドを送る（§3.4 / §7）。 */
+    /** [targetDeviceId] の端末へアプリ非表示解除（denylist から除去）コマンドを送る（§3.4 / §7）。 */
     suspend fun unmuteApp(targetDeviceId: String, packageName: String): Boolean =
         publish(
             command = CommandType.UNMUTE_APP,

@@ -474,7 +474,7 @@ class DesktopReceiver(
 
     /**
      * 受信専用端末のアプリフィルタ画面（§10.4-1）向けコントローラを組む。
-     * チェック操作は [repository] のローカルミラー（filterRules）へ反映すると同時に、送信元スマホへ
+     * チェック操作は [repository] のローカルミラー（filterRules）へ反映すると同時に、送信元の端末へ
      * mute/unmute コマンドを送る。宛先はタイムライン履歴に記録された送信元 deviceId を使う。
      */
     fun appFilterController(): AppFilterController = AppFilterController(

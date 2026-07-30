@@ -272,7 +272,7 @@ object PerantaReceive {
 
     /**
      * 受信専用端末のアプリフィルタ画面（§10.4-1）向けコントローラを組む。
-     * チェック操作は自端末のローカルミラー（filterRules）へ反映すると同時に、送信元スマホへ
+     * チェック操作は自端末のローカルミラー（filterRules）へ反映すると同時に、送信元の端末へ
      * mute/unmute コマンドを送る。宛先はタイムライン履歴に記録された送信元 deviceId を使う。
      */
     fun appFilterController(context: Context): AppFilterController {
@@ -378,7 +378,7 @@ object PerantaReceive {
     }
 
     /**
-     * 受信端末から送信元スマホへコマンドを送るための [CommandSender] を組む。
+     * 受信端末から送信元の端末へコマンドを送るための [CommandSender] を組む。
      * 送信に必要な設定（トークン・配送先解決）が揃っていなければ null。
      */
     private fun commandSender(appContext: Context): CommandSender? {

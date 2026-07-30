@@ -13,7 +13,7 @@ data class WindowGeometry(
 )
 
 /**
- * ウィンドウの見え方を設定ストアに覚える（§11）。この PC でだけ意味を持つ表示状態のため
+ * ウィンドウの見え方を設定ストアに覚える（§11）。この端末でだけ意味を持つ表示状態のため
  * ペアリングでは配らず、[to.sava.peranta.config.PerantaConfig] とは別に保存する。
  */
 class WindowGeometryStore(private val settings: Settings) {
