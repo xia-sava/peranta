@@ -157,9 +157,11 @@ object PerantaReceive {
         val presenter = AndroidNotificationPresenter(appContext)
         // 通知操作は実行時点の NLS 接続で選び、設定更新（mute/unmute）は接続に依らず常に反映する（§3.4/§7）。
         // NLS の許可・切断や設定変更が後から起きても、コマンドごとに実態を問い直して振る舞う。
+        // 他アプリの通知への操作は、送信済みタイムラインに転送実績がある通知だけに限る（§3.4）。
         val commandExecutor = RoutingCommandExecutor(
             isNlsConnected = { PerantaNotificationListenerService.activeInstance != null },
             isForwardingIntended = { androidConfigRepository(appContext).load().sendEnabled },
+            items = { PerantaSend.timelineFeed.items.value },
             notificationOps = AndroidCommandExecutor(appContext),
             localDismiss = LocalDismissCommandExecutor(
                 items = { PerantaSend.timelineFeed.items.value },

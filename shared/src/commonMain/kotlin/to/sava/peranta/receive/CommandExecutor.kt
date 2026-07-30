@@ -1,10 +1,14 @@
 package to.sava.peranta.receive
 
 /**
- * 受信した command ペイロード（§4.1）をプラットフォーム固有に実行する窓口（§3.4）。
- * NLS 操作・denylist 書き込みは commonMain から直接呼べないため、実装は androidMain で差し込み、
- * [ReceivePipeline] に注入する。commonMain 側は宛先・失効・必須フィールドの検証まで済ませてから呼ぶため、
+ * 受信した command ペイロード（§4.1）を実行する [ReceivePipeline] 側の窓口（§3.4）。
+ * [ReceivePipeline] は宛先・失効・必須フィールドの検証まで済ませてから呼ぶため、
  * 各メソッドの引数は非 null で妥当な値が渡る。
+ *
+ * 対象通知は素の notificationKey で受け取る。自端末の表示を操作する実装
+ * （[LocalDismissCommandExecutor]）が直接これを担い、他アプリの通知を操作する実装は
+ * [AuthorizedNotificationKey] を要求する [NotificationOps] の側に置く。
+ * 両者の振り分けは [RoutingCommandExecutor] が担う。
  *
  * 実行に失敗した場合（対象通知が見つからない・actionIndex が範囲外・返信入力欄が無い等）は
  * 理由を添えた [CommandExecutionException] を送出する。[ReceivePipeline] がこれを捕捉し、

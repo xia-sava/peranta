@@ -104,6 +104,10 @@ enum class ErrorKind(val origin: ErrorOrigin) {
     @SerialName("commandExecution")
     COMMAND_EXECUTION(ErrorOrigin.LOCAL_OPERATION),
 
+    /** 自端末が転送していない通知への操作を拒んだ（§3.4）。実行そのものの失敗とは区別する。 */
+    @SerialName("commandUnauthorized")
+    COMMAND_UNAUTHORIZED(ErrorOrigin.LOCAL_OPERATION),
+
     @SerialName("other")
     OTHER(ErrorOrigin.LOCAL_OPERATION),
 }

@@ -188,7 +188,8 @@ class ReceivePipeline(
     /**
      * 自分宛で未失効の command を実行する（§3.4）。[commandExecutor] が無ければ何もしない。
      * 同一 id の再送で操作を二重発火しないよう、実行前に重複排除する。
-     * 実行失敗（[CommandExecutionException]）はタイムラインへエラーとして記録する。
+     * 実行失敗（[CommandExecutionException]）と、自端末が転送していない通知への操作の拒否
+     * （[CommandUnauthorizedException]）は、それぞれ別種のエラーとしてタイムラインへ記録する。
      */
     private suspend fun executeCommand(payload: CommandPayload) {
         val executor = commandExecutor ?: run {
@@ -202,6 +203,12 @@ class ReceivePipeline(
         try {
             dispatchCommand(executor, payload)
             log.i { "command executed id=${payload.id} command=${payload.command}" }
+        } catch (e: CommandUnauthorizedException) {
+            recordError(
+                ErrorKind.COMMAND_UNAUTHORIZED,
+                e.message ?: "この端末が転送していない通知は操作できません",
+                causeLabel = e::class.simpleName,
+            )
         } catch (e: CommandExecutionException) {
             recordError(
                 ErrorKind.COMMAND_EXECUTION,
@@ -211,13 +218,19 @@ class ReceivePipeline(
         }
     }
 
-    /** command 種別ごとに必須フィールドを検証し、[executor] の対応メソッドへ委ねる。 */
+    /**
+     * command 種別ごとに必須フィールドを検証し、[executor] の対応メソッドへ委ねる。
+     *
+     * DISMISS では「元通知は消えた」の印（[markSourceDismissed]）を取り下げの前に付ける。
+     * 印は自端末の表示に対する更新で、元通知を実際に取り下げられたかとは独立して成り立つ
+     * （NLS 未接続の端末でも印は付く）。取り下げ側が例外を投げても印は残る。
+     */
     private suspend fun dispatchCommand(executor: CommandExecutor, payload: CommandPayload) {
         when (payload.command) {
             CommandType.DISMISS -> {
                 val key = requireKey(payload)
-                executor.dismiss(key)
                 markSourceDismissed(key)
+                executor.dismiss(key)
             }
 
             CommandType.INVOKE_ACTION ->
