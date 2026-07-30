@@ -407,6 +407,46 @@ private fun DetailDialog(
     )
 }
 
+/** トグル列が画面端に貼り付かないよう、行の右に置く余白。 */
+private val TOGGLE_ROW_END_PADDING = 8.dp
+
+/**
+ * アイコントグルの意味を示す凡例（§10.4）。図柄だけでは何の設定か分からないため、
+ * 一覧の上に一度だけ並びと同じ順で示す。
+ */
+@Composable
+private fun ToggleLegend() {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LegendItem(Icons.Default.NotificationsOff, MUTE_TOGGLE_DESCRIPTION)
+        LegendItem(Icons.Default.ClearAll, SWIPE_DISMISS_TOGGLE_DESCRIPTION)
+    }
+}
+
+@Composable
+private fun LegendItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
+    Row(
+        modifier = Modifier.padding(start = 12.dp, end = TOGGLE_ROW_END_PADDING),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp),
+        )
+    }
+}
+
 /**
  * 発信側の設定を切り替えるアイコントグル（§10.4）。入り切りは色の濃さで示す。
  */
@@ -454,6 +494,7 @@ private fun ReceiveRoleContent(
     }
 
     val listState = rememberLazyListState()
+    ToggleLegend()
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
@@ -462,7 +503,7 @@ private fun ReceiveRoleContent(
         ) {
             items(candidates, key = { it.packageName }) { candidate ->
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(end = TOGGLE_ROW_END_PADDING),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {

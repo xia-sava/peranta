@@ -58,6 +58,7 @@ class TimelineScreenTest {
         key: String = "0|com.example|1|null|10",
         from: String = "phone",
         packageName: String = "com.example",
+        text: String = "code 123456",
     ) = NotificationPayload(
         id = "n1",
         from = from,
@@ -66,7 +67,7 @@ class TimelineScreenTest {
         packageName = packageName,
         appName = "Example",
         title = "Verification",
-        text = "code 123456",
+        text = text,
         notificationKey = key,
         actions = actions,
         actionDetails = actionDetails,
@@ -125,6 +126,19 @@ class TimelineScreenTest {
         }
         onNodeWithTag("${TAG_TIMELINE_ACTION_PREFIX}1").performClick()
         assertEquals(Triple("phone", "0|com.example|1|null|10", 1), invoked)
+    }
+
+    /**
+     * 本文が長い通知でも状態兼ボタンは押し出されず表示される（§10.1）。
+     * 本文に幅を取り切らせるとボタンの幅が残らず、画面から消える不具合の回帰。
+     */
+    @Test
+    fun sourceStateButtonStaysVisibleWithLongBody() = runComposeUiTest {
+        val longText = "長い本文です。".repeat(60)
+        setContent {
+            TimelineScreen(items(notification(text = longText)), actions = TimelineActions())
+        }
+        onNodeWithTag(TAG_TIMELINE_SOURCE_ALIVE_BUTTON).assertIsDisplayed()
     }
 
     /** 元通知が生きているアイテムの ✓ ボタンは dismiss だけを送り、タイムラインには残す。 */

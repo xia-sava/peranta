@@ -471,8 +471,14 @@ private fun InteractiveReceivedBubble(
                 .timelineContextGesture(enabled = true) { menuOpen = true },
         ) {
             // バルーン幅は本文と × ボタンを合わせた幅。× は本文に被せず右隣（上寄せ）に置く。
+            // 本文に weight を与えて先に状態兼ボタンの幅を確保する。与えないと本文が横幅を取り切り、
+            // 長い通知でボタンが押し出されて見えなくなる。fill = false でバブル幅は内容なりに縮む。
             Row(verticalAlignment = Alignment.Top) {
-                Column(modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp)) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .padding(start = 12.dp, top = 8.dp, bottom = 8.dp),
+                ) {
                     ReceivedContent(payload, attachments, fullText)
                     if (!item.sourceDismissed) {
                         ActionButtons(payload, onActionClick)

@@ -138,6 +138,12 @@ private const val SECTION_ADD_DEVICE: String = "端末の追加"
 private const val SECTION_DANGER: String = "危険な操作"
 
 /**
+ * セクション見出しの上に置く余白（§10.2）。区切りとして働く量にする。
+ * 見出しは入力欄の文字より大きくし、項目の一部に見えないようにする。
+ */
+private val SECTION_HEADER_TOP_PADDING = 20.dp
+
+/**
  * 設定画面（§10.2）とペアリング（§10.3）を単一スクロールのセクション構造で編集するフラット画面。
  * 接続情報の入力・保存、共有鍵の作成、QR による新端末追加、共有鍵の作り直しを行う。入力・操作は
  * 全て即時保存し、画面を離れたときに反映する。
@@ -648,9 +654,9 @@ private fun overviewMarkerColor(status: SetupOverviewStatus): Color = when (stat
 private fun SectionHeader(title: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
     Text(
         text = title,
-        style = MaterialTheme.typography.labelLarge,
+        style = MaterialTheme.typography.titleMedium,
         color = color,
-        modifier = Modifier.padding(top = 8.dp),
+        modifier = Modifier.padding(top = SECTION_HEADER_TOP_PADDING),
     )
     HorizontalDivider()
 }
@@ -664,7 +670,7 @@ private fun DangerSectionHeader(expanded: Boolean, onToggle: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp)
+            .padding(top = SECTION_HEADER_TOP_PADDING)
             .clickable(onClick = onToggle)
             .testTag(TAG_DANGER_TOGGLE),
         verticalAlignment = Alignment.CenterVertically,
@@ -672,12 +678,12 @@ private fun DangerSectionHeader(expanded: Boolean, onToggle: () -> Unit) {
     ) {
         Text(
             text = if (expanded) "▼" else "▶",
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.error,
         )
         Text(
             text = SECTION_DANGER,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.error,
         )
     }
