@@ -14,6 +14,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -42,6 +43,7 @@ import to.sava.peranta.timeline.SentNotification
 import to.sava.peranta.timeline.TimelineItem
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
@@ -125,9 +127,9 @@ class TimelineScreenTest {
         assertEquals(Triple("phone", "0|com.example|1|null|10", 1), invoked)
     }
 
-    /** × ボタン押下で dismiss を送り、あわせてこの端末のタイムラインからも消す。 */
+    /** 元通知が生きているアイテムの ✓ ボタンは dismiss だけを送り、タイムラインには残す。 */
     @Test
-    fun dismissButtonDismissesAndHidesFromTimeline() = runComposeUiTest {
+    fun sourceAliveButtonDismissesSourceOnly() = runComposeUiTest {
         var dismissedId: String? = null
         var hiddenId: String? = null
         setContent {
@@ -139,14 +141,14 @@ class TimelineScreenTest {
                 ),
             )
         }
-        onNodeWithTag(TAG_TIMELINE_DISMISS_BUTTON).performClick()
+        onNodeWithTag(TAG_TIMELINE_SOURCE_ALIVE_BUTTON).performClick()
         assertEquals("n1", dismissedId)
-        assertEquals("n1", hiddenId)
+        assertNull(hiddenId)
     }
 
-    /** 長押しで開くコンテキストメニューの「消す」も × ボタンと同じ 2 つを行う。 */
+    /** コンテキストメニューの「送信元の通知を消す」も dismiss だけを送る。 */
     @Test
-    fun contextMenuDismissSendsDismissAndHidesFromTimeline() = runComposeUiTest {
+    fun contextMenuDismissSendsDismissOnly() = runComposeUiTest {
         var dismissedKey: String? = null
         var hiddenId: String? = null
         setContent {
@@ -161,6 +163,26 @@ class TimelineScreenTest {
         onNodeWithTag(TAG_TIMELINE_RECEIVED).performMouseInput { rightClick() }
         onNodeWithTag(TAG_TIMELINE_MENU_DISMISS).performClick()
         assertEquals("0|com.example|1|null|10", dismissedKey)
+        assertNull(hiddenId)
+    }
+
+    /** コンテキストメニューの「タイムラインから消す」は command を送らず、この端末からだけ消す。 */
+    @Test
+    fun contextMenuHideRemovesFromTimelineOnly() = runComposeUiTest {
+        var dismissedId: String? = null
+        var hiddenId: String? = null
+        setContent {
+            TimelineScreen(
+                items(),
+                actions = TimelineActions(
+                    dismiss = { dismissedId = it.payload.id },
+                    hideFromTimeline = { hiddenId = it.id },
+                ),
+            )
+        }
+        onNodeWithTag(TAG_TIMELINE_RECEIVED).performMouseInput { rightClick() }
+        onNodeWithTag(TAG_TIMELINE_MENU_HIDE).performClick()
+        assertNull(dismissedId)
         assertEquals("n1", hiddenId)
     }
 
@@ -388,7 +410,7 @@ class TimelineScreenTest {
         setContent { TimelineScreen(items()) }
         onAllNodesWithTag(TAG_TIMELINE_RECEIVED).assertCountEquals(0)
         onAllNodesWithTag("${TAG_TIMELINE_ACTION_PREFIX}0").assertCountEquals(0)
-        onAllNodesWithTag(TAG_TIMELINE_DISMISS_BUTTON).assertCountEquals(0)
+        onAllNodesWithTag(TAG_TIMELINE_SOURCE_ALIVE_BUTTON).assertCountEquals(0)
     }
 
     /** アクションが無い通知はボタンを出さないが、コンテキストメニューは開ける。 */
@@ -410,42 +432,45 @@ class TimelineScreenTest {
         onAllNodesWithTag("${TAG_TIMELINE_ACTION_PREFIX}1").assertCountEquals(0)
     }
 
-    /** sourceDismissed のアイテムは本文の下に「元の通知は消えています」の注記を出す。 */
+    /** 元通知の状態は右上のボタンの記号で示す。生きていれば ✓、消えていれば ×（§10.1）。 */
     @Test
-    fun sourceDismissedItemShowsNote() = runComposeUiTest {
-        setContent {
-            TimelineScreen(items(sourceDismissed = true), actions = TimelineActions())
-        }
-        onNodeWithText(SOURCE_DISMISSED_NOTE).assertExists()
-    }
-
-    /** sourceDismissed でない通常のアイテムには注記が出ない。 */
-    @Test
-    fun nonSourceDismissedItemDoesNotShowNote() = runComposeUiTest {
+    fun sourceStateIsShownByButtonGlyph() = runComposeUiTest {
         setContent {
             TimelineScreen(items(), actions = TimelineActions())
         }
-        onNodeWithText(SOURCE_DISMISSED_NOTE).assertDoesNotExist()
+        onNodeWithTag(TAG_TIMELINE_SOURCE_ALIVE_BUTTON).assertTextEquals(SOURCE_ALIVE_GLYPH)
+        onAllNodesWithTag(TAG_TIMELINE_SOURCE_DISMISSED_BUTTON).assertCountEquals(0)
+    }
+
+    /** sourceDismissed のアイテムは × を出し、✓ は出さない。 */
+    @Test
+    fun sourceDismissedItemShowsDismissedGlyph() = runComposeUiTest {
+        setContent {
+            TimelineScreen(items(sourceDismissed = true), actions = TimelineActions())
+        }
+        onNodeWithTag(TAG_TIMELINE_SOURCE_DISMISSED_BUTTON).assertTextEquals(SOURCE_DISMISSED_GLYPH)
+        onAllNodesWithTag(TAG_TIMELINE_SOURCE_ALIVE_BUTTON).assertCountEquals(0)
     }
 
     /**
-     * sourceDismissed のアイテムはコンテキストメニューのアクション項目を出さないが、
-     * 「消す」「このアプリからの通知を非表示」は引き続き出す。
+     * sourceDismissed のアイテムはコンテキストメニューのアクション項目と「送信元の通知を消す」を
+     * 出さないが、「タイムラインから消す」「このアプリからの通知を非表示」は引き続き出す。
      */
     @Test
-    fun sourceDismissedItemHidesContextMenuActionItemsButKeepsDismissAndMute() = runComposeUiTest {
+    fun sourceDismissedItemKeepsOnlyLocalContextMenuItems() = runComposeUiTest {
         setContent {
             TimelineScreen(items(sourceDismissed = true), actions = TimelineActions())
         }
         onNodeWithTag(TAG_TIMELINE_RECEIVED).performMouseInput { rightClick() }
         onAllNodesWithTag("${TAG_TIMELINE_MENU_ACTION_PREFIX}0").assertCountEquals(0)
-        onAllNodesWithTag(TAG_TIMELINE_MENU_DISMISS).assertCountEquals(1)
+        onAllNodesWithTag(TAG_TIMELINE_MENU_DISMISS).assertCountEquals(0)
+        onAllNodesWithTag(TAG_TIMELINE_MENU_HIDE).assertCountEquals(1)
         onAllNodesWithTag(TAG_TIMELINE_MENU_MUTE).assertCountEquals(1)
     }
 
-    /** sourceDismissed のアイテムにも × ボタンが出て、押すと引き続き「消す」ができる。 */
+    /** sourceDismissed のアイテムの × ボタンは、command を送らずこの端末のタイムラインから消す。 */
     @Test
-    fun sourceDismissedItemStillHasDismissButton() = runComposeUiTest {
+    fun sourceDismissedButtonHidesFromTimelineOnly() = runComposeUiTest {
         var dismissedId: String? = null
         var hiddenId: String? = null
         setContent {
@@ -457,8 +482,8 @@ class TimelineScreenTest {
                 ),
             )
         }
-        onNodeWithTag(TAG_TIMELINE_DISMISS_BUTTON).performClick()
-        assertEquals("n1", dismissedId)
+        onNodeWithTag(TAG_TIMELINE_SOURCE_DISMISSED_BUTTON).performClick()
+        assertNull(dismissedId)
         assertEquals("n1", hiddenId)
     }
 

@@ -62,11 +62,17 @@ const val TAG_TIMELINE_RECEIVED: String = "timeline-received"
 /** インラインのアクションボタンのタグ接頭辞（末尾に action の index を付ける）。 */
 const val TAG_TIMELINE_ACTION_PREFIX: String = "timeline-action-"
 
-/** 受信通知バブル右上の × ボタンのタグ。 */
-const val TAG_TIMELINE_DISMISS_BUTTON: String = "timeline-dismiss-button"
+/** 元通知が生きている受信アイテムの、バブル右上のボタンのタグ。 */
+const val TAG_TIMELINE_SOURCE_ALIVE_BUTTON: String = "timeline-source-alive-button"
+
+/** 元通知が消えた受信アイテムの、バブル右上のボタンのタグ。 */
+const val TAG_TIMELINE_SOURCE_DISMISSED_BUTTON: String = "timeline-source-dismissed-button"
 
 /** コンテキストメニューの「送信元の通知を消す」項目のタグ。 */
 const val TAG_TIMELINE_MENU_DISMISS: String = "timeline-menu-dismiss"
+
+/** コンテキストメニューの「タイムラインから消す」項目のタグ。 */
+const val TAG_TIMELINE_MENU_HIDE: String = "timeline-menu-hide"
 
 /** コンテキストメニューの「このアプリからの通知を非表示」項目のタグ。 */
 const val TAG_TIMELINE_MENU_MUTE: String = "timeline-menu-mute"
@@ -96,11 +102,11 @@ const val TAG_TIMELINE_REPLY_SEND: String = "timeline-reply-send"
 /** 返信本文が上限バイト数を超えているときの警告表示のタグ。 */
 const val TAG_TIMELINE_REPLY_LIMIT_WARNING: String = "timeline-reply-limit-warning"
 
-/** 元通知が消えた受信アイテムに出す注記のタグ。 */
-const val TAG_TIMELINE_SOURCE_DISMISSED_NOTE: String = "timeline-source-dismissed-note"
+/** 元通知が生きていることを示し、押すと元端末と他の受信端末から消す記号（§10.1）。 */
+const val SOURCE_ALIVE_GLYPH: String = "✓"
 
-/** 元通知が消えた受信アイテムに出す注記（§10.1）。 */
-const val SOURCE_DISMISSED_NOTE: String = "元の通知は消えています"
+/** 元通知が消えていることを示し、押すとこの端末のタイムラインから消す記号（§10.1）。 */
+const val SOURCE_DISMISSED_GLYPH: String = "×"
 
 /** 輪郭線で示す吹き出しの線幅。 */
 private val BUBBLE_BORDER_WIDTH = 1.dp
@@ -147,9 +153,10 @@ fun timelineScrollTargetIndex(visible: List<TimelineItem>, targetId: String): In
 
 /**
  * チャット風タイムライン（§10.1）。受信通知は左寄せ、エラー・送信通知は右寄せに並べる。
- * [actions] が渡されると受信通知にアクションボタン・右上の × ボタン・長押し/右クリックメニューを付ける。
- * 「送信元の通知を消す」は command のブロードキャストと同時に、この端末のタイムラインからも消す。
- * 消したアイテムは [ReceivedNotification.hiddenFromTimeline] で表示から外れ、実体は剪定で落ちる（§11）。
+ * [actions] が渡されると受信通知にアクションボタン・右上の状態兼ボタン・長押し/右クリックメニューを
+ * 付ける。「送信元の通知を消す」は command をブロードキャストするだけで、この端末のタイムラインには
+ * 残す。タイムラインから消したアイテムは [ReceivedNotification.hiddenFromTimeline] で表示から外れ、
+ * 実体は剪定で落ちる（§11）。
  * 並び順は時系列順（古い→新しい、上→下）で最新が最下部。起動時は最下部へジャンプし、
  * 最下部表示中の新着だけ追従する（§10.1）。[listState] を呼び出し側から注入でき、
  * [lazyScrollbarContent] スロットで Desktop 用スクロールバー等を注入できる（`AppFilterScreen` と同型）。
@@ -340,12 +347,13 @@ private fun ReceivedBubble(item: ReceivedNotification, attachments: AttachmentUi
 }
 
 /**
- * 操作可能な受信通知バブル。右上の × ボタンで消し、長押し/右クリックでコンテキストメニューを開く。
- * 通知に元アクションがあればボタンとして並べる。REPLY 分類のアクションは押すとインライン返信入力を
- * 開き、それ以外は押すと送信元へ invokeAction を返送する（§10.1）。
- * 元通知が既に消えている（[ReceivedNotification.sourceDismissed]）アイテムはアクションボタン・
- * 返信入力・コンテキストメニューのアクション項目を出さず、代わりに注記を表示する。
- * × ボタン・コンテキストメニューの「送信元の通知を消す」は引き続き行える。
+ * 操作可能な受信通知バブル。右上のボタンが元通知の状態を示し、長押し/右クリックでコンテキスト
+ * メニューを開く。通知に元アクションがあればボタンとして並べる。REPLY 分類のアクションは押すと
+ * インライン返信入力を開き、それ以外は押すと送信元へ invokeAction を返送する（§10.1）。
+ * 元通知が生きている間は ✓ を出し、押すと元端末と他の受信端末から消す。
+ * 元通知が既に消えている（[ReceivedNotification.sourceDismissed]）アイテムは × を出し、押すと
+ * この端末のタイムラインから消す。あわせてアクションボタン・返信入力・コンテキストメニューの
+ * アクション項目と「送信元の通知を消す」を出さない。
  */
 @Composable
 private fun InteractiveReceivedBubble(
@@ -365,10 +373,8 @@ private fun InteractiveReceivedBubble(
             else -> actions.invokeAction(notificationPayload, index)
         }
     }
-    val dismiss: () -> Unit = {
-        actions.dismiss(item)
-        actions.hideFromTimeline(item)
-    }
+    val dismissSource: () -> Unit = { actions.dismiss(item) }
+    val hideFromTimeline: () -> Unit = { actions.hideFromTimeline(item) }
     var menuOpen by remember { mutableStateOf(false) }
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
         Surface(
@@ -383,9 +389,7 @@ private fun InteractiveReceivedBubble(
             Row(verticalAlignment = Alignment.Top) {
                 Column(modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp)) {
                     ReceivedContent(payload, attachments, fullText)
-                    if (item.sourceDismissed) {
-                        SourceDismissedNote()
-                    } else {
+                    if (!item.sourceDismissed) {
                         ActionButtons(payload, onActionClick)
                         replyingIndex?.let { index ->
                             (payload as? NotificationPayload)?.let { notificationPayload ->
@@ -401,7 +405,10 @@ private fun InteractiveReceivedBubble(
                     }
                     SpeakerTimeRow(speaker = payload.speakerName(), time = item.timestampEpochMillis)
                 }
-                DismissButton(onClick = dismiss)
+                SourceStateButton(
+                    sourceDismissed = item.sourceDismissed,
+                    onClick = if (item.sourceDismissed) hideFromTimeline else dismissSource,
+                )
             }
         }
         ContextMenu(
@@ -410,34 +417,34 @@ private fun InteractiveReceivedBubble(
             payload = payload,
             actions = actions,
             onActionClick = onActionClick,
-            onDismissNotification = dismiss,
+            onDismissNotification = dismissSource,
+            onHideFromTimeline = hideFromTimeline,
             showActionItems = !item.sourceDismissed,
         )
     }
 }
 
-/** 受信通知バブル右上の × ボタン（§10.1）。バブルの内容を邪魔しない控えめな見た目にする。 */
+/**
+ * 受信通知バブル右上の、元通知の状態を示す兼ボタン（§10.1）。
+ * 元通知が生きていれば ✓ を出し、押すと元端末と他の受信端末から消す。既に消えていれば × を出し、
+ * 押すとこの端末のタイムラインから消す。バブルの内容を邪魔しない控えめな見た目にする。
+ */
 @Composable
-private fun DismissButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun SourceStateButton(
+    sourceDismissed: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Text(
-        text = "×",
+        text = if (sourceDismissed) SOURCE_DISMISSED_GLYPH else SOURCE_ALIVE_GLYPH,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
         modifier = modifier
             .clickable(onClick = onClick)
             .padding(6.dp)
-            .testTag(TAG_TIMELINE_DISMISS_BUTTON),
-    )
-}
-
-/** 元通知が消えた受信アイテムに出す控えめな注記（§10.1）。本文より一段薄い色で出す。 */
-@Composable
-private fun SourceDismissedNote() {
-    Text(
-        text = SOURCE_DISMISSED_NOTE,
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.outline,
-        modifier = Modifier.testTag(TAG_TIMELINE_SOURCE_DISMISSED_NOTE),
+            .testTag(
+                if (sourceDismissed) TAG_TIMELINE_SOURCE_DISMISSED_BUTTON else TAG_TIMELINE_SOURCE_ALIVE_BUTTON,
+            ),
     )
 }
 
@@ -498,8 +505,8 @@ private fun ReplyInput(onSend: (text: String) -> Unit, onCancel: () -> Unit) {
 
 /**
  * 受信通知アイテムのコンテキストメニュー。[showActionItems] が false のとき（元通知が消えた
- * アイテム、§10.1）はアクション項目を出さず、「送信元の通知を消す」「このアプリからの通知を非表示」は
- * 常に出す。
+ * アイテム、§10.1）はアクション項目と「送信元の通知を消す」を出さない。
+ * 「タイムラインから消す」「このアプリからの通知を非表示」は元通知の状態に依らず常に出す。
  */
 @Composable
 private fun ContextMenu(
@@ -509,6 +516,7 @@ private fun ContextMenu(
     actions: TimelineActions,
     onActionClick: (index: Int) -> Unit,
     onDismissNotification: () -> Unit,
+    onHideFromTimeline: () -> Unit,
     showActionItems: Boolean,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismissRequest) {
@@ -522,13 +530,23 @@ private fun ContextMenu(
                 modifier = Modifier.testTag(TAG_TIMELINE_MENU_MUTE),
             )
         }
+        if (showActionItems) {
+            DropdownMenuItem(
+                text = { Text("送信元の通知を消す") },
+                onClick = {
+                    onDismissRequest()
+                    onDismissNotification()
+                },
+                modifier = Modifier.testTag(TAG_TIMELINE_MENU_DISMISS),
+            )
+        }
         DropdownMenuItem(
-            text = { Text("送信元の通知を消す") },
+            text = { Text("タイムラインから消す") },
             onClick = {
                 onDismissRequest()
-                onDismissNotification()
+                onHideFromTimeline()
             },
-            modifier = Modifier.testTag(TAG_TIMELINE_MENU_DISMISS),
+            modifier = Modifier.testTag(TAG_TIMELINE_MENU_HIDE),
         )
         if (payload is NotificationPayload && showActionItems) {
             payload.actions.forEachIndexed { index, name ->
