@@ -53,7 +53,7 @@ suspend fun sendMessage(
             pipeline.recordError(MESSAGE_SEND_FAILED_MESSAGE)
             return false
         }
-        pipeline.send(payload, topics)
+        pipeline.send(payload, topics, config.persistSensitiveHistory)
         true
     } catch (cancellation: CancellationException) {
         throw cancellation

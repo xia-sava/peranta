@@ -178,8 +178,11 @@ class SendPipeline(
         }
     }
 
-    /** [payload] を送信済みとしてタイムラインへ追記する。[persistSensitive] が false なら本文を伏せる。 */
-    suspend fun recordSent(payload: Payload, persistSensitive: Boolean = true) {
+    /**
+     * [payload] を送信済みとしてタイムラインへ追記する。[persistSensitive] が false なら本文を伏せる。
+     * 既定値を持たせないことで、新しい記録経路を足すときに伏せるか否かの判断が呼び出し側に現れる。
+     */
+    suspend fun recordSent(payload: Payload, persistSensitive: Boolean) {
         store.append(
             SentNotification(
                 id = payload.id,
@@ -207,11 +210,12 @@ class SendPipeline(
     /**
      * [payload] を封緘し [topics] 全てへ publish して、成功時に送信済みを記録する。
      * publish が失敗した場合は記録せず例外を送出する。
+     * [persistSensitive] が false なら本文・キャプションを伏せて記録する（§11）。
      */
-    suspend fun send(payload: Payload, topics: List<String>) {
+    suspend fun send(payload: Payload, topics: List<String>, persistSensitive: Boolean) {
         val body = encodeEnvelope(seal(payload))
         publishEnvelope(body, topics, cacheSecondsFor(payload))
-        recordSent(payload)
+        recordSent(payload, persistSensitive)
     }
 }
 

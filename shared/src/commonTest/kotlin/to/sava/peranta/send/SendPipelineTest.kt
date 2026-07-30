@@ -49,7 +49,7 @@ class SendPipelineTest {
         val pipeline = SendPipeline(cipher(), ntfy, store, now = { 5000 })
         val p = payload(Priority.NORMAL)
 
-        pipeline.send(p, listOf("topic-a", "topic-b"))
+        pipeline.send(p, listOf("topic-a", "topic-b"), persistSensitive = true)
 
         assertEquals(listOf("topic-a", "topic-b"), ntfy.published.map { it.topic })
         val recorded = store.appended.single() as SentNotification
@@ -65,7 +65,7 @@ class SendPipelineTest {
         val pipeline = SendPipeline(cipher(), ntfy, feed, now = { 5000 })
         val p = payload(Priority.NORMAL)
 
-        pipeline.send(p, listOf("topic-a"))
+        pipeline.send(p, listOf("topic-a"), persistSensitive = true)
 
         val reflected = feed.items.value.single() as SentNotification
         assertEquals(p.id, reflected.id)
@@ -77,8 +77,8 @@ class SendPipelineTest {
         val ntfy = FakeNtfyClient()
         val pipeline = SendPipeline(cipher(), ntfy, FakeTimelineStore())
 
-        pipeline.send(payload(Priority.HIGH), listOf("topic"))
-        pipeline.send(payload(Priority.NORMAL), listOf("topic"))
+        pipeline.send(payload(Priority.HIGH), listOf("topic"), persistSensitive = true)
+        pipeline.send(payload(Priority.NORMAL), listOf("topic"), persistSensitive = true)
 
         assertEquals(HIGH_PRIORITY_CACHE_SECONDS, ntfy.published[0].cacheSeconds)
         assertEquals(null, ntfy.published[1].cacheSeconds)
@@ -91,7 +91,7 @@ class SendPipelineTest {
         val pipeline = SendPipeline(cipher(), FailingNtfyClient(), store)
 
         assertFailsWith<IllegalStateException> {
-            pipeline.send(payload(Priority.NORMAL), listOf("topic"))
+            pipeline.send(payload(Priority.NORMAL), listOf("topic"), persistSensitive = true)
         }
         assertTrue(store.appended.isEmpty())
     }
@@ -102,7 +102,7 @@ class SendPipelineTest {
         val ntfy = FakeNtfyClient()
         val pipeline = SendPipeline(cipher(), ntfy, FakeTimelineStore())
 
-        pipeline.send(payload(Priority.NORMAL), listOf("a", "b", "c"))
+        pipeline.send(payload(Priority.NORMAL), listOf("a", "b", "c"), persistSensitive = true)
 
         val bodies = ntfy.published.map { it.body }.toSet()
         assertEquals(1, bodies.size)

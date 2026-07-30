@@ -11,6 +11,7 @@ import to.sava.peranta.blob.drainToBytes
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.crypto.generateKey
+import to.sava.peranta.filter.SENSITIVE_HISTORY_PLACEHOLDER
 import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.net.FakeNtfyClient
@@ -70,13 +71,17 @@ class DesktopComposerTest {
         return file
     }
 
-    private fun config(blobTopic: String? = "blob-topic") = PerantaConfig(
+    private fun config(
+        blobTopic: String? = "blob-topic",
+        persistSensitiveHistory: Boolean = false,
+    ) = PerantaConfig(
         deviceId = "desktop-1",
         deviceName = "デスクトップ",
         sharedKeyBase64 = Base64.encode(generateKey()),
         keyId = "k1",
         blobTopic = blobTopic,
         deliveryTopics = listOf("topic-a"),
+        persistSensitiveHistory = persistSensitiveHistory,
     )
 
     private fun successHttpClient(captured: MutableList<HttpRequestData> = mutableListOf()): HttpClient =
@@ -105,7 +110,7 @@ class DesktopComposerTest {
         val store = FakeTimelineStore()
         val pipeline = SendPipeline(MessageCipher(generateKey(), "k1"), FakeNtfyClient(), store)
         val composer = DesktopComposer(
-            config = config(),
+            config = config(persistSensitiveHistory = true),
             httpClient = successHttpClient(captured),
             cipher = MessageCipher(generateKey(), "k1"),
             ntfy = FakeNtfyClient(),
@@ -124,6 +129,30 @@ class DesktopComposerTest {
         assertEquals(2, payload.attachments.size)
         assertEquals("デスクトップ", payload.fromName)
         assertTrue(composer.ui().attachments!!.staged.value.isEmpty())
+    }
+
+    /**
+     * persistSensitiveHistory が false なら、ファイル送信のキャプションも履歴では伏せる（§11）。
+     * 永続だけを伏せる扱いなので、publish 自体は行われる。
+     */
+    @Test
+    fun sendWithStagedFilesRedactsCaptionInHistory() = runTest {
+        val store = FakeTimelineStore()
+        val pipeline = SendPipeline(MessageCipher(generateKey(), "k1"), FakeNtfyClient(), store)
+        val composer = DesktopComposer(
+            config = config(persistSensitiveHistory = false),
+            httpClient = successHttpClient(),
+            cipher = MessageCipher(generateKey(), "k1"),
+            ntfy = FakeNtfyClient(),
+            sendPipeline = pipeline,
+            scope = this,
+        )
+        composer.addStaged(listOf(tempFile("a", "file-a")))
+
+        assertTrue(composer.ui().send("認証コード 123456"))
+
+        val payload = (store.appended.single() as SentNotification).payload as FilePayload
+        assertEquals(SENSITIVE_HISTORY_PLACEHOLDER, payload.caption)
     }
 
     /** ステージが空の送信はメッセージ送信（[to.sava.peranta.send.sendMessage]）に委譲し、MessagePayload が publish される。 */

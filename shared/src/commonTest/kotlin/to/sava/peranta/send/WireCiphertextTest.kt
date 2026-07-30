@@ -123,7 +123,7 @@ class WireCiphertextTest {
     @Test
     fun everyPublishedBodyIsAnEnvelopeWithoutPlaintext() = runTest {
         val pipeline = pipeline()
-        payloads.forEach { pipeline.send(it, listOf("topic")) }
+        payloads.forEach { pipeline.send(it, listOf("topic"), persistSensitive = true) }
 
         assertEquals(payloads.size, ntfy.published.size)
         ntfy.published.forEach { published ->
@@ -142,7 +142,7 @@ class WireCiphertextTest {
     @Test
     fun everyPublishedBodyOpensBackToItsPayload() = runTest {
         val pipeline = pipeline()
-        payloads.forEach { pipeline.send(it, listOf("topic")) }
+        payloads.forEach { pipeline.send(it, listOf("topic"), persistSensitive = true) }
 
         val opened = ntfy.published.map { cipher.open(decodeEnvelope(it.body)) }
         assertEquals(payloads, opened)

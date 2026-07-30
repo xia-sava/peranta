@@ -264,7 +264,7 @@ class DesktopComposer(
                 sendPipeline.recordError(FILE_SEND_FAILED_MESSAGE)
                 return false
             }
-            payloads.forEach { payload -> sendPipeline.send(payload, topics) }
+            payloads.forEach { payload -> sendPipeline.send(payload, topics, config.persistSensitiveHistory) }
             true
         } catch (cancellation: CancellationException) {
             throw cancellation

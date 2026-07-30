@@ -176,28 +176,28 @@ class SendLogHygieneTest {
     /** 通知の送信でタイトル・本文と共有鍵はログに出ない。 */
     @Test
     fun sentNotificationKeepsBodyOutOfLog() = runTest {
-        pipeline().send(notification(), listOf(TOPIC_MARKER))
+        pipeline().send(notification(), listOf(TOPIC_MARKER), persistSensitive = true)
         assertLoggedWithoutMarkers()
     }
 
     /** SMS の送信で本文はログに出ない。 */
     @Test
     fun sentSmsKeepsBodyOutOfLog() = runTest {
-        pipeline().send(sms(), listOf(TOPIC_MARKER))
+        pipeline().send(sms(), listOf(TOPIC_MARKER), persistSensitive = true)
         assertLoggedWithoutMarkers()
     }
 
     /** メッセージの送信で本文はログに出ない。 */
     @Test
     fun sentMessageKeepsBodyOutOfLog() = runTest {
-        pipeline().send(message(), listOf(TOPIC_MARKER))
+        pipeline().send(message(), listOf(TOPIC_MARKER), persistSensitive = true)
         assertLoggedWithoutMarkers()
     }
 
     /** ファイル転送の送信でキャプションと添付の取得先ホストはログに出ない。 */
     @Test
     fun sentFileKeepsCaptionAndHostOutOfLog() = runTest {
-        pipeline().send(file(), listOf(TOPIC_MARKER))
+        pipeline().send(file(), listOf(TOPIC_MARKER), persistSensitive = true)
         assertLoggedWithoutMarkers()
     }
 
