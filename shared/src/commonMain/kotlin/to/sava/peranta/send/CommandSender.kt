@@ -20,6 +20,8 @@ import to.sava.peranta.roster.resolveTargetTopic
  * - dismiss: 既読同期のため全端末へブロードキャスト（`to: "*"`、自分除外は [resolveSendTopics] に委ねる）。
  * - invokeAction / reply / muteApp: 実行できるのは元通知の送信元（スマホ）だけなので、その deviceId へ一点指定する。
  *
+ * 失効までの猶予とサーバのキャッシュ保持は、種別ごとの配送特性（[CommandDelivery]）から引く。
+ *
  * publish は封緘済みでのみ行い、タイムラインへは記録しない（コマンドは履歴ではなく操作のため）。
  * 送信できた topic があれば true を返す。宛先が解決できない・publish に失敗した場合は false を返し、
  * 例外はログに残して外へ漏らさない（[CancellationException] を除く）。
@@ -131,7 +133,7 @@ class CommandSender(
         )
         return try {
             val body = encodeEnvelope(pipeline.seal(payload))
-            pipeline.publishEnvelope(body, topics, cacheSeconds = HIGH_PRIORITY_CACHE_SECONDS)
+            pipeline.publishEnvelope(body, topics, cacheSeconds = deliveryOf(command).cacheSeconds)
             log.i { "command sent command=$command to=$to topics=${topics.size}" }
             true
         } catch (cancellation: CancellationException) {

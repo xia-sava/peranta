@@ -18,6 +18,7 @@ import to.sava.peranta.roster.RecordingControlNtfy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -87,6 +88,20 @@ class CommandSenderTest {
         val ok = sender(ntfy, config(deliveryTopics = listOf("static"))).dismiss("0|k")
         assertFalse(ok)
         assertTrue(ntfy.published.isEmpty())
+    }
+
+    /**
+     * キャッシュ保持は配送特性に従う。状態同期の dismiss は指定せずサーバの設定へ委ね、
+     * 即時操作の reply は短い保持で送る（§3.4）。
+     */
+    @Test
+    fun publishesWithCacheRetentionOfDelivery() = runTest {
+        val ntfy = RecordingControlNtfy(history = listOf(event(presence("phone", "https://h/phone-topic"))))
+        val commandSender = sender(ntfy)
+        commandSender.dismiss("0|k")
+        commandSender.reply(targetDeviceId = "phone", targetNotificationKey = "0|k", actionIndex = 0, text = "OK")
+        assertNull(ntfy.published.first().cacheSeconds)
+        assertEquals(HIGH_PRIORITY_CACHE_SECONDS, ntfy.published.last().cacheSeconds)
     }
 
     /** invokeAction は元通知の送信元 deviceId のエンドポイントへ一点指定する。 */

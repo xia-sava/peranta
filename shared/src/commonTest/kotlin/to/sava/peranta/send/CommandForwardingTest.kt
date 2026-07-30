@@ -12,9 +12,9 @@ class CommandForwardingTest {
 
     private val now = 1_000_000L
 
-    /** command は送信時刻 + 短命 TTL の失効を付け、指定したフィールドをそのまま載せる。 */
+    /** command は送信時刻 + 配送特性の猶予による失効を付け、指定したフィールドをそのまま載せる。 */
     @Test
-    fun buildsCommandWithShortExpiryAndFields() {
+    fun buildsCommandWithDeliveryExpiryAndFields() {
         val command = buildCommandPayload(
             command = CommandType.REPLY,
             from = "desk",
@@ -30,13 +30,35 @@ class CommandForwardingTest {
         assertEquals(CommandType.REPLY, command.command)
         assertEquals("0|com.example|1|null|10", command.targetNotificationKey)
         assertEquals("了解", command.replyText)
-        assertEquals(now + COMMAND_TTL_MILLIS, command.expiresAtEpochMillis)
+        assertEquals(now + CommandDelivery.IMMEDIATE.ttlMillis, command.expiresAtEpochMillis)
     }
 
-    /** command の TTL は OTP 本文の TTL より短い（即時性が前提のため）。 */
+    /** 即時操作の TTL は OTP 本文の TTL より短い（遅れて実行されると誤爆するため）。 */
     @Test
-    fun commandTtlIsShorterThanOtpTtl() {
-        assertEquals(true, COMMAND_TTL_MILLIS < OTP_TTL_MILLIS)
+    fun immediateCommandTtlIsShorterThanOtpTtl() {
+        assertEquals(true, CommandDelivery.IMMEDIATE.ttlMillis < OTP_TTL_MILLIS)
+    }
+
+    /** 遅れて届いても結果の変わらない command は状態同期、誤爆する command は即時操作に分類する。 */
+    @Test
+    fun classifiesCommandsByDeliveryCharacteristics() {
+        listOf(CommandType.DISMISS, CommandType.MUTE_APP, CommandType.UNMUTE_APP).forEach {
+            assertEquals(CommandDelivery.STATE_SYNC, deliveryOf(it), "$it は状態同期")
+        }
+        listOf(CommandType.INVOKE_ACTION, CommandType.REPLY).forEach {
+            assertEquals(CommandDelivery.IMMEDIATE, deliveryOf(it), "$it は即時操作")
+        }
+    }
+
+    /**
+     * 状態同期は受信端末が半日単位で離れていても届く必要があるため、即時操作より長く保ち、
+     * サーバのキャッシュ保持は指定せず設定へ委ねる。
+     */
+    @Test
+    fun stateSyncOutlivesImmediateAndLeavesCacheToServer() {
+        assertEquals(true, CommandDelivery.STATE_SYNC.ttlMillis > CommandDelivery.IMMEDIATE.ttlMillis)
+        assertNull(CommandDelivery.STATE_SYNC.cacheSeconds)
+        assertEquals(HIGH_PRIORITY_CACHE_SECONDS, CommandDelivery.IMMEDIATE.cacheSeconds)
     }
 
     /** expiresOf は command の失効時刻を取り出す。 */
@@ -48,7 +70,7 @@ class CommandForwardingTest {
             to = BROADCAST_TARGET,
             now = now,
         )
-        assertEquals(now + COMMAND_TTL_MILLIS, expiresOf(command))
+        assertEquals(now + CommandDelivery.STATE_SYNC.ttlMillis, expiresOf(command))
     }
 
     /** 失効の概念を持たない presence は expiresOf が null を返す（ロスター最新採用に委ねる）。 */
