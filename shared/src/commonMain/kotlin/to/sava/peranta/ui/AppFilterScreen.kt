@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ClearAll
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
@@ -83,6 +84,12 @@ const val TAG_APP_FILTER_DETAIL_REDACT: String = "app-filter-detail-redact"
 
 /** 詳細設定の「払いのけたら元の通知も消す」チェックのタグ。 */
 const val TAG_APP_FILTER_DETAIL_SWIPE_DISMISS: String = "app-filter-detail-swipe-dismiss"
+
+/** 詳細を開く 3 点ボタンのタグ接頭辞（末尾にパッケージ名を付ける）。 */
+const val TAG_APP_FILTER_MENU_PREFIX: String = "app-filter-menu-"
+
+/** 詳細を開く 3 点ボタンの説明。 */
+const val DETAIL_MENU_DESCRIPTION: String = "このアプリの詳細な扱いを開く"
 
 /** 受信専用ロールの、払いのけの扱いを切り替えるトグルのタグ接頭辞。 */
 const val TAG_APP_FILTER_SWIPE_PREFIX: String = "app-filter-swipe-"
@@ -302,6 +309,7 @@ private fun AppRow(
             onCheckedChange = onCheckedChange,
             modifier = Modifier.testTag("$TAG_APP_FILTER_CHECKBOX_PREFIX${app.packageName}"),
         )
+        DetailMenuButton(app.packageName, onOpenDetail)
     }
 }
 
@@ -451,6 +459,23 @@ private fun LegendItem(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 }
 
 /**
+ * 詳細な扱いを開く 3 点ボタン（§10.4）。行のどこかを押せば開くことは見て取れないため、
+ * 開く場所を図柄で示す。
+ */
+@Composable
+private fun DetailMenuButton(packageName: String, onClick: () -> Unit) {
+    Icon(
+        imageVector = Icons.Default.MoreVert,
+        contentDescription = DETAIL_MENU_DESCRIPTION,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(8.dp)
+            .testTag("$TAG_APP_FILTER_MENU_PREFIX$packageName"),
+    )
+}
+
+/**
  * 発信側の設定を切り替えるアイコントグル（§10.4）。入り切りは色の濃さで示す。
  */
 @Composable
@@ -545,6 +570,7 @@ private fun ReceiveRoleContent(
                             rule.copy(swipeDismissesSource = on),
                         )
                     }
+                    DetailMenuButton(candidate.packageName) { detailCandidate = candidate }
                 }
             }
         }

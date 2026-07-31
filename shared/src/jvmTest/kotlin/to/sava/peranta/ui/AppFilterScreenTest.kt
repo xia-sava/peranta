@@ -204,11 +204,20 @@ class AppFilterScreenTest {
         )
         setContent { AppFilterScreen(controller = controller, items = historyItems()) }
 
-        onNodeWithTag("$TAG_APP_FILTER_LABEL_PREFIX${"com.spam"}").performClick()
+        onNodeWithTag("$TAG_APP_FILTER_MENU_PREFIX${"com.spam"}").performClick()
         onNodeWithTag(TAG_APP_FILTER_DETAIL_REDACT).performClick()
         onNodeWithTag(TAG_APP_FILTER_DETAIL_SAVE).performClick()
         assertEquals(true, repo.load().filterRules.single().redact)
         assertEquals(true, sent?.redact)
+    }
+
+    /** 3 点ボタンは受信専用ロールの各行に出て、詳細の入口を図柄で示す（§10.4）。 */
+    @Test
+    fun receiveOnlyRowShowsDetailMenuButton() = runComposeUiTest {
+        setContent {
+            AppFilterScreen(controller = AppFilterController(repository()), items = historyItems())
+        }
+        onNodeWithTag("$TAG_APP_FILTER_MENU_PREFIX${"com.spam"}").assertIsDisplayed()
     }
 
     /** 受信専用ロールの候補 1 件を持つ履歴。 */
