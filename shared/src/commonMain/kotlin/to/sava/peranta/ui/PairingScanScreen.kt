@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import to.sava.peranta.pairing.PairingImportController
 import to.sava.peranta.pairing.PairingImportResult
 
-/** 端末名を入れずに取り込んだときの警告文（設定画面で後から入力できる）。 */
+/** 取り込み後の設定に端末名が無いときの警告文（設定画面で後から入力できる）。 */
 private const val PAIRING_DEVICE_NAME_MISSING_NOTICE: String =
     "端末名が未設定です。後で設定画面から入力してください。"
 
@@ -107,15 +107,14 @@ internal fun PairingScanContent(
     var succeeded by remember { mutableStateOf(false) }
 
     fun importRaw(raw: String) {
-        val deviceName = deviceNameInput.ifBlank { null }
-        when (val result = controller.import(raw, deviceName)) {
+        when (val result = controller.import(raw, deviceNameInput.ifBlank { null })) {
             is PairingImportResult.Applied -> {
                 succeeded = true
                 manualInput = ""
-                statusMessage = if (deviceName == null) {
-                    "設定を取り込みました（keyId=${result.keyId}）。$PAIRING_DEVICE_NAME_MISSING_NOTICE"
-                } else {
+                statusMessage = if (result.hasDeviceName) {
                     "設定を取り込みました（keyId=${result.keyId}）。"
+                } else {
+                    "設定を取り込みました（keyId=${result.keyId}）。$PAIRING_DEVICE_NAME_MISSING_NOTICE"
                 }
                 onApplied?.invoke()
             }

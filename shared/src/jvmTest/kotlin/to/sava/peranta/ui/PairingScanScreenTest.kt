@@ -127,9 +127,9 @@ class PairingScanScreenTest {
         )
     }
 
-    /** 端末名を空白のまま取り込むと既存の端末名を引き継ぎ、状態表示に未設定の警告が出る。 */
+    /** 端末名を空白のまま取り込むと既存の端末名を引き継ぎ、未設定の警告は出さない。 */
     @Test
-    fun blankDeviceNameKeepsExistingAndWarns() = runComposeUiTest {
+    fun blankDeviceNameKeepsExistingWithoutWarning() = runComposeUiTest {
         val repo = ConfigRepository(MapSettings())
         repo.save(PerantaConfig(deviceName = "既存端末名"))
 
@@ -139,6 +139,22 @@ class PairingScanScreenTest {
         onNodeWithTag(TAG_PAIRING_IMPORT).performClick()
 
         assertEquals("既存端末名", repo.load().deviceName)
+        onNodeWithTag(TAG_PAIRING_STATUS).assert(
+            hasText("端末名が未設定", substring = true).not(),
+        )
+    }
+
+    /** 端末名を持たない端末が空白のまま取り込むと、状態表示に未設定の警告が出る。 */
+    @Test
+    fun blankDeviceNameWithoutExistingWarns() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+
+        setContent { PairingScanScreen(PairingImportController(repo)) }
+
+        onNodeWithTag(TAG_PAIRING_MANUAL_INPUT).performTextReplacement(validUri())
+        onNodeWithTag(TAG_PAIRING_IMPORT).performClick()
+
+        assertNull(repo.load().deviceName)
         onNodeWithTag(TAG_PAIRING_STATUS).assertTextContains(
             "端末名が未設定です。後で設定画面から入力してください。",
             substring = true,

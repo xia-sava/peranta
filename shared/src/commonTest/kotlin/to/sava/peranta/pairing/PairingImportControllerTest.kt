@@ -6,6 +6,7 @@ import to.sava.peranta.config.PerantaConfig
 import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -58,6 +59,44 @@ class PairingImportControllerTest {
 
         assertTrue(repo.load().hasSharedKey)
         assertTrue(repo.load().isReadyForUnifiedPushReceive)
+    }
+
+    /** 端末名の有無は、入力の有無ではなく取り込み後の設定から判定する（既存値の引き継ぎも有りと数える）。 */
+    @Test
+    fun appliedReportsDeviceNameOfResultingConfig() {
+        val existing = ConfigRepository(MapSettings())
+        existing.save(PerantaConfig(deviceName = "tablet"))
+        val inherited = assertIs<PairingImportResult.Applied>(PairingImportController(existing).import(validUri()))
+        assertTrue(inherited.hasDeviceName)
+
+        val entered = ConfigRepository(MapSettings())
+        val provided = assertIs<PairingImportResult.Applied>(
+            PairingImportController(entered).import(validUri(), deviceName = "phone-1"),
+        )
+        assertTrue(provided.hasDeviceName)
+    }
+
+    /** 端末名を持たない端末が空欄のまま取り込むと、端末名なしとして報告する。 */
+    @Test
+    fun appliedReportsMissingDeviceNameWhenNeitherEnteredNorStored() {
+        val repo = ConfigRepository(MapSettings())
+
+        val result = assertIs<PairingImportResult.Applied>(PairingImportController(repo).import(validUri()))
+
+        assertFalse(result.hasDeviceName)
+    }
+
+    /** 空文字を入力しての取り込みは端末名を消すため、端末名なしとして報告する。 */
+    @Test
+    fun appliedReportsMissingDeviceNameWhenClearedByEmptyInput() {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(PerantaConfig(deviceName = "tablet"))
+
+        val result = assertIs<PairingImportResult.Applied>(
+            PairingImportController(repo).import(validUri(), deviceName = ""),
+        )
+
+        assertFalse(result.hasDeviceName)
     }
 
     /** 端末名を渡して取り込むと、共有鍵とともに端末名も設定へ適用される。 */

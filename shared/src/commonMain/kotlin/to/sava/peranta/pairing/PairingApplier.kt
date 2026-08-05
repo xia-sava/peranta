@@ -1,6 +1,7 @@
 package to.sava.peranta.pairing
 
 import to.sava.peranta.config.ConfigRepository
+import to.sava.peranta.config.PerantaConfig
 import kotlin.io.encoding.Base64
 
 /**
@@ -15,19 +16,20 @@ import kotlin.io.encoding.Base64
  */
 class PairingApplier(private val configRepository: ConfigRepository) {
 
-    fun apply(data: PairingData, deviceName: String? = null) {
+    /** [data] を設定へ適用し、保存した設定を返す。 */
+    fun apply(data: PairingData, deviceName: String? = null): PerantaConfig {
         val current = configRepository.load()
-        configRepository.save(
-            current.copy(
-                host = data.host,
-                accessToken = data.token,
-                keyId = data.keyId,
-                sharedKeyBase64 = Base64.encode(data.key),
-                port = data.port,
-                deviceName = deviceName ?: current.deviceName,
-                controlTopic = data.controlTopic ?: current.controlTopic,
-                blobTopic = data.blobTopic ?: current.blobTopic,
-            ),
+        val applied = current.copy(
+            host = data.host,
+            accessToken = data.token,
+            keyId = data.keyId,
+            sharedKeyBase64 = Base64.encode(data.key),
+            port = data.port,
+            deviceName = deviceName ?: current.deviceName,
+            controlTopic = data.controlTopic ?: current.controlTopic,
+            blobTopic = data.blobTopic ?: current.blobTopic,
         )
+        configRepository.save(applied)
+        return applied
     }
 }

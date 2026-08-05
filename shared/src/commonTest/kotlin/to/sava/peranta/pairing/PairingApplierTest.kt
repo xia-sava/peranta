@@ -104,4 +104,17 @@ class PairingApplierTest {
 
         assertEquals("tablet", repo.load().deviceName)
     }
+
+    /** 適用結果として保存後の設定を返す（引き継いだ端末名を呼び出し側が読める）。 */
+    @Test
+    fun applyReturnsSavedConfig() {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings)
+        repo.save(PerantaConfig(deviceName = "tablet"))
+
+        val applied = PairingApplier(repo).apply(PairingData("h", "tk", "k1", key(), port = 8443))
+
+        assertEquals(repo.load(), applied)
+        assertEquals("tablet", applied.deviceName)
+    }
 }

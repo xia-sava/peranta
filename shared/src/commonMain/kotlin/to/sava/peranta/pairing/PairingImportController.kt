@@ -19,8 +19,11 @@ class PairingImportController(configRepository: ConfigRepository) {
     fun import(rawUri: String, deviceName: String? = null): PairingImportResult =
         when (val result = PairingUri.decode(rawUri.trim())) {
             is PairingResult.Success -> {
-                applier.apply(result.data, deviceName)
-                PairingImportResult.Applied(result.data.keyId)
+                val applied = applier.apply(result.data, deviceName)
+                PairingImportResult.Applied(
+                    keyId = result.data.keyId,
+                    hasDeviceName = !applied.deviceName.isNullOrBlank(),
+                )
             }
 
             is PairingResult.Failure -> PairingImportResult.Failed(result.error.reason)
@@ -30,8 +33,11 @@ class PairingImportController(configRepository: ConfigRepository) {
 /** [PairingImportController.import] の結果。 */
 sealed class PairingImportResult {
 
-    /** 復号・適用に成功した。[keyId] は取り込んだ共有鍵の識別子。 */
-    class Applied(val keyId: String) : PairingImportResult()
+    /**
+     * 復号・適用に成功した。[keyId] は取り込んだ共有鍵の識別子。
+     * [hasDeviceName] は適用後の設定が端末名を持つかで、入力欄が空でも既存の端末名を引き継いだ場合は真になる。
+     */
+    class Applied(val keyId: String, val hasDeviceName: Boolean) : PairingImportResult()
 
     /** 復号に失敗した。[reason] は表示用の失敗理由。 */
     class Failed(val reason: String) : PairingImportResult()
