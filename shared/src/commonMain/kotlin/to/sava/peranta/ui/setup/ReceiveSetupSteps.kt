@@ -57,7 +57,13 @@ object ReceiveSetupSteps {
             else -> throw IllegalArgumentException("未知の受信セットアップ手順: $id")
         }
 
+    /** 手順 1 つを指す「手順N」の表記。未知の id はエラーにする。 */
+    fun labelOf(id: String): String = "手順${numberOf(id)}"
+
+    /** [fromId] から [toId] までの連続した手順を指す「手順N〜M」の表記。未知の id はエラーにする。 */
+    fun rangeLabelOf(fromId: String, toId: String): String = "手順${numberOf(fromId)}〜${numberOf(toId)}"
+
     /** 「受信のセットアップ 手順N「タイトル」で直せます」形式の誘導文。 */
     fun guidanceTo(id: String): String =
-        "受信のセットアップ 手順${numberOf(id)}「${titleOf(id)}」で直せます"
+        "受信のセットアップ ${labelOf(id)}「${titleOf(id)}」で直せます"
 }

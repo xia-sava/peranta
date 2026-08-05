@@ -5,10 +5,15 @@ import to.sava.peranta.net.SelfTestResult
 import to.sava.peranta.net.SelfTestStatus
 import to.sava.peranta.ui.FixAid
 
-/** 手順2が不一致のときの事実と影響の記述。 */
-private const val SERVER_CONFIG_MISMATCH_DETAIL: String =
-    "手順3の照合で不一致です。ntfy のデフォルトのサーバーがこのアプリの設定サーバと一致していないため、" +
+/** ntfy のサーバ設定が不一致のときの事実と影響の記述。 */
+private val SERVER_CONFIG_MISMATCH_DETAIL: String =
+    "${ReceiveSetupSteps.labelOf(ReceiveSetupSteps.UNIFIED_PUSH_ID)}の照合で不一致です。" +
+        "ntfy のデフォルトのサーバーがこのアプリの設定サーバと一致していないため、" +
         "転送された通知がこの端末に届きません。"
+
+/** 受信テストが失敗したときに見直す手順の範囲（ntfy のサーバ設定から省電力除外まで）。 */
+private val SELF_TEST_REVIEW_RANGE: String =
+    ReceiveSetupSteps.rangeLabelOf(ReceiveSetupSteps.SERVER_CONFIG_ID, ReceiveSetupSteps.NTFY_BATTERY_ID)
 
 /**
  * probe が判定した実状態から受信のセットアップ手順の [SetupItemUi] 列を組む純関数。
@@ -47,7 +52,7 @@ fun receiveSetupItems(
     }
 
 /**
- * 手順1: ntfy 導入。導入済みでもストア導線を常設する。
+ * ntfy 導入の手順。導入済みでもストア導線を常設する。
  * ntfy が無く他のディストリビュータだけが居るときは、それを採用しない旨を事実として添える。
  */
 private fun ntfyInstalledItem(
@@ -74,7 +79,7 @@ private fun otherDistributorsDetail(otherDistributors: List<String>): String =
     "ntfy 以外のディストリビュータ（${otherDistributors.joinToString("・")}）が導入されていますが、" +
         "自動では選びません。配信は自分の ntfy サーバを購読する ntfy アプリでのみ成立します。"
 
-/** 手順2: サーバ設定。手順3の照合から三値で状態を出し、貼り付け値は常設する。 */
+/** ntfy のサーバ設定の手順。UnifiedPush 登録の照合から三値で状態を出し、貼り付け値は常設する。 */
 private fun serverConfigItem(id: String, match: EndpointServerMatch?, ntfyServerAids: List<FixAid>): SetupItemUi =
     SetupItemUi(
         id = id,
@@ -87,14 +92,19 @@ private fun serverConfigItem(id: String, match: EndpointServerMatch?, ntfyServer
         },
         statusDetail = when (match) {
             null, EndpointServerMatch.Match -> null
-            EndpointServerMatch.Unparseable ->
-                "手順3の照合でエンドポイント URL を解釈できません。手順3で登録し直してください。"
+            EndpointServerMatch.Unparseable -> unparseableEndpointDetail()
             is EndpointServerMatch.Mismatch -> SERVER_CONFIG_MISMATCH_DETAIL
         },
         aids = ntfyServerAids,
     )
 
-/** 手順3: UnifiedPush 登録。ラベルは登録状態で入れ替え、位置は固定する。 */
+/** エンドポイント URL を解釈できないときの事実と対処。登録し直しは UnifiedPush 登録の手順で行う。 */
+private fun unparseableEndpointDetail(): String {
+    val unifiedPush = ReceiveSetupSteps.labelOf(ReceiveSetupSteps.UNIFIED_PUSH_ID)
+    return "${unifiedPush}の照合でエンドポイント URL を解釈できません。${unifiedPush}で登録し直してください。"
+}
+
+/** UnifiedPush 登録の手順。ラベルは登録状態で入れ替え、位置は固定する。 */
 private fun unifiedPushItem(
     id: String,
     upRegistered: Boolean,
@@ -124,7 +134,7 @@ private fun endpointMatchDetail(match: EndpointServerMatch?): String? =
         EndpointServerMatch.Unparseable -> "受信エンドポイント URL を解釈できません。"
     }
 
-/** 手順4: ntfy の省電力除外。ntfy 未導入なら前提未達として進めない。 */
+/** ntfy の省電力除外の手順。ntfy 未導入なら前提未達として進めない。 */
 private fun ntfyBatteryItem(
     id: String,
     ntfyInstalled: Boolean,
@@ -140,12 +150,16 @@ private fun ntfyBatteryItem(
             ntfyBatteryIgnored -> SetupStatus.DONE
             else -> SetupStatus.TODO
         },
-        statusDetail = if (ntfyInstalled) null else "先に手順1で ntfy を導入してください。",
+        statusDetail = if (ntfyInstalled) {
+            null
+        } else {
+            "先に${ReceiveSetupSteps.labelOf(ReceiveSetupSteps.NTFY_INSTALLED_ID)}で ntfy を導入してください。"
+        },
         action = SetupAction(label = "設定を開く", run = onOpenNtfyBattery),
     )
 
 /**
- * 手順5: 受信テスト。エンドポイント未払い出しは前提未達（BLOCKED）として手順3を参照させる。
+ * 受信テストの手順。エンドポイント未払い出しは前提未達（BLOCKED）として UnifiedPush 登録を参照させる。
  * アクセストークン未設定は受信自体を妨げない構成なので合否を出さず（UNKNOWN）、実行に必要な旨だけ示す。
  * 前提が揃えば結果で状態を分け、ラベルは実行有無で入れ替える。失敗時の対処は自手順参照に留める。
  * ボタンは状態に依らず常設する。
@@ -173,10 +187,10 @@ private fun selfTestItem(
         ),
     )
 
-/** 受信テストが実行できない前提未達の理由。エンドポイント未払い出しなら手順3を参照させる。 */
+/** 受信テストが実行できない前提未達の理由。エンドポイント未払い出しなら UnifiedPush 登録を参照させる。 */
 private fun selfTestBlockedDetail(endpointMatch: EndpointServerMatch?): String =
     if (endpointMatch == null) {
-        "先に手順3で登録してください。"
+        "先に${ReceiveSetupSteps.labelOf(ReceiveSetupSteps.UNIFIED_PUSH_ID)}で登録してください。"
     } else {
         "受信テストにはアクセストークンの設定が必要です。設定画面で設定してください。"
     }
@@ -199,9 +213,9 @@ private fun selfTestResultDetail(result: SelfTestResult): String =
     when (result) {
         SelfTestResult.Delivered -> "サーバ経由の配送を確認しました。"
         SelfTestResult.Timeout ->
-            "テスト通知を送信しましたが、5 秒以内に届きませんでした。手順2〜4を確認してください。"
+            "テスト通知を送信しましたが、5 秒以内に届きませんでした。${SELF_TEST_REVIEW_RANGE}を確認してください。"
         is SelfTestResult.PublishRejected ->
-            "サーバが送信を拒否しました（HTTP ${result.status}）。手順2〜4を確認してください。"
+            "サーバが送信を拒否しました（HTTP ${result.status}）。${SELF_TEST_REVIEW_RANGE}を確認してください。"
         SelfTestResult.PublishFailed ->
-            "サーバに接続できませんでした。手順2〜4を確認してください。"
+            "サーバに接続できませんでした。${SELF_TEST_REVIEW_RANGE}を確認してください。"
     }

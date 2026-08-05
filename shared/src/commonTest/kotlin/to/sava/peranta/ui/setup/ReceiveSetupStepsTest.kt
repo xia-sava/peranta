@@ -35,6 +35,26 @@ class ReceiveSetupStepsTest {
         assertEquals("受信テスト", ReceiveSetupSteps.titleOf(ReceiveSetupSteps.SELF_TEST_ID))
     }
 
+    /** 手順 1 つの表記は番号を伴う「手順N」になる。 */
+    @Test
+    fun labelOfComposesStepNumber() {
+        assertEquals("手順1", ReceiveSetupSteps.labelOf(ReceiveSetupSteps.NTFY_INSTALLED_ID))
+        assertEquals("手順3", ReceiveSetupSteps.labelOf(ReceiveSetupSteps.UNIFIED_PUSH_ID))
+    }
+
+    /** 連続した手順の範囲は「手順N〜M」になる。 */
+    @Test
+    fun rangeLabelOfComposesBothEnds() {
+        assertEquals(
+            "手順2〜4",
+            ReceiveSetupSteps.rangeLabelOf(ReceiveSetupSteps.SERVER_CONFIG_ID, ReceiveSetupSteps.NTFY_BATTERY_ID),
+        )
+        assertEquals(
+            "手順1〜5",
+            ReceiveSetupSteps.rangeLabelOf(ReceiveSetupSteps.NTFY_INSTALLED_ID, ReceiveSetupSteps.SELF_TEST_ID),
+        )
+    }
+
     /** 誘導文は番号とタイトルを組み合わせた定型文になる。 */
     @Test
     fun guidanceToComposesNumberAndTitle() {
@@ -56,12 +76,16 @@ class ReceiveSetupStepsTest {
         }
     }
 
-    /** 未知の id は番号・タイトル・説明・誘導文のいずれでもエラーにする。 */
+    /** 未知の id は番号・タイトル・説明・表記・誘導文のいずれでもエラーにする。 */
     @Test
     fun unknownIdFails() {
         assertFailsWith<IllegalArgumentException> { ReceiveSetupSteps.numberOf("nope") }
         assertFailsWith<IllegalArgumentException> { ReceiveSetupSteps.titleOf("nope") }
         assertFailsWith<IllegalArgumentException> { ReceiveSetupSteps.descriptionOf("nope") }
+        assertFailsWith<IllegalArgumentException> { ReceiveSetupSteps.labelOf("nope") }
+        assertFailsWith<IllegalArgumentException> {
+            ReceiveSetupSteps.rangeLabelOf("nope", ReceiveSetupSteps.SELF_TEST_ID)
+        }
         assertFailsWith<IllegalArgumentException> { ReceiveSetupSteps.guidanceTo("nope") }
     }
 }
