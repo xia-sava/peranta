@@ -350,4 +350,33 @@ class ConfigRepositoryTest {
         repo.save(PerantaConfig(sharedKeyBase64 = null))
         assertNull(repo.load().sharedKeyBase64)
     }
+
+    /** 受信テスト合格時のトークン指紋は未記録なら null で、記録すると load から読める（§10.6）。 */
+    @Test
+    fun selfTestPassFingerprintIsRecordedAndLoaded() {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
+        assertNull(repo.load().selfTestPassedTokenFingerprint)
+
+        repo.recordSelfTestPass("fp-1")
+
+        assertEquals("fp-1", repo.load().selfTestPassedTokenFingerprint)
+    }
+
+    /** 指紋の記録は他の設定項目を巻き戻さず、記録済みの指紋は後からの save でも往復する。 */
+    @Test
+    fun recordingSelfTestPassKeepsOtherSettings() {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
+        repo.save(PerantaConfig(host = "localhost", accessToken = "tok", deviceName = "desk"))
+
+        repo.recordSelfTestPass("fp-1")
+
+        val loaded = repo.load()
+        assertEquals("localhost", loaded.host)
+        assertEquals("desk", loaded.deviceName)
+        assertEquals("fp-1", loaded.selfTestPassedTokenFingerprint)
+        repo.save(loaded)
+        assertEquals("fp-1", repo.load().selfTestPassedTokenFingerprint)
+    }
 }

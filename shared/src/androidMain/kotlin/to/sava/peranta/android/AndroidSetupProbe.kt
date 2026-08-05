@@ -41,7 +41,7 @@ class AndroidSetupProbe(context: Context) {
 
     /**
      * ntfy 以外に導入されているディストリビュータの表示名。
-     * これらは自動で採用しないため（[distributorSelection]）、居ることを手順1の事実として示す。
+     * これらは自動で採用しないため（[distributorSelection]）、居ることを ntfy 導入の手順の事実として示す。
      */
     fun otherDistributors(): List<String> =
         UnifiedPush.getDistributors(appContext)
@@ -94,6 +94,12 @@ class AndroidSetupProbe(context: Context) {
     fun ntfyServerAids(config: PerantaConfig): List<FixAid> =
         listOf(
             FixAid.Copy(label = "デフォルトのサーバーに貼るサーバーURL", value = config.httpBaseUrl()),
+            FixAid.Action(label = "ntfy を開く", onRun = ::openNtfyApp),
+        )
+
+    /** ntfy 側のカスタムヘッダーへ貼り付ける値と ntfy 起動をまとめた補助操作。 */
+    fun ntfyCredentialAids(config: PerantaConfig): List<FixAid> =
+        listOf(
             FixAid.Copy(label = "カスタムヘッダーのサービスURL", value = config.httpBaseUrl()),
             FixAid.Copy(label = "カスタムヘッダーのヘッダ名", value = "Authorization"),
             FixAid.Copy(label = "カスタムヘッダーのヘッダ値", value = "Bearer ${config.accessToken.orEmpty()}", sensitive = true),

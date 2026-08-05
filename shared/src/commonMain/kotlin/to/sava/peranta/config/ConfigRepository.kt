@@ -42,6 +42,7 @@ class ConfigRepository(
             controlTopic = settings.getStringOrNull(KEY_CONTROL_TOPIC),
             blobTopic = settings.getStringOrNull(KEY_BLOB_TOPIC),
             unifiedPushEndpoint = settings.getStringOrNull(KEY_UNIFIED_PUSH_ENDPOINT),
+            selfTestPassedTokenFingerprint = settings.getStringOrNull(KEY_SELF_TEST_TOKEN_FINGERPRINT),
             sendEnabled = settings.getBoolean(KEY_SEND_ENABLED, false),
             smsDirectReceive = settings.getBoolean(KEY_SMS_DIRECT_RECEIVE, true),
             forwardWorkProfileNotifications = settings.getBoolean(KEY_FORWARD_WORK_PROFILE, false),
@@ -79,6 +80,7 @@ class ConfigRepository(
         putOrRemove(KEY_CONTROL_TOPIC, config.controlTopic)
         putOrRemove(KEY_BLOB_TOPIC, config.blobTopic)
         putOrRemove(KEY_UNIFIED_PUSH_ENDPOINT, config.unifiedPushEndpoint)
+        putOrRemove(KEY_SELF_TEST_TOKEN_FINGERPRINT, config.selfTestPassedTokenFingerprint)
         settings.putBoolean(KEY_SEND_ENABLED, config.sendEnabled)
         settings.putBoolean(KEY_SMS_DIRECT_RECEIVE, config.smsDirectReceive)
         settings.putBoolean(KEY_FORWARD_WORK_PROFILE, config.forwardWorkProfileNotifications)
@@ -107,6 +109,15 @@ class ConfigRepository(
             SECRET_NAMES.forEach { secretStore.clearSecret(it) }
             settings.clear()
         }
+    }
+
+    /**
+     * 受信テストに合格したときのアクセストークンの指紋を記録する（§10.6）。
+     * 合否は非同期に確定するため、[save] のように全項目を書き戻すと並行する設定変更を巻き戻しかねない。
+     * この 1 項目だけを [save] と共通のロックの下で書き換える。
+     */
+    fun recordSelfTestPass(tokenFingerprint: String): Unit = runBlocking {
+        configMutex.withLock { settings.putString(KEY_SELF_TEST_TOKEN_FINGERPRINT, tokenFingerprint) }
     }
 
     /**
@@ -209,6 +220,7 @@ class ConfigRepository(
         const val KEY_CONTROL_TOPIC = "controlTopic"
         const val KEY_BLOB_TOPIC = "blobTopic"
         const val KEY_UNIFIED_PUSH_ENDPOINT = "unifiedPushEndpoint"
+        const val KEY_SELF_TEST_TOKEN_FINGERPRINT = "selfTestPassedTokenFingerprint"
         const val KEY_SEND_ENABLED = "sendEnabled"
         const val KEY_SMS_DIRECT_RECEIVE = "smsDirectReceive"
         const val KEY_FORWARD_WORK_PROFILE = "forwardWorkProfileNotifications"
@@ -240,11 +252,11 @@ class ConfigRepository(
         private val UNUSED_KEYS = listOf("revokedDeviceIds")
 
         /**
-         * [save] と [updateFilterRules] の書き込みを直列化するロック。
+         * [save]・[updateFilterRules]・[recordSelfTestPass] の書き込みを直列化するロック。
          * [ConfigRepository] は同じ設定ストアに対して都度生成されるため、インスタンス間で共有できるよう
-         * companion に置く。両者の内部処理はいずれも中断を挟まない同期処理のみで、互いを再帰的に
+         * companion に置く。いずれの内部処理も中断を挟まない同期処理のみで、互いを再帰的に
          * 呼び出すこともないため、非再入ロックのままデッドロックは起きない。この前提を崩さないよう、
-         * [save]・[updateFilterRules] の実装からは互いを呼び出さないこと。
+         * これらの実装からは互いを呼び出さないこと。
          */
         private val configMutex = Mutex()
     }

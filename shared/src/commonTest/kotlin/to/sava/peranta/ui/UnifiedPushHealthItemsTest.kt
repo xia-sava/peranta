@@ -114,7 +114,7 @@ class UnifiedPushHealthItemsTest {
         assertEquals("セットアップを開く", item.link!!.label)
     }
 
-    /** 5 手順の列は同じ順序・id で診断項目列へ写る。 */
+    /** 手順の列は同じ順序・id で診断項目列へ写る。 */
     @Test
     fun preservesOrderAndIds() {
         val items = ReceiveSetupSteps.orderedIds.map { setupItem(id = it, status = SetupStatus.TODO) }

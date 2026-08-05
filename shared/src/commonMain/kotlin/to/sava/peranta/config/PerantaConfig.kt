@@ -29,6 +29,9 @@ const val DEFAULT_HOST: String = "peranta.example.com"
  * [forwardWorkProfileNotifications] が true のとき、仕事用プロファイル（自ユーザーとは別のプロファイル）で
  * 発生した通知も転送する（§3.1）。既定は false で、組織の管理境界の内側にある通知を端末の外へ出さない。
  * 端末ローカルの送信設定でありペアリング QR には含めない。
+ * [selfTestPassedTokenFingerprint] は受信テストに最後に合格したときのアクセストークンの指紋（§10.6）。
+ * ntfy アプリへ登録した認証情報が今のトークンで通用するかを判断する唯一の証拠で、
+ * トークンそのものは複製せず [accessTokenFingerprint] の値だけを持つ。
  */
 data class PerantaConfig(
     val host: String = DEFAULT_HOST,
@@ -43,6 +46,7 @@ data class PerantaConfig(
     val controlTopic: String? = null,
     val blobTopic: String? = null,
     val unifiedPushEndpoint: String? = null,
+    val selfTestPassedTokenFingerprint: String? = null,
     val sendEnabled: Boolean = false,
     val smsDirectReceive: Boolean = true,
     val forwardWorkProfileNotifications: Boolean = false,

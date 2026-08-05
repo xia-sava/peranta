@@ -8,6 +8,7 @@ object ReceiveSetupSteps {
 
     const val NTFY_INSTALLED_ID: String = "ntfy-installed"
     const val SERVER_CONFIG_ID: String = "up-server-config"
+    const val NTFY_CREDENTIALS_ID: String = "ntfy-credentials"
     const val UNIFIED_PUSH_ID: String = "unifiedpush"
     const val NTFY_BATTERY_ID: String = "ntfy-battery"
     const val SELF_TEST_ID: String = "up-self-test"
@@ -16,6 +17,7 @@ object ReceiveSetupSteps {
     val orderedIds: List<String> = listOf(
         NTFY_INSTALLED_ID,
         SERVER_CONFIG_ID,
+        NTFY_CREDENTIALS_ID,
         UNIFIED_PUSH_ID,
         NTFY_BATTERY_ID,
         SELF_TEST_ID,
@@ -33,6 +35,7 @@ object ReceiveSetupSteps {
         when (id) {
             NTFY_INSTALLED_ID -> "ntfy アプリの導入"
             SERVER_CONFIG_ID -> "ntfy にサーバを設定"
+            NTFY_CREDENTIALS_ID -> "ntfy に認証情報を設定"
             UNIFIED_PUSH_ID -> "UnifiedPush の登録"
             NTFY_BATTERY_ID -> "ntfy を省電力から除外"
             SELF_TEST_ID -> "受信テスト"
@@ -45,9 +48,11 @@ object ReceiveSetupSteps {
             NTFY_INSTALLED_ID ->
                 "UnifiedPush の配信には ntfy アプリが必要です。導入して既定に設定してください。"
             SERVER_CONFIG_ID ->
-                "ntfy アプリの 設定 →「デフォルトのサーバー」と、「カスタムヘッダー」の サービスURL の" +
-                    " 2 箇所に同じサーバーURL を設定し、あわせてヘッダ名・ヘッダ値を登録します。" +
-                    "「ユーザーの管理」でこのサーバーのユーザーを登録済みなら、カスタムヘッダーの登録は不要です。"
+                "ntfy アプリの 設定 →「デフォルトのサーバー」に、このアプリの設定サーバの URL を設定します。"
+            NTFY_CREDENTIALS_ID ->
+                "ntfy アプリの 設定 →「カスタムヘッダー」に サービスURL・ヘッダ名・ヘッダ値を登録します。" +
+                    "「ユーザーの管理」でこのサーバーのユーザーを登録済みなら、カスタムヘッダーの登録は不要です。" +
+                    "アクセストークンを再発行したときは、ntfy 側のこの登録も新しいトークンへ直します。"
             UNIFIED_PUSH_ID ->
                 "受信エンドポイントの払い出しを受けるには UnifiedPush へ登録してください。"
             NTFY_BATTERY_ID ->
@@ -63,7 +68,9 @@ object ReceiveSetupSteps {
     /** [fromId] から [toId] までの連続した手順を指す「手順N〜M」の表記。未知の id はエラーにする。 */
     fun rangeLabelOf(fromId: String, toId: String): String = "手順${numberOf(fromId)}〜${numberOf(toId)}"
 
+    /** 手順を名指しする「手順N「タイトル」」の表記。未知の id はエラーにする。 */
+    fun referenceTo(id: String): String = "${labelOf(id)}「${titleOf(id)}」"
+
     /** 「受信のセットアップ 手順N「タイトル」で直せます」形式の誘導文。 */
-    fun guidanceTo(id: String): String =
-        "受信のセットアップ ${labelOf(id)}「${titleOf(id)}」で直せます"
+    fun guidanceTo(id: String): String = "受信のセットアップ ${referenceTo(id)}で直せます"
 }

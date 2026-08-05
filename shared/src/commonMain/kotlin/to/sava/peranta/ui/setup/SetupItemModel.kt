@@ -5,7 +5,7 @@ import to.sava.peranta.ui.FixAid
 /**
  * セットアップ項目の状態。受信のセットアップ常設画面とウィザードの項目ページで共有する。
  * [DONE] は要件充足、[TODO] は未達で操作が要る、[BLOCKED] は前提未達で今は進めない、
- * [UNKNOWN] は直接検査できず未確認（エンドポイント未払い出し時の手順2 等）を表す。
+ * [UNKNOWN] は直接検査できず未確認（エンドポイント未払い出し時の ntfy のサーバ設定 等）を表す。
  */
 enum class SetupStatus {
     DONE,

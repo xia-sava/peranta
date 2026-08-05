@@ -42,7 +42,7 @@ class WizardFlowTest {
 
     /**
      * 動作チェック（AndroidHealthChecker）が生成する診断項目 id を config から写す契約。
-     * 送信ロールで nls/self-battery/(sms)、受信可能で受信手順 5 種、受信可能なら送信の可否を問わず
+     * 送信ロールで nls/self-battery/(sms)、受信可能で受信手順の全種、受信可能なら送信の可否を問わず
      * post-notifications。INFO の oem-power-save は合否を出さないため被覆対象に含めない。
      */
     private fun expectedHealthIds(config: PerantaConfig): Set<String> = buildSet {
@@ -334,27 +334,36 @@ class WizardFlowTest {
     }
 
     /**
-     * R3（ntfy にサーバを設定）は初回の未払い出し状態（UNKNOWN）でも通過でき、
-     * 照合不一致（TODO）になると未完了へ戻る。BLOCKED も未完了。
+     * ntfy 側の設定を直接検査できない手順（サーバ設定・認証情報）は未確認（UNKNOWN）でも通過でき、
+     * 要対処（TODO）になると未完了へ戻る。
      */
     @Test
-    fun serverConfigPageProceedsOnUnknownButNotOnTodo() {
-        val page = WizardPage(
-            ReceiveSetupSteps.SERVER_CONFIG_ID,
-            "ntfy にサーバを設定",
-            itemIds = listOf(ReceiveSetupSteps.SERVER_CONFIG_ID),
-        )
-        val unknown = listOf(item(ReceiveSetupSteps.SERVER_CONFIG_ID, SetupStatus.UNKNOWN))
-        val mismatch = listOf(item(ReceiveSetupSteps.SERVER_CONFIG_ID, SetupStatus.TODO))
-        val matched = listOf(item(ReceiveSetupSteps.SERVER_CONFIG_ID, SetupStatus.DONE))
-        assertTrue(WizardFlow.isPageComplete(page, PerantaConfig(), WizardAnswers(), unknown))
-        assertFalse(WizardFlow.isPageComplete(page, PerantaConfig(), WizardAnswers(), mismatch))
-        assertTrue(WizardFlow.isPageComplete(page, PerantaConfig(), WizardAnswers(), matched))
+    fun indirectlyVerifiedPagesProceedOnUnknownButNotOnTodo() {
+        listOf(ReceiveSetupSteps.SERVER_CONFIG_ID, ReceiveSetupSteps.NTFY_CREDENTIALS_ID).forEach { id ->
+            val page = WizardPage(id, ReceiveSetupSteps.titleOf(id), itemIds = listOf(id))
+            assertTrue(
+                WizardFlow.isPageComplete(
+                    page,
+                    PerantaConfig(),
+                    WizardAnswers(),
+                    listOf(item(id, SetupStatus.UNKNOWN)),
+                ),
+                id,
+            )
+            assertFalse(
+                WizardFlow.isPageComplete(page, PerantaConfig(), WizardAnswers(), listOf(item(id, SetupStatus.TODO))),
+                id,
+            )
+            assertTrue(
+                WizardFlow.isPageComplete(page, PerantaConfig(), WizardAnswers(), listOf(item(id, SetupStatus.DONE))),
+                id,
+            )
+        }
     }
 
-    /** UNKNOWN の緩和は up-server-config 限定で、他の項目（例: unifiedpush）は UNKNOWN では通過しない。 */
+    /** UNKNOWN の緩和は直接検査できない手順に限られ、他の項目（例: unifiedpush）は UNKNOWN では通過しない。 */
     @Test
-    fun unknownPassIsLimitedToServerConfig() {
+    fun unknownPassIsLimitedToIndirectlyVerifiedSteps() {
         val page = WizardPage(
             ReceiveSetupSteps.UNIFIED_PUSH_ID,
             "UnifiedPush の登録",

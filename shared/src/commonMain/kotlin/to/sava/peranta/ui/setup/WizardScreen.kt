@@ -519,7 +519,8 @@ private fun ItemPageBody(
     SetupChecklist(items = pageItems, mode = SetupChecklistMode.IN_PAGE, onCopyText = onCopyText)
     if (page.id == ReceiveSetupSteps.UNIFIED_PUSH_ID) {
         Text(
-            text = "登録しても設定サーバと一致しないときは、「戻る」で前の手順に戻り、ntfy のサーバ設定を直してください。",
+            text = "登録しても設定サーバと一致しないときは、「戻る」で" +
+                "${ReceiveSetupSteps.referenceTo(ReceiveSetupSteps.SERVER_CONFIG_ID)}に戻って直してください。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -670,7 +671,11 @@ private fun itemConsequence(id: String): String =
         WizardFlow.ITEM_SELF_BATTERY -> "バックグラウンドで通知を取りこぼすことがあります。"
         WizardFlow.ITEM_SMS -> "SMS を受信して転送できません。"
         WizardFlow.ITEM_POST_NOTIFICATIONS -> "受け取った通知をこの端末で表示できません。"
-        ReceiveSetupSteps.NTFY_INSTALLED_ID, ReceiveSetupSteps.SERVER_CONFIG_ID, ReceiveSetupSteps.UNIFIED_PUSH_ID ->
+        ReceiveSetupSteps.NTFY_INSTALLED_ID,
+        ReceiveSetupSteps.SERVER_CONFIG_ID,
+        ReceiveSetupSteps.NTFY_CREDENTIALS_ID,
+        ReceiveSetupSteps.UNIFIED_PUSH_ID,
+        ->
             "他の端末からの通知や操作を受け取れません。"
 
         ReceiveSetupSteps.NTFY_BATTERY_ID -> "省電力設定によっては通知の受信が遅れたり止まったりすることがあります。"

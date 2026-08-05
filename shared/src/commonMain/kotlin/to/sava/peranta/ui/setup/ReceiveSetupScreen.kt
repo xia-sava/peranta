@@ -37,7 +37,7 @@ private const val RECHECK_COUNT: Int = 3
 private const val RECHECK_INTERVAL_MILLIS: Long = 2_000L
 
 /**
- * 受信のセットアップ常設画面。[provider] が返す 5 手順を [SetupChecklist] の常設モードで描き、
+ * 受信のセットアップ常設画面。[provider] が返す手順を [SetupChecklist] の常設モードで描き、
  * 状態に依らず同じ位置に同じ道具（コピーチップ・主操作）を置く。
  *
  * [externalRefreshKey] が変わると再読込する。Android は画面復帰（ON_RESUME）ごとにこの値を進め、

@@ -3,6 +3,7 @@ package to.sava.peranta.android
 import android.content.Context
 import to.sava.peranta.ui.setup.SetupItemUi
 import to.sava.peranta.ui.setup.SetupItemsProvider
+import to.sava.peranta.ui.setup.ntfyCredentialProofOf
 import to.sava.peranta.ui.setup.receiveSetupItems
 
 /**
@@ -21,11 +22,13 @@ class AndroidReceiveSetupProvider(context: Context) : SetupItemsProvider {
             ntfyInstalled = probe.ntfyInstalled(),
             otherDistributors = probe.otherDistributors(),
             endpointMatch = probe.endpointMatch(config),
+            credentialProof = ntfyCredentialProofOf(config),
             upRegistered = probe.upRegistered(config),
             ntfyBatteryIgnored = probe.ntfyBatteryIgnored(),
             selfTestStatus = PerantaSelfTest.status.value,
             selfTestRunnable = config.unifiedPushEndpoint != null && !config.accessToken.isNullOrBlank(),
             ntfyServerAids = probe.ntfyServerAids(config),
+            ntfyCredentialAids = probe.ntfyCredentialAids(config),
             onInstallNtfy = probe::openNtfyInStore,
             onRegister = probe::register,
             onReregister = probe::reregister,

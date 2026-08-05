@@ -192,13 +192,19 @@ object WizardFlow {
         }
 
     /**
-     * 項目 1 件が完了ページ通過条件を満たすか。既定は [SetupStatus.DONE]。
-     * ntfy サーバ設定（[ReceiveSetupSteps.SERVER_CONFIG_ID]）だけは、エンドポイント払い出し前は
-     * 直接検査できず [SetupStatus.UNKNOWN] にしかならないため未確認のまま通過を許す（検証は次手順の照合が担う）。
+     * ntfy アプリ側の設定を直接検査できず、後続の手順の結果でしか裏を取れない項目。
+     * ntfy サーバ設定はエンドポイント払い出し前、認証情報は受信テスト合格前が該当し、
+     * どちらも [SetupStatus.UNKNOWN] にしかならないため、未確認のままページ通過を許す。
      */
+    private val INDIRECTLY_VERIFIED_ITEM_IDS: Set<String> = setOf(
+        ReceiveSetupSteps.SERVER_CONFIG_ID,
+        ReceiveSetupSteps.NTFY_CREDENTIALS_ID,
+    )
+
+    /** 項目 1 件が完了ページ通過条件を満たすか。既定は [SetupStatus.DONE]。 */
     private fun itemPasses(item: SetupItemUi): Boolean =
         item.status == SetupStatus.DONE ||
-            (item.id == ReceiveSetupSteps.SERVER_CONFIG_ID && item.status == SetupStatus.UNKNOWN)
+            (item.id in INDIRECTLY_VERIFIED_ITEM_IDS && item.status == SetupStatus.UNKNOWN)
 
     /** [pages] のうち最初の未完了ページ。全て完了なら null（実際には完了ページが常に未完了のため着地点になる）。 */
     fun firstIncompletePage(
