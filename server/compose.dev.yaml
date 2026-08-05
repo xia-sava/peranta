@@ -2,7 +2,7 @@
 # 本番と違い TLS プロキシを挟まず、ループバックへ直接 publish する。
 #
 # 起動: docker compose -f compose.dev.yaml up -d
-# ユーザー・ACL・トークンの作り方は README.md「6. ユーザーとトークンを作る」と同じ
+# ユーザー・ACL・トークンの作り方は README.md「5. ユーザーとトークンを作る」と同じ
 # （各コマンドへ -f compose.dev.yaml を付ける）。
 # 発行したトークン等は server/.local/ に保存する（gitignore 済み）
 

@@ -807,8 +807,11 @@ peranta-blob-{random}          # 画像/ファイル転送の暗号化 blob 置�
   - `server.yml` は開発・本番共通。環境依存の値（base-url 等）は環境変数 `NTFY_*` で上書きする。
   - `compose.yaml`（本番）はポートを publish せず、external network `proxy` で前段のリバースプロキシと繋ぐ。
     ネットワークを共有する形にすることで、同じサーバの他のサービスと 443 番とプロキシを分け合える。
-  - `compose.caddy.yaml` + `Caddyfile` が TLS 終端。証明書の取得・更新は Caddy に任せる。
-    既存のリバースプロキシがあるならこちらは使わず、そちらへ振り分けを足す。
+  - **前段の TLS リバースプロキシはこのリポジトリでは扱わない。** 満たすべき要件（`peranta-ntfy` の
+    80 番への振り分け・`proxy` ネットワークへの参加・WebSocket の透過・リクエストボディを
+    350MB 以上通すこと・serve するホスト名と `PERANTA_DOMAIN` の一致）を `server/README.md` に置き、
+    プロキシ自体はサーバ側の構成管理で用意する。コンテナ名 `peranta-ntfy` はプロキシ側の設定が
+    参照するため、変更するとプロキシの設定も揃えて直す必要がある。
   - `compose.dev.yaml`（開発）は `127.0.0.1:8090` へ平文で publish する。トークンが平文で流れるため
     バインドはループバックに限る（Docker の port publish は ufw を迂回するので、ufw では塞げない）。
 - 認証は `auth-default-access: deny-all` とし、アクセストークンを発行（`ntfy token add`）。トークンは全端末で 1 本を共有する。

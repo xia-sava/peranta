@@ -37,7 +37,7 @@ Android と Windows Desktop の間で通知・SMS・メッセージ・ファイ�
   で分ける（`androidMain` / `jvmMain`）。UI も Compose Multiplatform で共有する
 - `androidApp/` — Android のエントリポイント（送信・受信を兼ねる）
 - `desktopApp/` — Windows のエントリポイント
-- `server/` — ntfy と Caddy の Docker Compose 一式
+- `server/` — 中継 ntfy の設定と Docker Compose 一式
 - `tools/` — アイコン生成などの補助スクリプト
 
 ## 検証
