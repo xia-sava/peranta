@@ -152,11 +152,15 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           Copy-Item $msi.FullName artifacts/peranta.msi
 
+      # MSI はタグを打ったときだけ組み、必ずリリースへ載る。成果物として要るのは release ジョブへ
+      # 渡すまでなので、保持期間を最短にする。Actions のストレージ枠はアカウント全体で共有していて、
+      # 既定の 90 日で抱え続けると他のリポジトリの CI まで止まる。
       - uses: actions/upload-artifact@v4
         with:
           name: desktop
           path: artifacts/peranta.msi
           if-no-files-found: error
+          retention-days: 1
 
   # 手動実行でも組む。配布はしないが、実機で試すための署名済み APK を成果物として残す。
   android:
@@ -213,11 +217,14 @@ jobs:
           mkdir -p artifacts
           cp "$apk" artifacts/peranta.apk
 
+      # タグを打ったときの APK はリリースへ載るため、保持期間は release ジョブへ渡すまででよい。
+      # 手動実行の APK は成果物としてしか残らないため、実機へ入れるまでの猶予を置く。
       - uses: actions/upload-artifact@v4
         with:
           name: android
           path: artifacts/peranta.apk
           if-no-files-found: error
+          retention-days: ${{ github.ref_type == 'tag' && 1 || 3 }}
 
   # 配布物の照合値からマニフェストを組み、署名する。公開の権限は持たず、成果物として release へ渡す。
   # 署名鍵を持つのはこのジョブだけで、リリースを書き換える権限とは同居させない。
@@ -280,6 +287,7 @@ jobs:
           openssl dgst -sha256 -verify "$RUNNER_TEMP/manifest-public-key.pem" \
             -signature "$RUNNER_TEMP/latest.json.sig.der" artifacts/latest.json
 
+      # マニフェストもリリースへ載るため、保持期間は release ジョブへ渡すまででよい。
       - uses: actions/upload-artifact@v4
         with:
           name: manifest
@@ -287,6 +295,7 @@ jobs:
             artifacts/latest.json
             artifacts/latest.json.sig
           if-no-files-found: error
+          retention-days: 1
 
   # 成果物を公開するだけのジョブ。contents: write を持つのはここだけ。
   release:
