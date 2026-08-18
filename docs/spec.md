@@ -1356,7 +1356,7 @@ Play ストアには出さず独自配布。ビルド配布を高速に回すた
 ### 配布フロー
 
 GitHub Actions を検証（`.github/workflows/ci.yml`）と配布（`.github/workflows/release.yml`）に分ける。
-master への push と pull request では検証だけを行ない、配布物は `vMAJOR.MINOR.PATCH` の形のタグを
+main への push と pull request では検証だけを行ない、配布物は `vMAJOR.MINOR.PATCH` の形のタグを
 push したときだけ組んで公開する。配布物は固定名（`peranta.msi` / `peranta.apk` / `latest.json`）で、
 URL はビルドを跨いで変わらない。
 

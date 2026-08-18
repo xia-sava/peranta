@@ -56,7 +56,7 @@ Android と Windows Desktop の間で通知・SMS・メッセージ・ファイ�
 
 ## 版を上げる
 
-`vMAJOR.MINOR.PATCH` のタグを push したときだけ配布物が出る。master への push では出ない。
+`vMAJOR.MINOR.PATCH` のタグを push したときだけ配布物が出る。main への push では出ない。
 手順と注意点は release skill を参照。
 
 ## コミット
