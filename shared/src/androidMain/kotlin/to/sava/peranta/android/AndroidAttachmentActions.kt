@@ -15,17 +15,11 @@ import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.ui.REFUSED_OPEN_MESSAGE
 import java.io.File
 
-/** 添付共有・保存に使う FileProvider の authority 接尾辞（自己更新と同じ provider を流用、§4.3）。 */
-private const val FILE_PROVIDER_SUFFIX: String = ".updates"
-
 /** 開くハンドラが無いときにタイムラインへ出す文言。 */
 private const val NO_VIEWER_MESSAGE: String = "このファイルを開けるアプリが見つかりません"
 
 /** 保存に失敗したときにタイムラインへ出す文言。 */
 private const val SAVE_FAILED_MESSAGE: String = "ファイルの保存に失敗しました"
-
-/** [packageName] に対応する添付用 FileProvider の authority。 */
-fun attachmentFileProviderAuthority(packageName: String): String = "$packageName$FILE_PROVIDER_SUFFIX"
 
 /** SAF 保存結果に対する処理の分岐。 */
 internal enum class SaveDocumentOutcome {
@@ -177,5 +171,5 @@ class AndroidAttachmentActions(
     }
 
     private fun uriFor(file: File): Uri =
-        FileProvider.getUriForFile(context, attachmentFileProviderAuthority(context.packageName), file)
+        FileProvider.getUriForFile(context, fileProviderAuthority(context.packageName), file)
 }

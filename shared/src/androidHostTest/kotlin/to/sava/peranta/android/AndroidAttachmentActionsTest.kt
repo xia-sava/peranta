@@ -5,12 +5,6 @@ import kotlin.test.assertEquals
 
 class AndroidAttachmentActionsTest {
 
-    /** 添付用 FileProvider の authority は自己更新と同じ provider（`<applicationId>.updates`）を流用する。 */
-    @Test
-    fun authorityReusesUpdatesProvider() {
-        assertEquals("to.sava.peranta.updates", attachmentFileProviderAuthority("to.sava.peranta"))
-    }
-
     /** ユーザーがピッカーをキャンセルした（Uri なし）なら何もしない。 */
     @Test
     fun cancelledPickIsIgnored() {

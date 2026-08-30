@@ -5,14 +5,12 @@ import android.content.Intent
 import androidx.core.content.FileProvider
 import co.touchlab.kermit.Logger
 import io.ktor.client.HttpClient
+import to.sava.peranta.android.fileProviderAuthority
 import java.io.File
 import java.io.IOException
 
 /** APK の MIME タイプ。 */
 private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
-
-/** FileProvider の authority 接尾辞（androidApp の manifest の provider と一致させる）。 */
-private const val FILE_PROVIDER_SUFFIX = ".updates"
 
 /** ダウンロード先ディレクトリ名（res/xml/file_paths.xml の cache-path と一致させる）。 */
 private const val DOWNLOAD_DIR = "updates"
@@ -69,7 +67,7 @@ class AndroidUpdateInstaller(
 
     /** インストール確認の Intent を発行する。実際のインストールはユーザーが承認して進む。 */
     fun launch(apk: File) {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}$FILE_PROVIDER_SUFFIX", apk)
+        val uri = FileProvider.getUriForFile(context, fileProviderAuthority(context.packageName), apk)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, APK_MIME_TYPE)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
