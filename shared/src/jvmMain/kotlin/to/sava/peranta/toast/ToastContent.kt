@@ -1,5 +1,9 @@
 package to.sava.peranta.toast
 
+import to.sava.peranta.model.ActionExecutionKind
+import to.sava.peranta.model.NotificationPayload
+import to.sava.peranta.model.Payload
+import to.sava.peranta.model.actionKindAt
 import to.sava.peranta.receive.displayFor
 import to.sava.peranta.receive.sourceLabelFor
 import to.sava.peranta.timeline.ErrorItem
@@ -31,8 +35,31 @@ fun toastContentFor(item: ReceivedNotification): ReceivedNotificationToast? =
             body = it.body,
             source = it.source,
             openUrl = it.openUrl,
+            actions = toastActionsFor(item.payload),
         )
     }
+
+/**
+ * トーストに載せる元通知のアクションを選ぶ（§3.3）。押した結果が発出元で完結するもの
+ * （[ActionExecutionKind.SENDER_EFFECT]）だけを採り、押しても発出元の画面が開くだけのものと、
+ * 分類する材料が無いものは落とす。手元で結果を確かめられない操作をトーストへ並べても空振りに
+ * なるため。落としたアクションもタイムラインのバブル（§10.1）には並ぶので操作手段は残る。
+ */
+private fun toastActionsFor(payload: Payload): List<ToastAction> {
+    val notification = payload as? NotificationPayload ?: return emptyList()
+    return notification.actions.mapIndexedNotNull { index, label ->
+        ToastAction(index = index, label = label)
+            .takeIf { label.isNotBlank() && notification.actionKindAt(index) == ActionExecutionKind.SENDER_EFFECT }
+    }
+}
+
+/**
+ * 表示していた [action] が、押した時点の [payload] でも同じ位置に同じ名前で残っているか（§3.3）。
+ * トーストは操作するまで残るため、その間に元通知が差し替わってアクションの並びが変わることがある。
+ * 位置だけで発火すると別の操作を起こしてしまうので、送る前にこれで確かめる。
+ */
+fun isActionStillOffered(payload: NotificationPayload, action: ToastAction): Boolean =
+    payload.actions.getOrNull(action.index) == action.label
 
 /** エラーアイテムを軽い通知トーストへ変換する（§10.1 のローカル通知）。 */
 fun toastContentFor(item: ErrorItem): ReceivedNotificationToast =

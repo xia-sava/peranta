@@ -2,6 +2,17 @@ package to.sava.peranta.toast
 
 import androidx.compose.ui.graphics.ImageBitmap
 
+/**
+ * トーストに載せる元通知のアクション（§3.3）。ラベルは発信元をヘッダに出すぶん接頭辞を付けず、
+ * 元通知に付いていた名前をそのまま出す。
+ */
+data class ToastAction(
+    /** 元通知でのアクションの位置。発火するコマンド（§3.4）はこの位置を指す。 */
+    val index: Int,
+    /** ボタンに出す名前。 */
+    val label: String,
+)
+
 /** 1 トーストの表示内容。 */
 data class ReceivedNotificationToast(
     val id: String,
@@ -11,6 +22,8 @@ data class ReceivedNotificationToast(
     val source: String? = null,
     /** 本文から抽出した先頭 URL。あれば「開く」ボタンを追加する（§3.3）。 */
     val openUrl: String? = null,
+    /** 元通知のアクション。ボタンとして並べ、押すと発出元で実行する（§3.3）。 */
+    val actions: List<ToastAction> = emptyList(),
     /** 通知に付いていた画像。本文より遅れて届くため、表示中に差し込まれることがある（§4.3.1）。 */
     val image: ImageBitmap? = null,
     /** 元通知の送信者アイコン。画像と同じく本文より遅れて届くことがある（§4.3.1）。 */
@@ -18,24 +31,27 @@ data class ReceivedNotificationToast(
 )
 
 /** トースト表示の結果。 */
-enum class ToastResult {
+sealed interface ToastResult {
     /** 本体クリック。 */
-    Clicked,
+    data object Clicked : ToastResult
 
     /** ユーザーが閉じた（× ボタン・スワイプ）。 */
-    Dismissed,
+    data object Dismissed : ToastResult
 
     /** 「開く」ボタン押下。 */
-    ButtonOpen,
+    data object ButtonOpen : ToastResult
 
     /** 「消す」ボタン押下。 */
-    ButtonDismiss,
+    data object ButtonDismiss : ToastResult
+
+    /** 元通知のアクションボタン押下。[index] は元通知でのアクションの位置（§3.4）。 */
+    data class ButtonAction(val index: Int) : ToastResult
 
     /** 既読同期などで表示側から取り下げた（§3.4）。 */
-    Closed,
+    data object Closed : ToastResult
 
     /** 表示できなかった。 */
-    Failed,
+    data object Failed : ToastResult
 }
 
 /**

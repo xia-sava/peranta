@@ -36,6 +36,7 @@ import to.sava.peranta.config.withDevOverrides
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
+import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.SwipeBehavior
 import to.sava.peranta.model.notificationKeyOrNull
@@ -70,6 +71,7 @@ import to.sava.peranta.timeline.defaultTimelineFile
 import to.sava.peranta.toast.ReceivedNotificationToast
 import to.sava.peranta.toast.ToastResult
 import to.sava.peranta.toast.Toaster
+import to.sava.peranta.toast.isActionStillOffered
 import to.sava.peranta.toast.toastContentFor
 import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.AttachmentDownloadState
@@ -369,7 +371,7 @@ class DesktopReceiver(
 
     private suspend fun showNotificationToast(item: ReceivedNotification) {
         val content = toastContentFor(item)?.withCachedImages(item) ?: return
-        when (toaster.show(content)) {
+        when (val result = toaster.show(content)) {
             ToastResult.ButtonDismiss -> requestDismiss(currentPayload(item.id) ?: item.payload)
             ToastResult.ButtonOpen -> content.openUrl?.let { openUrlInBrowser(it) }
             ToastResult.Clicked -> {
@@ -379,7 +381,27 @@ class DesktopReceiver(
 
             ToastResult.Dismissed -> dismissSourceOnSwipe(currentPayload(item.id) ?: item.payload)
 
+            is ToastResult.ButtonAction -> requestAction(item, content, result.index)
+
             else -> Unit
+        }
+    }
+
+    /**
+     * トーストのアクションボタン押下を発出元への発火（§3.4）にする。トーストは操作するまで残るため、
+     * その間に元通知が差し替わってアクションの並びが変わることがある。位置だけで撃つと別の操作を
+     * 起こしてしまうので、表示したときのラベルと押した時点のラベルが一致するときだけ送る。
+     */
+    private fun requestAction(item: ReceivedNotification, content: ReceivedNotificationToast, index: Int) {
+        val action = content.actions.firstOrNull { it.index == index } ?: return
+        val payload = (currentPayload(item.id) ?: item.payload) as? NotificationPayload ?: return
+        if (!isActionStillOffered(payload, action)) {
+            log.w { "toast action skipped (actions changed) id=${item.id} index=$index" }
+            return
+        }
+        toastScope.launch {
+            commandSender.invokeAction(payload.from, payload.notificationKey, index)
+            log.i { "toast action invoked id=${item.id} index=$index" }
         }
     }
 

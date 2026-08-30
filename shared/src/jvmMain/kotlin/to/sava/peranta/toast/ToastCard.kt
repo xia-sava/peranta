@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,6 +41,12 @@ private const val OPEN_BUTTON_LABEL = "開く"
 
 /** 既読同期ボタンのラベル。押下は発出元の通知を消すコマンドになる（§3.4）。 */
 private const val DISMISS_BUTTON_LABEL = "送信元の通知を消す"
+
+/**
+ * 元通知のアクションを並べる段に出すボタンの数の上限（§3.3）。トーストの幅を等分して 1 行に
+ * 収めるため、ラベルが読める幅を保てる数で止める。あふれた分はタイムライン（§10.1）で操作する。
+ */
+private const val MAX_ACTION_BUTTONS = 3
 
 /** 件名に出す最大行数。 */
 private const val TITLE_MAX_LINES = 2
@@ -126,14 +133,29 @@ internal fun ToastCard(
             )
         }
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (item.openUrl != null) {
-                ToastButton(OPEN_BUTTON_LABEL, palette, Modifier.weight(1f)) {
-                    onResult(ToastResult.ButtonOpen)
+        // 元通知のアクションを上段に、この端末の操作（開く・消す）を下段に置く。押す先が
+        // 発出元かこの端末かで段を分け、いつも同じ位置に「消す」が来るようにする（§3.3）。
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            item.actions.take(MAX_ACTION_BUTTONS)
+                .takeIf { it.isNotEmpty() }
+                ?.let { actions ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        actions.forEach { action ->
+                            ToastButton(action.label, palette, Modifier.weight(1f)) {
+                                onResult(ToastResult.ButtonAction(action.index))
+                            }
+                        }
+                    }
                 }
-            }
-            ToastButton(DISMISS_BUTTON_LABEL, palette, Modifier.weight(1f)) {
-                onResult(ToastResult.ButtonDismiss)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (item.openUrl != null) {
+                    ToastButton(OPEN_BUTTON_LABEL, palette, Modifier.weight(1f)) {
+                        onResult(ToastResult.ButtonOpen)
+                    }
+                }
+                ToastButton(DISMISS_BUTTON_LABEL, palette, Modifier.weight(1f)) {
+                    onResult(ToastResult.ButtonDismiss)
+                }
             }
         }
     }
@@ -190,7 +212,7 @@ private fun ToastButton(
             .padding(vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = label, color = palette.title, fontSize = 13.sp)
+        Text(text = label, color = palette.title, fontSize = 13.sp, textAlign = TextAlign.Center)
     }
 }
 

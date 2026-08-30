@@ -7,6 +7,7 @@ import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.MessagePayload
+import to.sava.peranta.model.NotificationActionDetail
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.timeline.ErrorItem
@@ -16,7 +17,9 @@ import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class ToastContentTest {
 
@@ -297,5 +300,111 @@ class ToastContentTest {
     fun errorWithBlankMessageFallsBack() {
         val item = ErrorItem(id = "e2", timestampEpochMillis = 1_000, message = "", kind = ErrorKind.OTHER)
         assertEquals("（本文なし）", toastContentFor(item).body)
+    }
+
+    /** 発出元で完結する（画面を開かない）アクション。 */
+    private val senderEffect = NotificationActionDetail(hasRemoteInput = false, opensActivity = false)
+
+    /** 発出元で画面が開くアクション。 */
+    private val opensOnSender = NotificationActionDetail(hasRemoteInput = false, opensActivity = true)
+
+    private fun withActions(
+        actions: List<String>,
+        actionDetails: List<NotificationActionDetail>,
+    ) = ReceivedNotification(
+        id = "a1",
+        timestampEpochMillis = 1_000,
+        payload = notificationWithActions(actions, actionDetails),
+    )
+
+    private fun notificationWithActions(
+        actions: List<String>,
+        actionDetails: List<NotificationActionDetail>,
+    ) = NotificationPayload(
+        id = "a1",
+        from = "phone",
+        to = "*",
+        sentAtEpochMillis = 900,
+        packageName = "com.google.android.gm",
+        appName = "Gmail",
+        title = "差出人",
+        text = "件名",
+        notificationKey = "0|com.google.android.gm|1|null|10",
+        postedAtEpochMillis = 900,
+        actions = actions,
+        actionDetails = actionDetails,
+    )
+
+    /** 発出元で完結するアクションはトーストのボタンになる。 */
+    @Test
+    fun senderEffectActionsBecomeToastButtons() {
+        val content = toastContentFor(
+            withActions(listOf("アーカイブ", "既読にする"), listOf(senderEffect, senderEffect)),
+        )
+        assertEquals(
+            listOf(ToastAction(index = 0, label = "アーカイブ"), ToastAction(index = 1, label = "既読にする")),
+            content?.actions,
+        )
+    }
+
+    /** 発出元で画面が開くだけのアクションは載せない（手元で結果を確かめられないため）。 */
+    @Test
+    fun opensOnSenderActionIsNotOffered() {
+        val content = toastContentFor(
+            withActions(listOf("アーカイブ", "返信"), listOf(senderEffect, opensOnSender)),
+        )
+        assertEquals(listOf(ToastAction(index = 0, label = "アーカイブ")), content?.actions)
+    }
+
+    /** インライン返信（RemoteInput つき）のアクションは載せない。 */
+    @Test
+    fun replyActionIsNotOffered() {
+        val reply = NotificationActionDetail(hasRemoteInput = true, opensActivity = false)
+        val content = toastContentFor(withActions(listOf("返信"), listOf(reply)))
+        assertEquals(emptyList(), content?.actions)
+    }
+
+    /** 分類する材料が無いアクション（旧送信元から届いたもの）は載せない。 */
+    @Test
+    fun actionWithoutDetailIsNotOffered() {
+        val content = toastContentFor(withActions(listOf("アーカイブ"), emptyList()))
+        assertEquals(emptyList(), content?.actions)
+    }
+
+    /** 名前が空白だけのアクションは押しても何のボタンか分からないため載せない。 */
+    @Test
+    fun blankLabelActionIsNotOffered() {
+        val content = toastContentFor(withActions(listOf("  "), listOf(senderEffect)))
+        assertEquals(emptyList(), content?.actions)
+    }
+
+    /** 載せないアクションを飛ばしても、位置は元通知での並びのまま保つ（発火はこの位置を指すため）。 */
+    @Test
+    fun offeredActionKeepsOriginalIndex() {
+        val content = toastContentFor(
+            withActions(listOf("返信", "アーカイブ"), listOf(opensOnSender, senderEffect)),
+        )
+        assertEquals(listOf(ToastAction(index = 1, label = "アーカイブ")), content?.actions)
+    }
+
+    /** アクションの並びが変わっていなければ、表示していたボタンはそのまま発火してよい。 */
+    @Test
+    fun actionStillOfferedWhenLabelUnchanged() {
+        val payload = notificationWithActions(listOf("アーカイブ", "既読にする"), listOf(senderEffect, senderEffect))
+        assertTrue(isActionStillOffered(payload, ToastAction(index = 1, label = "既読にする")))
+    }
+
+    /** 元通知が差し替わって同じ位置の名前が変わっていたら、別の操作になるので発火しない。 */
+    @Test
+    fun actionNotOfferedWhenLabelChanged() {
+        val payload = notificationWithActions(listOf("元に戻す"), listOf(senderEffect))
+        assertFalse(isActionStillOffered(payload, ToastAction(index = 0, label = "アーカイブ")))
+    }
+
+    /** アクションごと消えていたら発火しない。 */
+    @Test
+    fun actionNotOfferedWhenGone() {
+        val payload = notificationWithActions(emptyList(), emptyList())
+        assertFalse(isActionStillOffered(payload, ToastAction(index = 0, label = "アーカイブ")))
     }
 }
