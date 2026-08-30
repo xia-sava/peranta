@@ -1,4 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.w3c.dom.Element
+import javax.xml.parsers.DocumentBuilderFactory
 
 plugins {
     alias(libs.plugins.androidApplication)
@@ -68,3 +70,55 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 }
+
+// provider の宣言と、Uri を組み立てる側の定数の食い違いを見る。
+// 1 つのクラスが持てる authority は 1 つで、同じクラスで provider を 2 つ宣言すると後に書いた方の
+// authority を引けない。ビルドも lint も通るため、端末へ Uri を渡した時点で初めて壊れる。
+val verifyFileProviders = tasks.register("verifyFileProviders") {
+    // doLast がビルドスクリプトのインスタンスを掴むと configuration cache へ入らないため、File だけを渡す。
+    val manifest = layout.projectDirectory.file("src/main/AndroidManifest.xml").asFile
+    val sources = layout.projectDirectory.dir("../shared/src/androidMain").asFile
+    inputs.file(manifest)
+    inputs.dir(sources)
+
+    doLast {
+        val providers = DocumentBuilderFactory.newInstance()
+            .newDocumentBuilder()
+            .parse(manifest)
+            .getElementsByTagName("provider")
+        val classNames = mutableListOf<String>()
+        val authorities = mutableSetOf<String>()
+        for (index in 0 until providers.length) {
+            val provider = providers.item(index) as Element
+            classNames += provider.getAttribute("android:name")
+            authorities += provider.getAttribute("android:authorities").removePrefix("\${applicationId}")
+        }
+
+        classNames.groupingBy { it }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
+            .takeIf { it.isNotEmpty() }
+            ?.let {
+                throw GradleException(
+                    "同じクラスで宣言した provider がある: ${it.joinToString()}。後に書いた方の authority は引けない",
+                )
+            }
+
+        // Uri を組み立てる接尾辞は、宣言された authority と過不足なく揃っている必要がある。
+        val suffixPattern = Regex("const val \\w*PROVIDER_SUFFIX(?:\\s*:\\s*\\w+)?\\s*=\\s*\"([^\"]+)\"")
+        val declared = sources.walk()
+            .filter { it.extension == "kt" }
+            .flatMap { suffixPattern.findAll(it.readText()) }
+            .map { it.groupValues[1] }
+            .toSet()
+        if (declared != authorities) {
+            throw GradleException(
+                "provider の authority と、Uri を組み立てる定数が食い違っている: " +
+                    "マニフェスト=${authorities.sorted()} 定数=${declared.sorted()}",
+            )
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(verifyFileProviders) }
