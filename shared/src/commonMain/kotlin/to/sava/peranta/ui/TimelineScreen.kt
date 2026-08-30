@@ -39,6 +39,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -172,6 +174,12 @@ fun timelineScrollTargetIndex(visible: List<TimelineItem>, targetId: String): In
     visible.indexOfFirst { it.id == targetId }.takeIf { it >= 0 }
 
 /**
+ * タイムラインで返信入力を開く指定（§3.3）。入力を要するアクションはトーストの中では扱えないため、
+ * トーストのボタンからこの指定が渡り、アイテムの吹き出しがその場で入力欄を開く。
+ */
+data class TimelineReplyRequest(val itemId: String, val actionIndex: Int)
+
+/**
  * チャット風タイムライン（§10.1）。受信通知は左寄せ、エラー・送信通知は右寄せに並べる。
  * [actions] が渡されると受信通知にアクションボタン・右上の状態兼ボタン・長押し/右クリックメニューを
  * 付ける。「送信元の通知を消す」は command をブロードキャストするだけで、この端末のタイムラインには
@@ -183,6 +191,8 @@ fun timelineScrollTargetIndex(visible: List<TimelineItem>, targetId: String): In
  * [scrollToItemId] が非 null になると、対象アイテムまでアニメーション付きでスクロールし、
  * 見つかった/見つからなかったに関わらず [onScrollToItemHandled] を呼んで消費を通知する
  * （対象が表示リストに無ければスクロールせず消費のみ通知する）。最下部追従ロジックとは独立して動く。
+ * [replyRequest] が非 null になると、対象アイテムの吹き出しが返信入力を開き、[onReplyRequestHandled]
+ * で消費を通知する（対象が表示リストに無ければここで消費のみ通知する）。
  */
 @Composable
 fun TimelineScreen(
@@ -196,6 +206,8 @@ fun TimelineScreen(
     emptyStateMessage: String = DEFAULT_EMPTY_TIMELINE_MESSAGE,
     scrollToItemId: String? = null,
     onScrollToItemHandled: () -> Unit = {},
+    replyRequest: TimelineReplyRequest? = null,
+    onReplyRequestHandled: () -> Unit = {},
 ) {
     val list by items.collectAsState()
     val visible = list.filterNot { it is ReceivedNotification && it.hiddenFromTimeline }
@@ -252,6 +264,14 @@ fun TimelineScreen(
         onScrollToItemHandledState()
     }
 
+    // 返信の要求は対象の吹き出しが受け取って消費する。表示リストに無い（剪定済み・ローカル非表示）
+    // アイテム宛の要求は受け取り手が居ないため、ここで消費して要求を溜めない。
+    val onReplyRequestHandledState by rememberUpdatedState(onReplyRequestHandled)
+    LaunchedEffect(replyRequest) {
+        val request = replyRequest ?: return@LaunchedEffect
+        if (currentVisible.none { it.id == request.itemId }) onReplyRequestHandledState()
+    }
+
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         if (visible.isEmpty()) {
             EmptyState(emptyStateMessage)
@@ -271,6 +291,8 @@ fun TimelineScreen(
                                 actions = actions,
                                 attachments = attachments,
                                 fullText = fullText,
+                                replyRequest = replyRequest?.takeIf { it.itemId == item.id },
+                                onReplyRequestHandled = onReplyRequestHandled,
                             )
                         }
                     }
@@ -359,13 +381,15 @@ private fun TimelineRow(
     actions: TimelineActions?,
     attachments: AttachmentUi?,
     fullText: FullTextUi?,
+    replyRequest: TimelineReplyRequest? = null,
+    onReplyRequestHandled: () -> Unit = {},
 ) {
     when (item) {
         is ReceivedNotification ->
             if (actions == null) {
                 ReceivedBubble(item, attachments, fullText)
             } else {
-                InteractiveReceivedBubble(item, actions, attachments, fullText)
+                InteractiveReceivedBubble(item, actions, attachments, fullText, replyRequest, onReplyRequestHandled)
             }
 
         is ReceivedFile -> ReceivedFileBubble(item, attachments)
@@ -446,9 +470,19 @@ private fun InteractiveReceivedBubble(
     actions: TimelineActions,
     attachments: AttachmentUi?,
     fullText: FullTextUi?,
+    replyRequest: TimelineReplyRequest? = null,
+    onReplyRequestHandled: () -> Unit = {},
 ) {
     val payload = item.payload
     var replyingIndex by remember { mutableStateOf<Int?>(null) }
+    // トーストの返信ボタン（§3.3）から届いた要求で入力欄を開く。元通知が既に消えたアイテムは
+    // 操作 UI を出さないため、開かずに消費だけする。
+    val onReplyRequestHandledState by rememberUpdatedState(onReplyRequestHandled)
+    LaunchedEffect(replyRequest) {
+        val request = replyRequest ?: return@LaunchedEffect
+        if (!item.sourceDismissed) replyingIndex = request.actionIndex
+        onReplyRequestHandledState()
+    }
     val onActionClick: (Int) -> Unit = { index ->
         val notificationPayload = payload as? NotificationPayload
         when {
@@ -558,17 +592,20 @@ private fun ActionButtons(payload: Payload, onActionClick: (index: Int) -> Unit)
 /**
  * REPLY 分類のアクション用インライン返信入力（§10.1）。上限バイト数超過時は切り詰め警告のみ出し、
  * 実際の切り詰めは送信経路（[to.sava.peranta.send.CommandSender.reply]）側で行う。
- * 空白のみの入力では送信を無効化する。
+ * 空白のみの入力では送信を無効化する。開いた時点で入力欄へフォーカスを移し、そのまま打ち始められる
+ * ようにする（トーストの返信ボタン（§3.3）から開いたときも同じ）。
  */
 @Composable
 private fun ReplyInput(onSend: (text: String) -> Unit, onCancel: () -> Unit) {
     var text by remember { mutableStateOf("") }
     val overLimit = exceedsReplyLimit(text)
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         OutlinedTextField(
             value = text,
             onValueChange = { text = it },
-            modifier = Modifier.fillMaxWidth().testTag(TAG_TIMELINE_REPLY_INPUT),
+            modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).testTag(TAG_TIMELINE_REPLY_INPUT),
             minLines = 1,
             maxLines = 3,
             isError = overLimit,

@@ -21,6 +21,7 @@ import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.DEFAULT_EMPTY_TIMELINE_MESSAGE
 import to.sava.peranta.ui.FullTextUi
 import to.sava.peranta.ui.TimelineActions
+import to.sava.peranta.ui.TimelineReplyRequest
 import to.sava.peranta.ui.TimelineScreen
 
 /** タイムライン本体。ナビゲーションは画面シェルへ委ね、ここは受信済みアイテムの表示に専念する。 */
@@ -34,6 +35,8 @@ fun App(
     emptyStateMessage: String = DEFAULT_EMPTY_TIMELINE_MESSAGE,
     scrollToItemId: String? = null,
     onScrollToItemHandled: () -> Unit = {},
+    replyRequest: TimelineReplyRequest? = null,
+    onReplyRequestHandled: () -> Unit = {},
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         TimelineScreen(
@@ -45,6 +48,8 @@ fun App(
             emptyStateMessage = emptyStateMessage,
             scrollToItemId = scrollToItemId,
             onScrollToItemHandled = onScrollToItemHandled,
+            replyRequest = replyRequest,
+            onReplyRequestHandled = onReplyRequestHandled,
         )
     }
 }

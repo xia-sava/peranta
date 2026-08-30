@@ -11,6 +11,11 @@ data class ToastAction(
     val index: Int,
     /** ボタンに出す名前。 */
     val label: String,
+    /**
+     * 受信端末で本文を入力してから送るアクションか（§3.4 のインライン返信）。
+     * トーストの中では入力を受けないため、押すとタイムラインの返信入力を開く（§3.3）。
+     */
+    val needsInput: Boolean = false,
 )
 
 /** 1 トーストの表示内容。 */

@@ -12,10 +12,13 @@ import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BlobEnc
 import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.MessagePayload
+import to.sava.peranta.model.NotificationActionDetail
+import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
+import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.toast.ReceivedNotificationToast
 import to.sava.peranta.toast.ToastResult
 import to.sava.peranta.toast.Toaster
@@ -154,4 +157,53 @@ class DesktopReceiverToastClickTest {
             runBlocking { receiver.close() }
         }
     }
+
+    /** 入力の要るアクション（インライン返信）を押すと、タイムラインで返信を開く要求になる（§3.3）。 */
+    @Test
+    fun toastReplyActionRequestsTimelineReply() {
+        val replies = ConcurrentLinkedQueue<Pair<String, Int>>()
+        val toaster = FixedResultToaster(ToastResult.ButtonAction(index = 1))
+        val receiver = DesktopReceiver(
+            config = testConfig(),
+            repository = ConfigRepository(MapSettings()),
+            toaster = toaster,
+            onToastReplyRequested = { itemId, index -> replies.add(itemId to index) },
+        )
+        try {
+            receiver.handleAppended(
+                ReceivedNotification(
+                    id = replyNotification.id,
+                    timestampEpochMillis = 1000L,
+                    payload = replyNotification,
+                ),
+            )
+            runBlocking {
+                withTimeout(5_000) {
+                    while (replies.isEmpty()) delay(20)
+                }
+            }
+            assertEquals(listOf("notif-1" to 1), replies.toList())
+        } finally {
+            runBlocking { receiver.close() }
+        }
+    }
+
+    /** 発出元で完結するアクションと、この端末で入力するアクションを 1 件ずつ持つ通知。 */
+    private val replyNotification = NotificationPayload(
+        id = "notif-1",
+        from = "phone",
+        to = "*",
+        sentAtEpochMillis = 1000L,
+        packageName = "com.example.chat",
+        appName = "Chat",
+        title = "相手",
+        text = "こんばんは",
+        notificationKey = "0|com.example.chat|1|null|10",
+        actions = listOf("既読にする", "返信"),
+        actionDetails = listOf(
+            NotificationActionDetail(opensActivity = false),
+            NotificationActionDetail(hasRemoteInput = true),
+        ),
+        postedAtEpochMillis = 1000L,
+    )
 }

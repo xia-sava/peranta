@@ -41,15 +41,20 @@ fun toastContentFor(item: ReceivedNotification): ReceivedNotificationToast? =
 
 /**
  * トーストに載せる元通知のアクションを選ぶ（§3.3）。押した結果が発出元で完結するもの
- * （[ActionExecutionKind.SENDER_EFFECT]）だけを採り、押しても発出元の画面が開くだけのものと、
- * 分類する材料が無いものは落とす。手元で結果を確かめられない操作をトーストへ並べても空振りに
- * なるため。落としたアクションもタイムラインのバブル（§10.1）には並ぶので操作手段は残る。
+ * （[ActionExecutionKind.SENDER_EFFECT]）と、この端末で本文を入力して送るもの
+ * （[ActionExecutionKind.REPLY]）を採る。押しても発出元の画面が開くだけのものと、分類する材料が
+ * 無いものは落とす。手元で結果を確かめられない操作をトーストへ並べても空振りになるため。
+ * 落としたアクションもタイムラインのバブル（§10.1）には並ぶので操作手段は残る。
  */
 private fun toastActionsFor(payload: Payload): List<ToastAction> {
     val notification = payload as? NotificationPayload ?: return emptyList()
     return notification.actions.mapIndexedNotNull { index, label ->
-        ToastAction(index = index, label = label)
-            .takeIf { label.isNotBlank() && notification.actionKindAt(index) == ActionExecutionKind.SENDER_EFFECT }
+        if (label.isBlank()) return@mapIndexedNotNull null
+        when (notification.actionKindAt(index)) {
+            ActionExecutionKind.SENDER_EFFECT -> ToastAction(index = index, label = label)
+            ActionExecutionKind.REPLY -> ToastAction(index = index, label = label, needsInput = true)
+            else -> null
+        }
     }
 }
 

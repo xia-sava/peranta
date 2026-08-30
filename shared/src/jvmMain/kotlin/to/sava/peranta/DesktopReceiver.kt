@@ -175,6 +175,7 @@ class DesktopReceiver(
     private val repository: ConfigRepository,
     private val toaster: Toaster,
     private val onToastClicked: (itemId: String) -> Unit = {},
+    private val onToastReplyRequested: (itemId: String, actionIndex: Int) -> Unit = { _, _ -> },
     private val log: Logger = Logger.withTag("DesktopReceiver"),
 ) : DesktopSelfTest {
     private val httpClient = createNtfyHttpClient()
@@ -397,6 +398,12 @@ class DesktopReceiver(
         val payload = (currentPayload(item.id) ?: item.payload) as? NotificationPayload ?: return
         if (!isActionStillOffered(payload, action)) {
             log.w { "toast action skipped (actions changed) id=${item.id} index=$index" }
+            return
+        }
+        // 本文の入力が要るアクションはトーストの中では扱えないため、タイムラインの返信入力へ引き継ぐ。
+        if (action.needsInput) {
+            log.i { "toast reply requested id=${item.id} index=$index" }
+            onToastReplyRequested(item.id, index)
             return
         }
         toastScope.launch {

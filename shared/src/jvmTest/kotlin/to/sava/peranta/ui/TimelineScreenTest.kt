@@ -418,6 +418,65 @@ class TimelineScreenTest {
         onAllNodesWithTag(TAG_TIMELINE_REPLY_INPUT).assertCountEquals(0)
     }
 
+    /** トーストから届いた返信要求は、対象アイテムの入力欄を開いて消費を通知する（§3.3）。 */
+    @Test
+    fun replyRequestOpensInlineInput() = runComposeUiTest {
+        var handled = false
+        val payload = notification(
+            actions = listOf("アーカイブ", "返信"),
+            actionDetails = listOf(
+                NotificationActionDetail(opensActivity = false),
+                NotificationActionDetail(hasRemoteInput = true),
+            ),
+        )
+        setContent {
+            TimelineScreen(
+                items(payload),
+                actions = TimelineActions(),
+                replyRequest = TimelineReplyRequest(itemId = payload.id, actionIndex = 1),
+                onReplyRequestHandled = { handled = true },
+            )
+        }
+        onNodeWithTag(TAG_TIMELINE_REPLY_INPUT).assertExists()
+        assertTrue(handled)
+    }
+
+    /** 元通知が消えたアイテム宛の返信要求は、入力欄を開かずに消費だけする（操作 UI を出さないため）。 */
+    @Test
+    fun replyRequestOnDismissedSourceOnlyConsumes() = runComposeUiTest {
+        var handled = false
+        val payload = notification(
+            actions = listOf("返信"),
+            actionDetails = listOf(NotificationActionDetail(hasRemoteInput = true)),
+        )
+        setContent {
+            TimelineScreen(
+                items(payload, sourceDismissed = true),
+                actions = TimelineActions(),
+                replyRequest = TimelineReplyRequest(itemId = payload.id, actionIndex = 0),
+                onReplyRequestHandled = { handled = true },
+            )
+        }
+        onAllNodesWithTag(TAG_TIMELINE_REPLY_INPUT).assertCountEquals(0)
+        assertTrue(handled)
+    }
+
+    /** 表示リストに無いアイテム宛の返信要求は、受け取り手が居ないので画面側で消費する。 */
+    @Test
+    fun replyRequestForMissingItemIsConsumed() = runComposeUiTest {
+        var handled = false
+        setContent {
+            TimelineScreen(
+                items(),
+                actions = TimelineActions(),
+                replyRequest = TimelineReplyRequest(itemId = "no-such-item", actionIndex = 0),
+                onReplyRequestHandled = { handled = true },
+            )
+        }
+        onAllNodesWithTag(TAG_TIMELINE_REPLY_INPUT).assertCountEquals(0)
+        assertTrue(handled)
+    }
+
     /** 返信本文が上限バイト数を超えると、送信は無効化されず切り詰め警告のみ表示される。 */
     @Test
     fun replyOverLimitShowsTruncationWarning() = runComposeUiTest {

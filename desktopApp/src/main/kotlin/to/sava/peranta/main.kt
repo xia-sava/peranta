@@ -70,6 +70,7 @@ import to.sava.peranta.ui.MessageComposer
 import to.sava.peranta.ui.PairingScanScreen
 import to.sava.peranta.ui.PerantaTheme
 import to.sava.peranta.ui.SettingsScreen
+import to.sava.peranta.ui.TimelineReplyRequest
 import to.sava.peranta.ui.ZoomableQrCode
 import to.sava.peranta.ui.failingHealthCheckIds
 import to.sava.peranta.ui.setup.SetupAction
@@ -281,6 +282,13 @@ fun main(args: Array<String>) {
         bringToFront()
         scrollToItemRequest.get().invoke(itemId)
     }
+    // 入力の要るアクションはトーストの中で完結しないため、前面化とスクロールに続けて、そのアイテムの
+    // 返信入力を開かせる（§3.3）。
+    val replyToItemRequest = AtomicReference<(itemId: String, actionIndex: Int) -> Unit>({ _, _ -> })
+    val bringToFrontAndReplyToItem: (itemId: String, actionIndex: Int) -> Unit = { itemId, actionIndex ->
+        bringToFront()
+        replyToItemRequest.get().invoke(itemId, actionIndex)
+    }
     val updater = DesktopUpdater(DesktopVersion.versionCode)
     // トーストは受信機より長生きさせる。設定変更で受信機を作り直しても表示中のものを引き継ぐ。
     val toaster = ComposeToaster(WindowsNotificationSound())
@@ -387,6 +395,16 @@ fun main(args: Array<String>) {
             }
         }
 
+        // トーストの返信ボタンで届いた要求。対象アイテムへスクロールしたうえで返信入力を開く。
+        var pendingReplyRequest by remember { mutableStateOf<TimelineReplyRequest?>(null) }
+        LaunchedEffect(Unit) {
+            replyToItemRequest.set { itemId, actionIndex ->
+                onNavigate(ShellDestination.Timeline)
+                pendingScrollItemId = itemId
+                pendingReplyRequest = TimelineReplyRequest(itemId, actionIndex)
+            }
+        }
+
         // 最小化はタスクバーでなくトレイへ格納する。復帰時に備えて最小化フラグは戻しておく。
         LaunchedEffect(Unit) {
             snapshotFlow { windowState.isMinimized }.collectLatest { minimized ->
@@ -427,6 +445,7 @@ fun main(args: Array<String>) {
                                 repository = desktopSettings.repository,
                                 toaster = toaster,
                                 onToastClicked = bringToFrontAndScrollToItem,
+                                onToastReplyRequested = bringToFrontAndReplyToItem,
                             )
                         }
                     }
@@ -508,6 +527,8 @@ fun main(args: Array<String>) {
                                             lazyScrollbarContent = { listState -> DesktopScrollbar(listState) },
                                             scrollToItemId = pendingScrollItemId,
                                             onScrollToItemHandled = { pendingScrollItemId = null },
+                                            replyRequest = pendingReplyRequest,
+                                            onReplyRequestHandled = { pendingReplyRequest = null },
                                         )
                                         else -> App()
                                     }

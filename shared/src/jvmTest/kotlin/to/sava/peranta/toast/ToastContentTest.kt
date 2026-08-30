@@ -356,12 +356,22 @@ class ToastContentTest {
         assertEquals(listOf(ToastAction(index = 0, label = "アーカイブ")), content?.actions)
     }
 
-    /** インライン返信（RemoteInput つき）のアクションは載せない。 */
+    /** インライン返信（RemoteInput つき）のアクションは、入力が要る印を付けて載せる。 */
     @Test
-    fun replyActionIsNotOffered() {
+    fun replyActionIsOfferedAsInputAction() {
         val reply = NotificationActionDetail(hasRemoteInput = true, opensActivity = false)
         val content = toastContentFor(withActions(listOf("返信"), listOf(reply)))
-        assertEquals(emptyList(), content?.actions)
+        assertEquals(
+            listOf(ToastAction(index = 0, label = "返信", needsInput = true)),
+            content?.actions,
+        )
+    }
+
+    /** 発出元で完結するアクションには入力が要る印を付けない。 */
+    @Test
+    fun senderEffectActionDoesNotNeedInput() {
+        val content = toastContentFor(withActions(listOf("アーカイブ"), listOf(senderEffect)))
+        assertEquals(listOf(false), content?.actions?.map { it.needsInput })
     }
 
     /** 分類する材料が無いアクション（旧送信元から届いたもの）は載せない。 */
