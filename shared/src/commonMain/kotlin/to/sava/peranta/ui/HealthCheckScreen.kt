@@ -26,18 +26,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** 画面冒頭の説明文（強制ブロックせず、後でも直せる旨を明示する、§10.5）。 */
 private const val HEALTH_DESCRIPTION: String =
@@ -72,7 +73,7 @@ private val ALL_CLEAR_CONTENT: Color = Color(0xFF1B5E20)
  * システム設定から戻った直後の状態を反映する。この画面は致命的でない未達でも操作を妨げないため、
  * [onBack] は常に有効にし、そのままメイン画面へ戻れるようにする。
  * [onCopyText] は案内ダイアログの [FixAid.Copy] ボタンで使うコピー処理。null なら
- * [LocalClipboardManager] へフォールバックする。
+ * [LocalClipboard] へフォールバックする。
  * [showHeader] が false のときは画面見出し行（タイトルと「戻る」）を出さない。外側のアプリバーが
  * 見出しと戻る導線を持つ埋め込み利用で使い、既定の true では従来どおり見出しつきの単独画面として振る舞う。
  * スクロールバーの描画はプラットフォーム依存のため [scrollbarContent] スロットで注入する。
@@ -325,7 +326,8 @@ private fun FixGuidanceContent(
     item: HealthCheckItem,
     onCopyText: ((text: String, sensitive: Boolean) -> Unit)?,
 ) {
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val copyScope = rememberCoroutineScope()
     var copiedIndex by remember(item.id) { mutableStateOf<Int?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(text = item.fixGuidance.orEmpty())
@@ -349,7 +351,7 @@ private fun FixGuidanceContent(
                             if (onCopyText != null) {
                                 onCopyText(aid.value, aid.sensitive)
                             } else {
-                                clipboard.setText(AnnotatedString(aid.value))
+                                copyScope.launch { clipboard.setPlainText(aid.value) }
                             }
                             copiedIndex = index
                         },

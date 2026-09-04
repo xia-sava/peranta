@@ -47,10 +47,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -236,13 +235,15 @@ fun TimelineScreen(
 
     // 本文中のコードを押したらクリップボードへ入れ、押せたことを通知で返す（§10.1）。
     // 続けて別のコードを押したときは前の通知を引っ込め、最後に押したものの結果だけを見せる。
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val snackbarHostState = remember { SnackbarHostState() }
     val copyScope = rememberCoroutineScope()
     val onCopyCode: (code: String) -> Unit = { code ->
-        clipboard.setText(AnnotatedString(code))
         snackbarHostState.currentSnackbarData?.dismiss()
-        copyScope.launch { snackbarHostState.showSnackbar(CODE_COPIED_MESSAGE) }
+        copyScope.launch {
+            clipboard.setPlainText(code)
+            snackbarHostState.showSnackbar(CODE_COPIED_MESSAGE)
+        }
     }
 
     // 起動時は最下部（最新）へアニメーション無しでジャンプする。以降は、末尾アイテムの itemCount が

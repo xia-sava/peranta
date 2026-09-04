@@ -14,9 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
-import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.asAwtTransferable
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -34,7 +32,6 @@ import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runComposeUiTest
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import java.awt.datatransfer.DataFlavor
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -981,19 +978,7 @@ class TimelineScreenTest {
         assertTrue(receivedListState != null)
     }
 
-    /** 本文中のコードのコピー先を差し替え、入った文字列を記録する（§10.1）。 */
-    private fun recordingClipboardManager(sink: MutableList<String>): ClipboardManager = object : ClipboardManager {
-        override fun setText(annotatedString: AnnotatedString) {
-            sink += annotatedString.text
-        }
-
-        override fun getText(): AnnotatedString? = sink.lastOrNull()?.let(::AnnotatedString)
-    }
-
-    /**
-     * 選択した本文のコピー先を差し替え、書かれた文字列を記録する（§10.1）。
-     * 選択の仕組みはコードのコピーとは別に [LocalClipboard] を使うため、受け皿も分かれる。
-     */
+    /** クリップボードへ書かれた文字列を記録するだけの差し替え（§10.1 のコピー確認用）。 */
     private class RecordingClipboard : Clipboard {
         val written = mutableListOf<String>()
 
@@ -1081,30 +1066,31 @@ class TimelineScreenTest {
     /** 本文中のコードを押すとクリップボードへ入り、押せたことを通知で返す（§10.1）。 */
     @Test
     fun tappingCodeCopiesItToClipboard() = runComposeUiTest {
-        val copied = mutableListOf<String>()
+        val clipboard = RecordingClipboard()
         setContent {
-            CompositionLocalProvider(LocalClipboardManager provides recordingClipboardManager(copied)) {
+            CompositionLocalProvider(LocalClipboard provides clipboard) {
                 TimelineScreen(items(notification(text = "483920")), actions = TimelineActions())
             }
         }
 
         onNodeWithText("483920").performClick()
-        assertEquals(listOf("483920"), copied)
+        waitUntil { clipboard.written.isNotEmpty() }
+        assertEquals(listOf("483920"), clipboard.written)
         onNodeWithText(CODE_COPIED_MESSAGE).assertIsDisplayed()
     }
 
     /** 5 桁以下の数字列はコードとして扱わず、押してもクリップボードへ入らない（§10.1）。 */
     @Test
     fun tappingShortDigitRunCopiesNothing() = runComposeUiTest {
-        val copied = mutableListOf<String>()
+        val clipboard = RecordingClipboard()
         setContent {
-            CompositionLocalProvider(LocalClipboardManager provides recordingClipboardManager(copied)) {
+            CompositionLocalProvider(LocalClipboard provides clipboard) {
                 TimelineScreen(items(notification(text = "48392")), actions = TimelineActions())
             }
         }
 
         onNodeWithText("48392").performClick()
-        assertEquals(emptyList(), copied)
+        assertEquals(emptyList(), clipboard.written)
     }
 
     private companion object {

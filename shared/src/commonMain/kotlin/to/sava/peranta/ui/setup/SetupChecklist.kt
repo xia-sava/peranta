@@ -14,16 +14,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import to.sava.peranta.ui.FixAid
+import to.sava.peranta.ui.setPlainText
 
 /** コピー実行直後に添える案内文。 */
 private const val COPIED_LABEL: String = "コピーしました"
@@ -40,7 +42,7 @@ enum class SetupChecklistMode { STANDING, IN_PAGE }
 
 /**
  * 同一の [SetupItemUi] 列を [mode] に応じた見せ方で描くチェックリスト。
- * [onCopyText] は [FixAid.Copy] のコピー処理で、null なら [LocalClipboardManager] へフォールバックする。
+ * [onCopyText] は [FixAid.Copy] のコピー処理で、null なら [LocalClipboard] へフォールバックする。
  */
 @Composable
 fun SetupChecklist(
@@ -142,7 +144,8 @@ private fun SetupAids(
     onCopyText: ((text: String, sensitive: Boolean) -> Unit)?,
 ) {
     if (item.aids.isEmpty()) return
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val copyScope = rememberCoroutineScope()
     var copiedIndex by remember(item.id) { mutableStateOf<Int?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item.aids.forEachIndexed { index, aid ->
@@ -165,7 +168,7 @@ private fun SetupAids(
                             if (onCopyText != null) {
                                 onCopyText(aid.value, aid.sensitive)
                             } else {
-                                clipboard.setText(AnnotatedString(aid.value))
+                                copyScope.launch { clipboard.setPlainText(aid.value) }
                             }
                             copiedIndex = index
                         },
