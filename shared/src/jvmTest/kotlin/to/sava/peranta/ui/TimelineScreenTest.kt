@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
@@ -18,6 +19,8 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -979,6 +982,32 @@ class TimelineScreenTest {
         }
 
         override fun getText(): AnnotatedString? = sink.lastOrNull()?.let(::AnnotatedString)
+    }
+
+    /** 右クリックしたコンテキストメニューは押した座標に開く（§10.1）。 */
+    @Test
+    fun rightClickOpensMenuAtThePointer() = runComposeUiTest {
+        setContent { TimelineScreen(items(), actions = TimelineActions()) }
+
+        onNodeWithTag(TAG_TIMELINE_RECEIVED).performMouseInput { rightClick(Offset(20f, 10f)) }
+        val nearLeft = onNodeWithTag(TAG_TIMELINE_MENU_HIDE).getBoundsInRoot().left
+        onNodeWithTag(TAG_TIMELINE_MENU_HIDE).performClick()
+
+        onNodeWithTag(TAG_TIMELINE_RECEIVED).performMouseInput { rightClick(Offset(160f, 10f)) }
+        val farLeft = onNodeWithTag(TAG_TIMELINE_MENU_HIDE).getBoundsInRoot().left
+        assertTrue(farLeft > nearLeft)
+    }
+
+    /**
+     * 右クリックで開くメニューは 1 つ（§10.1）。本文を選べるようにした結果、選択機構が持つ
+     * 右クリックメニューが重なって出た回帰を捕まえる。吹き出しの本体と合わせて根は 2 つ。
+     */
+    @Test
+    fun rightClickOpensOnlyTheTimelineMenu() = runComposeUiTest {
+        setContent { TimelineScreen(items(), actions = TimelineActions()) }
+
+        onNodeWithTag(TAG_TIMELINE_RECEIVED).performMouseInput { rightClick() }
+        assertEquals(2, onAllNodes(isRoot()).fetchSemanticsNodes().size)
     }
 
     /** メニューボタンでコンテキストメニューが開く（§10.1）。Android はこれが唯一の入口になる。 */

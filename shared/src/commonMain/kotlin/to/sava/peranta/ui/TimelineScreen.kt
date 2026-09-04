@@ -48,9 +48,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.StateFlow
@@ -563,6 +565,9 @@ private fun InteractiveReceivedBubble(
     val dismissSource: () -> Unit = { actions.dismiss(item) }
     val hideFromTimeline: () -> Unit = { actions.hideFromTimeline(item) }
     var menuOpen by remember { mutableStateOf(false) }
+    var pointerMenuOpen by remember { mutableStateOf(false) }
+    var pointerMenuAt by remember { mutableStateOf(DpOffset.Zero) }
+    val density = LocalDensity.current
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -570,7 +575,10 @@ private fun InteractiveReceivedBubble(
             shape = MaterialTheme.shapes.medium,
             modifier = Modifier
                 .testTag(TAG_TIMELINE_RECEIVED)
-                .timelineContextGesture(enabled = true) { menuOpen = true },
+                .timelineContextGesture(enabled = true) { position ->
+                    pointerMenuAt = with(density) { DpOffset(position.x.toDp(), position.y.toDp()) }
+                    pointerMenuOpen = true
+                },
         ) {
             // バルーン幅は本文と右上のボタンを合わせた幅。ボタンは本文に被せず右隣（上寄せ）に置く。
             // 本文に weight を与えて先にボタンの幅を確保する。与えないと本文が横幅を取り切り、
@@ -621,6 +629,23 @@ private fun InteractiveReceivedBubble(
                         onClick = if (item.sourceDismissed) hideFromTimeline else dismissSource,
                     )
                 }
+            }
+        }
+        // 右クリックはメニューを押した座標へ出す。メニューは置き場所の下端から開くため、
+        // 大きさを持たない起点を吹き出しの左上に据え、そこからの位置として座標を渡す。
+        Box(modifier = Modifier.align(Alignment.TopStart)) {
+            DisableSelection {
+                ContextMenu(
+                    expanded = pointerMenuOpen,
+                    onDismissRequest = { pointerMenuOpen = false },
+                    payload = payload,
+                    actions = actions,
+                    onActionClick = onActionClick,
+                    onDismissNotification = dismissSource,
+                    onHideFromTimeline = hideFromTimeline,
+                    showActionItems = !item.sourceDismissed,
+                    offset = pointerMenuAt,
+                )
             }
         }
     }
@@ -731,6 +756,7 @@ private fun ReplyInput(onSend: (text: String) -> Unit, onCancel: () -> Unit) {
  * 受信通知アイテムのコンテキストメニュー。[showActionItems] が false のとき（元通知が消えた
  * アイテム、§10.1）はアクション項目と「送信元の通知を消す」を出さない。
  * 「タイムラインから消す」「このアプリからの通知を非表示」は元通知の状態に依らず常に出す。
+ * [offset] は置き場所の左上から測った表示位置で、右クリックの座標へ出すときに使う。
  */
 @Composable
 private fun ContextMenu(
@@ -742,8 +768,9 @@ private fun ContextMenu(
     onDismissNotification: () -> Unit,
     onHideFromTimeline: () -> Unit,
     showActionItems: Boolean,
+    offset: DpOffset = DpOffset.Zero,
 ) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismissRequest) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismissRequest, offset = offset) {
         if (payload is NotificationPayload) {
             DropdownMenuItem(
                 text = { Text("このアプリからの通知を非表示") },
