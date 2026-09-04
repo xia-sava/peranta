@@ -14,7 +14,7 @@ plugins {
 kotlin {
     jvm()
 
-    androidLibrary {
+    android {
         namespace = "to.sava.peranta.shared"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
@@ -86,7 +86,7 @@ kotlin {
             implementation(libs.ktor.server.core)
             implementation(libs.ktor.server.cio)
             implementation(libs.ktor.server.websockets)
-            implementation(compose.desktop.uiTestJUnit4)
+            implementation(libs.compose.uiTestJUnit4)
             implementation(compose.desktop.currentOs)
         }
     }
