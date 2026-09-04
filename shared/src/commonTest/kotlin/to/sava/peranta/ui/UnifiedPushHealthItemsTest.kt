@@ -62,7 +62,7 @@ class UnifiedPushHealthItemsTest {
         val fact = "受信エンドポイントが向いている先が不一致です。"
         val item = convert(setupItem(status = SetupStatus.TODO, statusDetail = fact))
         assertTrue(item.detail!!.contains(fact))
-        assertTrue(item.detail!!.contains(ReceiveSetupSteps.guidanceTo(ReceiveSetupSteps.UNIFIED_PUSH_ID)))
+        assertTrue(item.detail.contains(ReceiveSetupSteps.guidanceTo(ReceiveSetupSteps.UNIFIED_PUSH_ID)))
     }
 
     /** 事実が無い未達でも、誘導文だけは detail に出す。 */
@@ -103,7 +103,7 @@ class UnifiedPushHealthItemsTest {
         var opened = false
         val item = convert(setupItem(status = SetupStatus.TODO), onOpenSetup = { opened = true })
         assertEquals("セットアップを開く", item.link!!.label)
-        item.link!!.onOpen()
+        item.link.onOpen()
         assertTrue(opened)
     }
 

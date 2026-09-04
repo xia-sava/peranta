@@ -22,7 +22,7 @@ class AndroidAppDataTest {
 
     private fun file(path: String): File =
         File(cacheDir, path).also {
-            it.parentFile.mkdirs()
+            it.parentFile?.mkdirs()
             it.writeText("x")
         }
 

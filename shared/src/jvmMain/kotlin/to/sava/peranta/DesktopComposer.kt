@@ -254,7 +254,7 @@ class DesktopComposer(
             val payloads = buildFilePayloads(
                 deviceId = config.deviceId!!,
                 attachments = refs,
-                keyId = config.keyId!!,
+                keyId = config.keyId,
                 now = nowEpochMillis(),
                 caption = text.ifBlank { null },
                 deviceName = config.deviceName,

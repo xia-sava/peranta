@@ -1,5 +1,6 @@
 package to.sava.peranta.net
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,6 +54,7 @@ private class FailingNtfy : NtfyClient {
     override fun subscribe(topic: String): Flow<NtfyEvent> = emptyFlow()
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SelfTestProbeTest {
 
     /** publish される topic・マーカー本文（固定 nonce）・cacheSeconds が仕様どおりであること。 */

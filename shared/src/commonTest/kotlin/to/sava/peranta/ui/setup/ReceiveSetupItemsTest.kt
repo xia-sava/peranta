@@ -85,8 +85,8 @@ class ReceiveSetupItemsTest {
             .byId(ReceiveSetupSteps.SERVER_CONFIG_ID)
         assertEquals(SetupStatus.TODO, item.status)
         assertTrue(item.statusDetail!!.contains("解釈できません"))
-        assertTrue(item.statusDetail!!.contains("手順4"))
-        assertTrue(!item.statusDetail!!.contains("不一致"))
+        assertTrue(item.statusDetail.contains("手順4"))
+        assertTrue(!item.statusDetail.contains("不一致"))
     }
 
     /** サーバ設定は状態に依らず貼り付け値（コピーチップ等）を常設する。 */
@@ -157,7 +157,7 @@ class ReceiveSetupItemsTest {
             .byId(ReceiveSetupSteps.NTFY_INSTALLED_ID)
         assertEquals(SetupStatus.TODO, withOthers.status)
         assertTrue(withOthers.statusDetail!!.contains("Sunup"))
-        assertTrue(withOthers.statusDetail!!.contains("NextPush"))
+        assertTrue(withOthers.statusDetail.contains("NextPush"))
 
         val onlyOthersMissing = build(ntfyInstalled = false).byId(ReceiveSetupSteps.NTFY_INSTALLED_ID)
         assertNull(onlyOthersMissing.statusDetail)

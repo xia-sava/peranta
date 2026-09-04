@@ -131,8 +131,11 @@ private fun Drawable.toBitmap(): Bitmap? {
     return bitmap
 }
 
-/** Parcelable の取り出し。型指定版が使えない API レベルでは非推奨の総称版に落ちる。 */
-@Suppress("DEPRECATION")
+/**
+ * Parcelable の取り出し。型指定版が使えない API レベルでは非推奨の総称版に落ちる。
+ * 総称版は型を実行時に確かめられないため、取り出せた値が [type] であることは呼び出し側が保つ。
+ */
+@Suppress("DEPRECATION", "UNCHECKED_CAST")
 private fun <T> Bundle.parcelable(key: String, type: Class<T>): T? =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         getParcelable(key, type)

@@ -238,7 +238,7 @@ class AttachmentTransferService : Service() {
         val payloads = buildFilePayloads(
             deviceId = config.deviceId!!,
             attachments = attachments,
-            keyId = config.keyId!!,
+            keyId = config.keyId,
             now = nowEpochMillis(),
             caption = caption,
             deviceName = config.deviceName,
