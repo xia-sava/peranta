@@ -9,10 +9,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.asAwtTransferable
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
@@ -31,6 +36,7 @@ import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import java.awt.datatransfer.DataFlavor
 import kotlinx.coroutines.flow.MutableStateFlow
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
@@ -975,13 +981,31 @@ class TimelineScreenTest {
         assertTrue(receivedListState != null)
     }
 
-    /** クリップボードへ入った文字列を記録するだけの差し替え（§10.1 のコピー確認用）。 */
-    private fun recordingClipboard(sink: MutableList<String>): ClipboardManager = object : ClipboardManager {
+    /** 本文中のコードのコピー先を差し替え、入った文字列を記録する（§10.1）。 */
+    private fun recordingClipboardManager(sink: MutableList<String>): ClipboardManager = object : ClipboardManager {
         override fun setText(annotatedString: AnnotatedString) {
             sink += annotatedString.text
         }
 
         override fun getText(): AnnotatedString? = sink.lastOrNull()?.let(::AnnotatedString)
+    }
+
+    /**
+     * 選択した本文のコピー先を差し替え、書かれた文字列を記録する（§10.1）。
+     * 選択の仕組みはコードのコピーとは別に [LocalClipboard] を使うため、受け皿も分かれる。
+     */
+    private class RecordingClipboard : Clipboard {
+        val written = mutableListOf<String>()
+
+        override suspend fun getClipEntry(): ClipEntry? = null
+
+        @OptIn(ExperimentalComposeUiApi::class)
+        override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+            val transferable = clipEntry?.asAwtTransferable ?: return
+            (transferable.getTransferData(DataFlavor.stringFlavor) as? String)?.let { written += it }
+        }
+
+        override val nativeClipboard: Any get() = error("この差し替えでは native のクリップボードを使わない")
     }
 
     /** 右クリックしたコンテキストメニューは押した座標に開く（§10.1）。 */
@@ -1010,6 +1034,40 @@ class TimelineScreenTest {
         assertEquals(2, onAllNodes(isRoot()).fetchSemanticsNodes().size)
     }
 
+    /** 選択が無い間は「コピー」を出さない（§10.1）。複写するものが無いため。 */
+    @Test
+    fun contextMenuHasNoCopyWithoutSelection() = runComposeUiTest {
+        setContent { TimelineScreen(items(), actions = TimelineActions()) }
+
+        onNodeWithTag(TAG_TIMELINE_RECEIVED).performMouseInput { rightClick() }
+        onAllNodesWithTag(TAG_TIMELINE_MENU_COPY).assertCountEquals(0)
+    }
+
+    /** 本文を選んでから右クリックすると「コピー」が並び、押すと選択がクリップボードへ入る（§10.1）。 */
+    @Test
+    fun contextMenuCopiesTheSelection() = runComposeUiTest {
+        val clipboard = RecordingClipboard()
+        val body = "認証コードは 483920 です。"
+        setContent {
+            CompositionLocalProvider(LocalClipboard provides clipboard) {
+                TimelineScreen(items(notification(text = body)), actions = TimelineActions())
+            }
+        }
+
+        onNodeWithText(body).performMouseInput {
+            moveTo(Offset(1f, centerY))
+            press()
+            moveTo(Offset(width * 0.5f, centerY))
+            moveTo(Offset(width - 1f, centerY))
+            release()
+        }
+        onNodeWithTag(TAG_TIMELINE_RECEIVED).performMouseInput { rightClick() }
+        onNodeWithTag(TAG_TIMELINE_MENU_COPY).performClick()
+
+        waitUntil { clipboard.written.isNotEmpty() }
+        assertEquals(body, clipboard.written.single())
+    }
+
     /** メニューボタンでコンテキストメニューが開く（§10.1）。Android はこれが唯一の入口になる。 */
     @Test
     fun menuButtonOpensContextMenu() = runComposeUiTest {
@@ -1025,7 +1083,7 @@ class TimelineScreenTest {
     fun tappingCodeCopiesItToClipboard() = runComposeUiTest {
         val copied = mutableListOf<String>()
         setContent {
-            CompositionLocalProvider(LocalClipboardManager provides recordingClipboard(copied)) {
+            CompositionLocalProvider(LocalClipboardManager provides recordingClipboardManager(copied)) {
                 TimelineScreen(items(notification(text = "483920")), actions = TimelineActions())
             }
         }
@@ -1040,7 +1098,7 @@ class TimelineScreenTest {
     fun tappingShortDigitRunCopiesNothing() = runComposeUiTest {
         val copied = mutableListOf<String>()
         setContent {
-            CompositionLocalProvider(LocalClipboardManager provides recordingClipboard(copied)) {
+            CompositionLocalProvider(LocalClipboardManager provides recordingClipboardManager(copied)) {
                 TimelineScreen(items(notification(text = "48392")), actions = TimelineActions())
             }
         }

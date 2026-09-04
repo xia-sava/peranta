@@ -90,6 +90,9 @@ const val TAG_TIMELINE_SOURCE_DISMISSED_BUTTON: String = "timeline-source-dismis
 /** 受信通知バブル右上のメニューボタン。 */
 const val TAG_TIMELINE_MENU_BUTTON: String = "timeline-menu-button"
 
+/** コンテキストメニューの「コピー」。選択中の本文があるときだけ出る。 */
+const val TAG_TIMELINE_MENU_COPY: String = "timeline-menu-copy"
+
 /** コンテキストメニューの「送信元の通知を消す」項目のタグ。 */
 const val TAG_TIMELINE_MENU_DISMISS: String = "timeline-menu-dismiss"
 
@@ -414,6 +417,7 @@ private fun EmptyState(message: String) {
  * タイムラインの 1 行（§10.1）。吹き出しの本文は文字を選べるようにし、押して働く部品（ボタン・
  * 返信入力・メニュー）は選択の対象から外す。選択範囲は 1 行の中で閉じる——[LazyColumn] は画面外へ
  * 出た行を捨てるため、行をまたぐ選択は捨てられた時点で壊れる。
+ * 選択した本文の複写は [TimelineSelectionScope] がプラットフォームごとの担い手へ振り分ける。
  */
 @Composable
 private fun TimelineRow(
@@ -425,27 +429,29 @@ private fun TimelineRow(
     replyRequest: TimelineReplyRequest? = null,
     onReplyRequestHandled: () -> Unit = {},
 ) {
-    SelectionContainer {
-        when (item) {
-            is ReceivedNotification ->
-                if (actions == null) {
-                    ReceivedBubble(item, attachments, fullText, onCopyCode)
-                } else {
-                    InteractiveReceivedBubble(
-                        item,
-                        actions,
-                        attachments,
-                        fullText,
-                        onCopyCode,
-                        replyRequest,
-                        onReplyRequestHandled,
-                    )
-                }
+    TimelineSelectionScope {
+        SelectionContainer {
+            when (item) {
+                is ReceivedNotification ->
+                    if (actions == null) {
+                        ReceivedBubble(item, attachments, fullText, onCopyCode)
+                    } else {
+                        InteractiveReceivedBubble(
+                            item,
+                            actions,
+                            attachments,
+                            fullText,
+                            onCopyCode,
+                            replyRequest,
+                            onReplyRequestHandled,
+                        )
+                    }
 
-            is ReceivedFile -> ReceivedFileBubble(item, attachments, onCopyCode)
-            is ReceivedMessage -> MessageBubble(item, onCopyCode)
-            is SentNotification -> SentBubble(item, onCopyCode)
-            is ErrorItem -> ErrorBubble(item)
+                is ReceivedFile -> ReceivedFileBubble(item, attachments, onCopyCode)
+                is ReceivedMessage -> MessageBubble(item, onCopyCode)
+                is SentNotification -> SentBubble(item, onCopyCode)
+                is ErrorItem -> ErrorBubble(item)
+            }
         }
     }
 }
@@ -771,6 +777,16 @@ private fun ContextMenu(
     offset: DpOffset = DpOffset.Zero,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismissRequest, offset = offset) {
+        copySelectionOrNull()?.let { copySelection ->
+            DropdownMenuItem(
+                text = { Text("コピー") },
+                onClick = {
+                    onDismissRequest()
+                    copySelection()
+                },
+                modifier = Modifier.testTag(TAG_TIMELINE_MENU_COPY),
+            )
+        }
         if (payload is NotificationPayload) {
             DropdownMenuItem(
                 text = { Text("このアプリからの通知を非表示") },
