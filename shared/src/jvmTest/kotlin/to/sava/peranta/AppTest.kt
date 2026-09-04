@@ -3,7 +3,7 @@ package to.sava.peranta
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.v2.runComposeUiTest
 import kotlinx.coroutines.flow.MutableStateFlow
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.timeline.ReceivedNotification

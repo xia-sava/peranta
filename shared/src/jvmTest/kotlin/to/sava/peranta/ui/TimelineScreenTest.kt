@@ -31,7 +31,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.rightClick
-import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import java.awt.datatransfer.DataFlavor
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -990,6 +990,8 @@ class TimelineScreenTest {
             (transferable.getTransferData(DataFlavor.stringFlavor) as? String)?.let { written += it }
         }
 
+        // nativeClipboard は Compose 側で非推奨だが、インターフェースの実装としては置く必要がある。
+        @Suppress("OVERRIDE_DEPRECATION")
         override val nativeClipboard: Any get() = error("この差し替えでは native のクリップボードを使わない")
     }
 

@@ -10,7 +10,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
-import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.test.withKeyDown
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +49,7 @@ class MessageComposerTest {
         onNodeWithTag(TAG_COMPOSER_INPUT).performTextInput("こんにちは")
         onNodeWithTag(TAG_COMPOSER_SEND).performClick()
 
+        waitUntil { sent != null }
         assertEquals("こんにちは", sent)
         onNodeWithTag(TAG_COMPOSER_INPUT).assertTextEquals("")
     }
@@ -162,6 +163,7 @@ class MessageComposerTest {
         onNodeWithTag(TAG_COMPOSER_INPUT).performTextInput("キャンセルするはず")
         onNodeWithTag(TAG_COMPOSER_SEND).performClick()
 
+        waitUntil { started }
         assertTrue(started)
         onNodeWithTag(TAG_COMPOSER_SEND).assertTextEquals("キャンセル")
 

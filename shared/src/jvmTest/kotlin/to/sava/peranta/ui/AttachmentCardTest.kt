@@ -7,7 +7,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.v2.runComposeUiTest
 import kotlinx.coroutines.flow.MutableStateFlow
 import to.sava.peranta.blob.MAX_NOTIFICATION_IMAGE_BYTES
 import to.sava.peranta.blob.TransferProgress

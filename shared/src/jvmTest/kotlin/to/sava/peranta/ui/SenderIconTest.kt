@@ -5,7 +5,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.v2.runComposeUiTest
 import kotlinx.coroutines.flow.MutableStateFlow
 import to.sava.peranta.blob.MAX_SENDER_ICON_BYTES
 import to.sava.peranta.blob.TransferProgress

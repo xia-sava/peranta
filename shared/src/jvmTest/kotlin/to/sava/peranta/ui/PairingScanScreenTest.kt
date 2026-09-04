@@ -10,7 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
-import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.v2.runComposeUiTest
 import com.russhwolf.settings.MapSettings
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
