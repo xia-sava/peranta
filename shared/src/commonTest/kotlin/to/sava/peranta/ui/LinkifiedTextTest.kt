@@ -7,6 +7,8 @@ class LinkifiedTextTest {
 
     private fun matches(text: String): List<String> = findUrlRanges(text).map { text.substring(it.first, it.last + 1) }
 
+    private fun codes(text: String): List<String> = findCodeRanges(text).map { text.substring(it.first, it.last + 1) }
+
     /** URL を含まない本文では検出範囲が空。 */
     @Test
     fun noUrlReturnsEmptyRanges() {
@@ -52,5 +54,47 @@ class LinkifiedTextTest {
     @Test
     fun ignoresIncompleteScheme() {
         assertEquals(emptyList(), findUrlRanges("これは ttp://example.com ではない"))
+    }
+
+    /** 6 桁続く半角数字をコードとして検出する。 */
+    @Test
+    fun detectsSixDigitCode() {
+        assertEquals(listOf("483920"), codes("認証コードは 483920 です"))
+    }
+
+    /** 5 桁以下の数字はコードとみなさない。金額の桁区切り・日付・時刻を拾わない。 */
+    @Test
+    fun ignoresShortDigitRuns() {
+        assertEquals(emptyList(), findCodeRanges("12,345円を9/30の12:34までに"))
+    }
+
+    /** 6 桁を超える数字列も途中で切らず、続く限りを 1 つのコードとして扱う。 */
+    @Test
+    fun detectsLongerDigitRun() {
+        assertEquals(listOf("09012345678"), codes("連絡先は 09012345678 です"))
+    }
+
+    /** 本文にコードが複数あればすべて検出する。 */
+    @Test
+    fun detectsMultipleCodes() {
+        assertEquals(listOf("123456", "654321"), codes("旧 123456 新 654321"))
+    }
+
+    /** 全角数字はコードとみなさない。 */
+    @Test
+    fun ignoresFullWidthDigits() {
+        assertEquals(emptyList(), findCodeRanges("１２３４５６"))
+    }
+
+    /** URL に含まれる数字はコードとして扱わない。URL は開く先であってコピーする値ではない。 */
+    @Test
+    fun ignoresDigitsInsideUrl() {
+        assertEquals(emptyList(), findCodeRanges("https://example.com/123456"))
+    }
+
+    /** URL と本文のコードが並ぶ本文では、URL の外にあるものだけを検出する。 */
+    @Test
+    fun detectsCodeOutsideUrl() {
+        assertEquals(listOf("483920"), codes("https://example.com/999999 のコードは 483920"))
     }
 }

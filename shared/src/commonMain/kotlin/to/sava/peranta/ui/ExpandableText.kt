@@ -30,6 +30,7 @@ class FullTextUi(
  * ボタンは無く、コンポーズされると取得が始まる。取得中・取得失敗はプレビューのまま据え置く。
  * 取得した全文はインライン本文と同じく [normalizeFullText] を通す。blob は payload とは別経路で届くため、
  * 受信の関門（`normalizeReceivedPayload`）を通っていない。
+ * [onCopyCode] は本文中のコードを押したときの処理で、[LinkifiedText] へそのまま渡す。
  */
 @Composable
 internal fun ExpandableText(
@@ -37,6 +38,7 @@ internal fun ExpandableText(
     ref: AttachmentRef,
     fullText: FullTextUi,
     modifier: Modifier = Modifier,
+    onCopyCode: ((code: String) -> Unit)? = null,
 ) {
     var expanded by remember(ref.blobId) { mutableStateOf<String?>(null) }
     LaunchedEffect(ref.blobId) {
@@ -52,5 +54,6 @@ internal fun ExpandableText(
         text = expanded ?: preview,
         style = MaterialTheme.typography.bodyMedium,
         modifier = modifier.testTag("$TAG_FULL_TEXT_PREFIX${ref.blobId}"),
+        onCopyCode = onCopyCode,
     )
 }

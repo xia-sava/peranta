@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -306,21 +307,25 @@ private fun OpenButton(ref: AttachmentRef, onClick: () -> Unit) {
  */
 @Composable
 private fun ExternalOriginDialog(ref: AttachmentRef, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(CONFIRM_OPEN_TITLE) },
-        text = { Text("「${ref.fileName}」を既定のアプリで開きます。心当たりの無いファイルは開かないでください。") },
-        confirmButton = {
-            TextButton(
-                onClick = onConfirm,
-                modifier = Modifier.testTag("$TAG_ATTACHMENT_OPEN_CONFIRM_PREFIX${ref.blobId}"),
-            ) { Text("開く") }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.testTag("$TAG_ATTACHMENT_OPEN_CANCEL_PREFIX${ref.blobId}"),
-            ) { Text("キャンセル") }
-        },
-    )
+    // ダイアログは別のレイアウト階層に出るため、タイムラインの選択範囲（§10.1）から外す。
+    // 外さないと本文の選択がダイアログの階層へまたがり、座標を解けずに落ちる。
+    DisableSelection {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(CONFIRM_OPEN_TITLE) },
+            text = { Text("「${ref.fileName}」を既定のアプリで開きます。心当たりの無いファイルは開かないでください。") },
+            confirmButton = {
+                TextButton(
+                    onClick = onConfirm,
+                    modifier = Modifier.testTag("$TAG_ATTACHMENT_OPEN_CONFIRM_PREFIX${ref.blobId}"),
+                ) { Text("開く") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.testTag("$TAG_ATTACHMENT_OPEN_CANCEL_PREFIX${ref.blobId}"),
+                ) { Text("キャンセル") }
+            },
+        )
+    }
 }

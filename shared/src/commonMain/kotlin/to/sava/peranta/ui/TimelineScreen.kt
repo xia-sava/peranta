@@ -16,15 +16,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,6 +39,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -41,7 +47,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
@@ -76,6 +84,9 @@ const val TAG_TIMELINE_SOURCE_ALIVE_BUTTON: String = "timeline-source-alive-butt
 
 /** 元通知が消えた受信アイテムの、バブル右上のボタンのタグ。 */
 const val TAG_TIMELINE_SOURCE_DISMISSED_BUTTON: String = "timeline-source-dismissed-button"
+
+/** 受信通知バブル右上のメニューボタン。 */
+const val TAG_TIMELINE_MENU_BUTTON: String = "timeline-menu-button"
 
 /** コンテキストメニューの「送信元の通知を消す」項目のタグ。 */
 const val TAG_TIMELINE_MENU_DISMISS: String = "timeline-menu-dismiss"
@@ -124,8 +135,14 @@ const val SOURCE_ALIVE_DESCRIPTION: String = "送信元の通知を消す"
 /** 元通知が消えていることを示すボタンの説明（§10.1）。押すとこの端末のタイムラインから消す。 */
 const val SOURCE_DISMISSED_DESCRIPTION: String = "タイムラインから消す"
 
-/** バブル右上の状態兼ボタンの大きさ。本文の邪魔をしない控えめな寸法にする。 */
-private val SOURCE_STATE_ICON_SIZE = 18.dp
+/** メニューボタンの説明（§10.1）。押すとコンテキストメニューを開く。 */
+const val MENU_BUTTON_DESCRIPTION: String = "メニュー"
+
+/** 本文中のコードを押してクリップボードへ入れた直後に出す通知（§10.1）。 */
+const val CODE_COPIED_MESSAGE: String = "コピーしました"
+
+/** バブル右上に並ぶボタンの大きさ。本文の邪魔をしない控えめな寸法にする。 */
+private val BUBBLE_ICON_SIZE = 18.dp
 
 /** 輪郭線で示す吹き出しの線幅。 */
 private val BUBBLE_BORDER_WIDTH = 1.dp
@@ -181,8 +198,8 @@ data class TimelineReplyRequest(val itemId: String, val actionIndex: Int)
 
 /**
  * チャット風タイムライン（§10.1）。受信通知は左寄せ、エラー・送信通知は右寄せに並べる。
- * [actions] が渡されると受信通知にアクションボタン・右上の状態兼ボタン・長押し/右クリックメニューを
- * 付ける。「送信元の通知を消す」は command をブロードキャストするだけで、この端末のタイムラインには
+ * [actions] が渡されると受信通知にアクションボタン・右上のメニューボタンと状態兼ボタン・
+ * コンテキストメニューを付ける。「送信元の通知を消す」は command をブロードキャストするだけで、この端末のタイムラインには
  * 残す。タイムラインから消したアイテムは [ReceivedNotification.hiddenFromTimeline] で表示から外れ、
  * 実体は剪定で落ちる（§11）。
  * 並び順は時系列順（古い→新しい、上→下）で最新が最下部。起動時は最下部へジャンプし、
@@ -211,6 +228,17 @@ fun TimelineScreen(
 ) {
     val list by items.collectAsState()
     val visible = list.filterNot { it is ReceivedNotification && it.hiddenFromTimeline }
+
+    // 本文中のコードを押したらクリップボードへ入れ、押せたことを通知で返す（§10.1）。
+    // 続けて別のコードを押したときは前の通知を引っ込め、最後に押したものの結果だけを見せる。
+    val clipboard = LocalClipboardManager.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val copyScope = rememberCoroutineScope()
+    val onCopyCode: (code: String) -> Unit = { code ->
+        clipboard.setText(AnnotatedString(code))
+        snackbarHostState.currentSnackbarData?.dismiss()
+        copyScope.launch { snackbarHostState.showSnackbar(CODE_COPIED_MESSAGE) }
+    }
 
     // 起動時は最下部（最新）へアニメーション無しでジャンプする。以降は、末尾アイテムの itemCount が
     // 変わっていない間のスクロール／レイアウト変化を常時観測して「最下部にいるか」を wasAtBottom
@@ -291,12 +319,17 @@ fun TimelineScreen(
                                 actions = actions,
                                 attachments = attachments,
                                 fullText = fullText,
+                                onCopyCode = onCopyCode,
                                 replyRequest = replyRequest?.takeIf { it.itemId == item.id },
                                 onReplyRequestHandled = onReplyRequestHandled,
                             )
                         }
                     }
                     lazyScrollbarContent(listState)
+                    SnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                    )
                 }
             }
         }
@@ -375,32 +408,48 @@ private fun EmptyState(message: String) {
     }
 }
 
+/**
+ * タイムラインの 1 行（§10.1）。吹き出しの本文は文字を選べるようにし、押して働く部品（ボタン・
+ * 返信入力・メニュー）は選択の対象から外す。選択範囲は 1 行の中で閉じる——[LazyColumn] は画面外へ
+ * 出た行を捨てるため、行をまたぐ選択は捨てられた時点で壊れる。
+ */
 @Composable
 private fun TimelineRow(
     item: TimelineItem,
     actions: TimelineActions?,
     attachments: AttachmentUi?,
     fullText: FullTextUi?,
+    onCopyCode: (code: String) -> Unit,
     replyRequest: TimelineReplyRequest? = null,
     onReplyRequestHandled: () -> Unit = {},
 ) {
-    when (item) {
-        is ReceivedNotification ->
-            if (actions == null) {
-                ReceivedBubble(item, attachments, fullText)
-            } else {
-                InteractiveReceivedBubble(item, actions, attachments, fullText, replyRequest, onReplyRequestHandled)
-            }
+    SelectionContainer {
+        when (item) {
+            is ReceivedNotification ->
+                if (actions == null) {
+                    ReceivedBubble(item, attachments, fullText, onCopyCode)
+                } else {
+                    InteractiveReceivedBubble(
+                        item,
+                        actions,
+                        attachments,
+                        fullText,
+                        onCopyCode,
+                        replyRequest,
+                        onReplyRequestHandled,
+                    )
+                }
 
-        is ReceivedFile -> ReceivedFileBubble(item, attachments)
-        is ReceivedMessage -> MessageBubble(item)
-        is SentNotification -> SentBubble(item)
-        is ErrorItem -> ErrorBubble(item)
+            is ReceivedFile -> ReceivedFileBubble(item, attachments, onCopyCode)
+            is ReceivedMessage -> MessageBubble(item, onCopyCode)
+            is SentNotification -> SentBubble(item, onCopyCode)
+            is ErrorItem -> ErrorBubble(item)
+        }
     }
 }
 
 @Composable
-private fun MessageBubble(item: ReceivedMessage) {
+private fun MessageBubble(item: ReceivedMessage, onCopyCode: (code: String) -> Unit) {
     Bubble(
         alignment = Alignment.CenterStart,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -408,12 +457,20 @@ private fun MessageBubble(item: ReceivedMessage) {
         speaker = item.payload.speakerName(),
         time = item.timestampEpochMillis,
     ) {
-        LinkifiedText(text = item.payload.text, style = MaterialTheme.typography.bodyMedium)
+        LinkifiedText(
+            text = item.payload.text,
+            style = MaterialTheme.typography.bodyMedium,
+            onCopyCode = onCopyCode,
+        )
     }
 }
 
 @Composable
-private fun ReceivedFileBubble(item: ReceivedFile, attachments: AttachmentUi?) {
+private fun ReceivedFileBubble(
+    item: ReceivedFile,
+    attachments: AttachmentUi?,
+    onCopyCode: (code: String) -> Unit,
+) {
     Bubble(
         alignment = Alignment.CenterStart,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -421,14 +478,18 @@ private fun ReceivedFileBubble(item: ReceivedFile, attachments: AttachmentUi?) {
         speaker = item.payload.speakerName(),
         time = item.timestampEpochMillis,
     ) {
-        FilePayloadContent(item.payload, attachments)
+        FilePayloadContent(item.payload, attachments, onCopyCode)
     }
 }
 
 @Composable
-private fun FilePayloadContent(payload: FilePayload, attachments: AttachmentUi?) {
+private fun FilePayloadContent(
+    payload: FilePayload,
+    attachments: AttachmentUi?,
+    onCopyCode: (code: String) -> Unit,
+) {
     payload.caption?.let {
-        LinkifiedText(text = it, style = MaterialTheme.typography.bodyMedium)
+        LinkifiedText(text = it, style = MaterialTheme.typography.bodyMedium, onCopyCode = onCopyCode)
     }
     payload.attachments.forEach { ref ->
         if (attachments == null) {
@@ -443,7 +504,12 @@ private fun FilePayloadContent(payload: FilePayload, attachments: AttachmentUi?)
 }
 
 @Composable
-private fun ReceivedBubble(item: ReceivedNotification, attachments: AttachmentUi?, fullText: FullTextUi?) {
+private fun ReceivedBubble(
+    item: ReceivedNotification,
+    attachments: AttachmentUi?,
+    fullText: FullTextUi?,
+    onCopyCode: (code: String) -> Unit,
+) {
     Bubble(
         alignment = Alignment.CenterStart,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -451,13 +517,14 @@ private fun ReceivedBubble(item: ReceivedNotification, attachments: AttachmentUi
         speaker = item.payload.speakerName(),
         time = item.timestampEpochMillis,
     ) {
-        ReceivedContent(item.payload, attachments, fullText)
+        ReceivedContent(item.payload, attachments, fullText, onCopyCode)
     }
 }
 
 /**
- * 操作可能な受信通知バブル。右上のボタンが元通知の状態を示し、長押し/右クリックでコンテキスト
- * メニューを開く。通知に元アクションがあればボタンとして並べる。REPLY 分類のアクションは押すと
+ * 操作可能な受信通知バブル。右上にメニューボタンと元通知の状態を示すボタンを並べる。コンテキスト
+ * メニューはメニューボタンで開き、Desktop では右クリックでも開ける（§10.1）。
+ * 通知に元アクションがあればボタンとして並べる。REPLY 分類のアクションは押すと
  * インライン返信入力を開き、それ以外は押すと送信元へ invokeAction を返送する（§10.1）。
  * 元通知が生きている間は ✓ を出し、押すと元端末と他の受信端末から消す。
  * 元通知が既に消えている（[ReceivedNotification.sourceDismissed]）アイテムは × を出し、押すと
@@ -470,6 +537,7 @@ private fun InteractiveReceivedBubble(
     actions: TimelineActions,
     attachments: AttachmentUi?,
     fullText: FullTextUi?,
+    onCopyCode: (code: String) -> Unit,
     replyRequest: TimelineReplyRequest? = null,
     onReplyRequestHandled: () -> Unit = {},
 ) {
@@ -504,8 +572,8 @@ private fun InteractiveReceivedBubble(
                 .testTag(TAG_TIMELINE_RECEIVED)
                 .timelineContextGesture(enabled = true) { menuOpen = true },
         ) {
-            // バルーン幅は本文と × ボタンを合わせた幅。× は本文に被せず右隣（上寄せ）に置く。
-            // 本文に weight を与えて先に状態兼ボタンの幅を確保する。与えないと本文が横幅を取り切り、
+            // バルーン幅は本文と右上のボタンを合わせた幅。ボタンは本文に被せず右隣（上寄せ）に置く。
+            // 本文に weight を与えて先にボタンの幅を確保する。与えないと本文が横幅を取り切り、
             // 長い通知でボタンが押し出されて見えなくなる。fill = false でバブル幅は内容なりに縮む。
             Row(verticalAlignment = Alignment.Top) {
                 Column(
@@ -513,40 +581,65 @@ private fun InteractiveReceivedBubble(
                         .weight(1f, fill = false)
                         .padding(start = 12.dp, top = 8.dp, bottom = 8.dp),
                 ) {
-                    ReceivedContent(payload, attachments, fullText)
+                    ReceivedContent(payload, attachments, fullText, onCopyCode)
                     if (!item.sourceDismissed) {
-                        ActionButtons(payload, onActionClick)
-                        replyingIndex?.let { index ->
-                            (payload as? NotificationPayload)?.let { notificationPayload ->
-                                ReplyInput(
-                                    onSend = { text ->
-                                        actions.reply(notificationPayload, index, text)
-                                        replyingIndex = null
-                                    },
-                                    onCancel = { replyingIndex = null },
-                                )
+                        DisableSelection {
+                            ActionButtons(payload, onActionClick)
+                            replyingIndex?.let { index ->
+                                (payload as? NotificationPayload)?.let { notificationPayload ->
+                                    ReplyInput(
+                                        onSend = { text ->
+                                            actions.reply(notificationPayload, index, text)
+                                            replyingIndex = null
+                                        },
+                                        onCancel = { replyingIndex = null },
+                                    )
+                                }
                             }
                         }
                     }
                     SpeakerTimeRow(speaker = payload.speakerName(), time = item.timestampEpochMillis)
                 }
-                SourceStateButton(
-                    sourceDismissed = item.sourceDismissed,
-                    onClick = if (item.sourceDismissed) hideFromTimeline else dismissSource,
-                )
+                DisableSelection {
+                    MenuButton(onClick = { menuOpen = true })
+                    SourceStateButton(
+                        sourceDismissed = item.sourceDismissed,
+                        onClick = if (item.sourceDismissed) hideFromTimeline else dismissSource,
+                    )
+                }
             }
         }
-        ContextMenu(
-            expanded = menuOpen,
-            onDismissRequest = { menuOpen = false },
-            payload = payload,
-            actions = actions,
-            onActionClick = onActionClick,
-            onDismissNotification = dismissSource,
-            onHideFromTimeline = hideFromTimeline,
-            showActionItems = !item.sourceDismissed,
-        )
+        DisableSelection {
+            ContextMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                payload = payload,
+                actions = actions,
+                onActionClick = onActionClick,
+                onDismissNotification = dismissSource,
+                onHideFromTimeline = hideFromTimeline,
+                showActionItems = !item.sourceDismissed,
+            )
+        }
     }
+}
+
+/**
+ * 受信通知バブル右上のメニューボタン（§10.1）。押すとコンテキストメニューを開く。
+ * 状態兼ボタンと同じ控えめな見た目で、その左隣に並べる。
+ */
+@Composable
+private fun MenuButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Icon(
+        imageVector = Icons.Default.MoreVert,
+        contentDescription = MENU_BUTTON_DESCRIPTION,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(6.dp)
+            .size(BUBBLE_ICON_SIZE)
+            .testTag(TAG_TIMELINE_MENU_BUTTON),
+    )
 }
 
 /**
@@ -567,7 +660,7 @@ private fun SourceStateButton(
         modifier = modifier
             .clickable(onClick = onClick)
             .padding(6.dp)
-            .size(SOURCE_STATE_ICON_SIZE)
+            .size(BUBBLE_ICON_SIZE)
             .testTag(
                 if (sourceDismissed) TAG_TIMELINE_SOURCE_DISMISSED_BUTTON else TAG_TIMELINE_SOURCE_ALIVE_BUTTON,
             ),
@@ -697,16 +790,30 @@ private fun ContextMenu(
  * 添付操作を持たない画面（[attachments] が null）ではカードを出さない。
  */
 @Composable
-private fun ReceivedContent(payload: Payload, attachments: AttachmentUi?, fullText: FullTextUi?) {
+private fun ReceivedContent(
+    payload: Payload,
+    attachments: AttachmentUi?,
+    fullText: FullTextUi?,
+    onCopyCode: (code: String) -> Unit,
+) {
     ReceivedHeader(payload, attachments)
     payload.displayTitle()?.let {
         Text(text = it, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium)
     }
     val textAttachment = payload.fullTextAttachment()
     if (fullText != null && textAttachment != null) {
-        ExpandableText(preview = payload.displayText(), ref = textAttachment, fullText = fullText)
+        ExpandableText(
+            preview = payload.displayText(),
+            ref = textAttachment,
+            fullText = fullText,
+            onCopyCode = onCopyCode,
+        )
     } else {
-        LinkifiedText(text = payload.displayText(), style = MaterialTheme.typography.bodyMedium)
+        LinkifiedText(
+            text = payload.displayText(),
+            style = MaterialTheme.typography.bodyMedium,
+            onCopyCode = onCopyCode,
+        )
     }
     if (attachments != null) {
         payload.displayAttachments().forEach { ref -> AttachmentCard(ref, attachments) }
@@ -746,7 +853,7 @@ private fun ReceivedHeader(payload: Payload, attachments: AttachmentUi?) {
  * 全文添付の展開は出さない（手元の通知は端末側で直接操作でき、全文も手元にある）。
  */
 @Composable
-private fun SentBubble(item: SentNotification) {
+private fun SentBubble(item: SentNotification, onCopyCode: (code: String) -> Unit) {
     Bubble(
         alignment = Alignment.CenterEnd,
         containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -756,15 +863,23 @@ private fun SentBubble(item: SentNotification) {
     ) {
         val payload = item.payload
         if (payload is FilePayload) {
-            FilePayloadContent(payload, attachments = null)
+            FilePayloadContent(payload, attachments = null, onCopyCode = onCopyCode)
         } else if (payload is MessagePayload) {
-            LinkifiedText(text = payload.text, style = MaterialTheme.typography.bodyMedium)
+            LinkifiedText(
+                text = payload.text,
+                style = MaterialTheme.typography.bodyMedium,
+                onCopyCode = onCopyCode,
+            )
         } else {
             Text(text = payload.displayHeader(), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
             payload.displayTitle()?.let {
                 Text(text = it, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium)
             }
-            LinkifiedText(text = payload.displayText(), style = MaterialTheme.typography.bodyMedium)
+            LinkifiedText(
+                text = payload.displayText(),
+                style = MaterialTheme.typography.bodyMedium,
+                onCopyCode = onCopyCode,
+            )
         }
     }
 }

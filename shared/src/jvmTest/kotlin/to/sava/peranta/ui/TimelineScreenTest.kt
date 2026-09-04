@@ -4,11 +4,14 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
@@ -23,6 +26,7 @@ import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.MutableStateFlow
 import to.sava.peranta.model.AttachmentKind
@@ -966,6 +970,54 @@ class TimelineScreenTest {
         }
         onNodeWithTag(SCROLLBAR_SLOT_TAG).assertIsDisplayed()
         assertTrue(receivedListState != null)
+    }
+
+    /** クリップボードへ入った文字列を記録するだけの差し替え（§10.1 のコピー確認用）。 */
+    private fun recordingClipboard(sink: MutableList<String>): ClipboardManager = object : ClipboardManager {
+        override fun setText(annotatedString: AnnotatedString) {
+            sink += annotatedString.text
+        }
+
+        override fun getText(): AnnotatedString? = sink.lastOrNull()?.let(::AnnotatedString)
+    }
+
+    /** メニューボタンでコンテキストメニューが開く（§10.1）。Android はこれが唯一の入口になる。 */
+    @Test
+    fun menuButtonOpensContextMenu() = runComposeUiTest {
+        setContent { TimelineScreen(items(), actions = TimelineActions()) }
+
+        onAllNodesWithTag(TAG_TIMELINE_MENU_HIDE).assertCountEquals(0)
+        onNodeWithTag(TAG_TIMELINE_MENU_BUTTON).performClick()
+        onAllNodesWithTag(TAG_TIMELINE_MENU_HIDE).assertCountEquals(1)
+    }
+
+    /** 本文中のコードを押すとクリップボードへ入り、押せたことを通知で返す（§10.1）。 */
+    @Test
+    fun tappingCodeCopiesItToClipboard() = runComposeUiTest {
+        val copied = mutableListOf<String>()
+        setContent {
+            CompositionLocalProvider(LocalClipboardManager provides recordingClipboard(copied)) {
+                TimelineScreen(items(notification(text = "483920")), actions = TimelineActions())
+            }
+        }
+
+        onNodeWithText("483920").performClick()
+        assertEquals(listOf("483920"), copied)
+        onNodeWithText(CODE_COPIED_MESSAGE).assertIsDisplayed()
+    }
+
+    /** 5 桁以下の数字列はコードとして扱わず、押してもクリップボードへ入らない（§10.1）。 */
+    @Test
+    fun tappingShortDigitRunCopiesNothing() = runComposeUiTest {
+        val copied = mutableListOf<String>()
+        setContent {
+            CompositionLocalProvider(LocalClipboardManager provides recordingClipboard(copied)) {
+                TimelineScreen(items(notification(text = "48392")), actions = TimelineActions())
+            }
+        }
+
+        onNodeWithText("48392").performClick()
+        assertEquals(emptyList(), copied)
     }
 
     private companion object {

@@ -13,7 +13,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * 受信専用端末のタイムライン長押し mute（§3.4/§10.1）が、送信元へのコマンド送信だけでなく
+ * 受信専用端末のタイムラインからの mute（§3.4/§10.1）が、送信元へのコマンド送信だけでなく
  * 自端末のローカルミラー（filterRules）も更新することを検証する。
  * control topic を未設定にして、コマンド送信が実ネットワークへ出る前に宛先解決で打ち切られるようにする
  * （[to.sava.peranta.send.CommandSender.muteApp] は宛先 topic が解決できない場合 publish を行わない）。

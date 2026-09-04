@@ -4,7 +4,9 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -18,6 +20,15 @@ private val URL_PATTERN: Regex = Regex("https?://\\S+")
 
 /** URL 候補の末尾から取り除く閉じ括弧・句読点。 */
 private val TRAILING_PUNCTUATION: Set<Char> = setOf(')', '。', '、')
+
+/**
+ * コードとして拾う連続半角数字の最小桁数。これ未満の数字列（金額の桁区切り・日付・時刻など）は
+ * リンク化せず、本文の見た目を保つ。
+ */
+private const val MIN_CODE_DIGITS: Int = 6
+
+/** コードを検出する正規表現。半角数字が [MIN_CODE_DIGITS] 桁以上続く範囲を候補とする。 */
+private val CODE_PATTERN: Regex = Regex("[0-9]{$MIN_CODE_DIGITS,}")
 
 /**
  * [text] に含まれる http(s) URL の範囲一覧を検出する（純関数）。
@@ -39,20 +50,40 @@ internal fun firstUrl(text: String): String? =
     findUrlRanges(text).firstOrNull()?.let { text.substring(it.first, it.last + 1) }
 
 /**
+ * [text] に含まれるコードの範囲一覧を検出する（純関数）。半角数字が [MIN_CODE_DIGITS] 桁以上続く
+ * 範囲を候補とし、URL に重なるもの（[findUrlRanges]）は除く。URL は開く先であってコピーする値では
+ * ないため、URL 中の数字はコードとして扱わない。
+ */
+internal fun findCodeRanges(text: String): List<IntRange> {
+    val urls = findUrlRanges(text)
+    return CODE_PATTERN.findAll(text)
+        .map { it.range }
+        .filter { code -> urls.none { url -> code.first <= url.last && url.first <= code.last } }
+        .toList()
+}
+
+/**
  * 本文中の URL をリンク化して表示する（タイムラインの通常テキスト・通知/SMS 本文・ファイルの
  * キャプションで共通に使う）。[findUrlRanges] で見つけた URL 部分に下線付きの
  * [MaterialTheme.colorScheme.primary] を当て、[LinkAnnotation.Url]（Compose 標準機構）が
  * [androidx.compose.ui.platform.LocalUriHandler] 経由でタップ/クリックを既定ブラウザ起動へ自動で流す。
  * リンクのタップ領域は URL 文字列に限られるため、バブル全体のスワイプ等の既存ジェスチャとは干渉しない。
+ *
+ * [onCopyCode] を渡すと [findCodeRanges] が見つけたコードも同じ見た目のリンクにし、押すと
+ * その文字列を渡す（§10.1）。null のときはコードを検出しない。
  */
 @Composable
 internal fun LinkifiedText(
     text: String,
     style: TextStyle = LocalTextStyle.current,
     modifier: Modifier = Modifier,
+    onCopyCode: ((code: String) -> Unit)? = null,
 ) {
     val linkColor = MaterialTheme.colorScheme.primary
-    val annotated = remember(text, linkColor) {
+    // 押した時点の処理を呼ぶ。ラムダの同一性で注釈を作り直さないよう、キーには有無だけを使う。
+    val currentOnCopyCode by rememberUpdatedState(onCopyCode)
+    val codesEnabled = onCopyCode != null
+    val annotated = remember(text, linkColor, codesEnabled) {
         buildAnnotatedString {
             append(text)
             val linkStyles = TextLinkStyles(
@@ -64,6 +95,20 @@ internal fun LinkifiedText(
                     start = range.first,
                     end = range.last + 1,
                 )
+            }
+            if (codesEnabled) {
+                findCodeRanges(text).forEach { range ->
+                    val code = text.substring(range.first, range.last + 1)
+                    addLink(
+                        clickable = LinkAnnotation.Clickable(
+                            tag = code,
+                            styles = linkStyles,
+                            linkInteractionListener = { currentOnCopyCode?.invoke(code) },
+                        ),
+                        start = range.first,
+                        end = range.last + 1,
+                    )
+                }
             }
         }
     }

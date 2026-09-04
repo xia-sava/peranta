@@ -6,7 +6,7 @@ import androidx.compose.foundation.onClick
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerButton
 
-/** Desktop では右クリックでコンテキストメニューを開く（§10.1）。 */
+/** Desktop ではメニューボタンに加えて右クリックでもコンテキストメニューを開ける（§10.1）。 */
 @OptIn(ExperimentalFoundationApi::class)
 actual fun Modifier.timelineContextGesture(enabled: Boolean, onOpenMenu: () -> Unit): Modifier =
     if (!enabled) {
