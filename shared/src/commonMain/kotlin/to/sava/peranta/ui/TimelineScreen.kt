@@ -601,25 +601,27 @@ private fun InteractiveReceivedBubble(
                     SpeakerTimeRow(speaker = payload.speakerName(), time = item.timestampEpochMillis)
                 }
                 DisableSelection {
-                    MenuButton(onClick = { menuOpen = true })
+                    // メニューはボタンを包む Box を起点に出し、押した指の先へ開くようにする。
+                    // 吹き出しを起点にすると、右上のボタンから遠い左下に出てしまう。
+                    Box {
+                        MenuButton(onClick = { menuOpen = true })
+                        ContextMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false },
+                            payload = payload,
+                            actions = actions,
+                            onActionClick = onActionClick,
+                            onDismissNotification = dismissSource,
+                            onHideFromTimeline = hideFromTimeline,
+                            showActionItems = !item.sourceDismissed,
+                        )
+                    }
                     SourceStateButton(
                         sourceDismissed = item.sourceDismissed,
                         onClick = if (item.sourceDismissed) hideFromTimeline else dismissSource,
                     )
                 }
             }
-        }
-        DisableSelection {
-            ContextMenu(
-                expanded = menuOpen,
-                onDismissRequest = { menuOpen = false },
-                payload = payload,
-                actions = actions,
-                onActionClick = onActionClick,
-                onDismissNotification = dismissSource,
-                onHideFromTimeline = hideFromTimeline,
-                showActionItems = !item.sourceDismissed,
-            )
         }
     }
 }
