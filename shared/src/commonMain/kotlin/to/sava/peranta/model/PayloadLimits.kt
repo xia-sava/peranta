@@ -51,6 +51,9 @@ const val MAX_MESSAGE_TEXT_BYTES: Int = MAX_FORWARDED_TEXT_BYTES
  */
 const val MAX_SOURCE_LABEL_BYTES: Int = 100
 
+/** コマンドへの応答（§3.4）が運ぶ失敗理由の UTF-8 バイト予算。1〜2 文の利用者向け文言に足りる長さ。 */
+const val MAX_COMMAND_ACK_MESSAGE_BYTES: Int = 300
+
 /** 表示に載せる本文の行数上限。改行だけを詰めた本文が吹き出しを占有しないようにする。 */
 const val MAX_DISPLAY_LINES: Int = 20
 

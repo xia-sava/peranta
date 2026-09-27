@@ -1,5 +1,8 @@
 package to.sava.peranta.send
 
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.crypto.MessageCipher
@@ -13,8 +16,11 @@ import to.sava.peranta.model.PresencePayload
 import to.sava.peranta.model.decodeEnvelope
 import to.sava.peranta.model.encodeEnvelope
 import to.sava.peranta.net.NtfyEvent
+import to.sava.peranta.roster.CAPABILITY_COMMAND
+import to.sava.peranta.roster.CAPABILITY_COMMAND_ACK
 import to.sava.peranta.roster.CAPABILITY_DISPLAY
 import to.sava.peranta.roster.RecordingControlNtfy
+import to.sava.peranta.timeline.ErrorKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -33,15 +39,23 @@ class CommandSenderTest {
     private val controlTopic = "peranta-control-xyz"
     private val self = "desktop-self"
 
-    private fun presence(deviceId: String, endpoint: String) = PresencePayload(
+    private fun presence(
+        deviceId: String,
+        endpoint: String,
+        capabilities: List<String> = listOf(CAPABILITY_DISPLAY),
+    ) = PresencePayload(
         id = "p-$deviceId",
         from = deviceId,
         to = BROADCAST_TARGET,
         sentAtEpochMillis = 100,
-        deviceName = deviceId,
+        deviceName = "$deviceId-name",
         endpoint = endpoint,
-        capabilities = listOf(CAPABILITY_DISPLAY),
+        capabilities = capabilities,
     )
+
+    /** 応答に対応した版の presence。 */
+    private fun ackCapablePresence(deviceId: String, endpoint: String) =
+        presence(deviceId, endpoint, listOf(CAPABILITY_DISPLAY, CAPABILITY_COMMAND, CAPABILITY_COMMAND_ACK))
 
     private suspend fun event(payload: Payload): NtfyEvent =
         NtfyEvent("e", 100, controlTopic, encodeEnvelope(cipher.seal(payload)))
@@ -55,8 +69,18 @@ class CommandSenderTest {
         deliveryTopics = deliveryTopics,
     )
 
-    private fun sender(ntfy: RecordingControlNtfy, config: PerantaConfig = config()) =
-        CommandSender(config, cipher, ntfy, SendPipeline(cipher, ntfy, FakeTimelineStore()))
+    private fun sender(
+        ntfy: RecordingControlNtfy,
+        config: PerantaConfig = config(),
+        ackTracker: CommandAckTracker? = null,
+    ) = CommandSender(config, cipher, ntfy, SendPipeline(cipher, ntfy, FakeTimelineStore()), ackTracker)
+
+    /** 知らせを記録するだけの応答待ち。待ち時間は仮想時間で進める。 */
+    private fun TestScope.recordingTracker(reports: MutableList<ErrorKind>) = CommandAckTracker(
+        scope = backgroundScope,
+        onProblem = { kind, _ -> reports.add(kind) },
+        now = { testScheduler.currentTime },
+    )
 
     private suspend fun openCommand(body: String): CommandPayload =
         cipher.open(decodeEnvelope(body)) as CommandPayload
@@ -180,6 +204,108 @@ class CommandSenderTest {
         val ok = sender(ntfy).invokeAction("phone", "0|k", 0)
         assertFalse(ok)
         assertTrue(ntfy.published.isEmpty())
+    }
+
+    /** 応答に対応した宛先への invokeAction は、自端末の受信 topic を応答の送り先にして宛先へ応答を求める（§3.4）。 */
+    @Test
+    fun invokeActionRequestsAckFromCapableTarget() = runTest {
+        val ntfy = RecordingControlNtfy(
+            history = listOf(
+                event(presence(self, "https://h/self-topic")),
+                event(ackCapablePresence("phone", "https://h/phone-topic")),
+            ),
+        )
+        sender(ntfy, ackTracker = recordingTracker(mutableListOf())).invokeAction("phone", "0|k", 0)
+        val command = openCommand(ntfy.published.single().body)
+        assertEquals("self-topic", command.ackTopic)
+        assertEquals("phone", command.ackBy)
+    }
+
+    /** 応答に対応していない版の宛先には応答を求めず、応答が来なくても知らせない。 */
+    @Test
+    fun invokeActionDoesNotRequestAckFromLegacyTarget() = runTest {
+        val reports = mutableListOf<ErrorKind>()
+        val ntfy = RecordingControlNtfy(
+            history = listOf(
+                event(presence(self, "https://h/self-topic")),
+                event(presence("phone", "https://h/phone-topic")),
+            ),
+        )
+        sender(ntfy, ackTracker = recordingTracker(reports)).invokeAction("phone", "0|k", 0)
+        advanceTimeBy(COMMAND_ACK_TIMEOUT_MILLIS * 2)
+        runCurrent()
+        val command = openCommand(ntfy.published.single().body)
+        assertNull(command.ackTopic)
+        assertNull(command.ackBy)
+        assertTrue(reports.isEmpty())
+    }
+
+    /** 自端末の受信 topic がロスターに無ければ応答の送り先が無いため、応答を求めない。 */
+    @Test
+    fun noAckRequestWithoutOwnEndpoint() = runTest {
+        val ntfy = RecordingControlNtfy(history = listOf(event(ackCapablePresence("phone", "https://h/phone-topic"))))
+        sender(ntfy, ackTracker = recordingTracker(mutableListOf())).invokeAction("phone", "0|k", 0)
+        assertNull(openCommand(ntfy.published.single().body).ackTopic)
+    }
+
+    /** dismiss は全端末へ送りつつ、元通知を転送した端末だけを応答者に指名する。 */
+    @Test
+    fun dismissNominatesSourceDeviceForAck() = runTest {
+        val ntfy = RecordingControlNtfy(
+            history = listOf(
+                event(presence(self, "https://h/self-topic")),
+                event(ackCapablePresence("phone", "https://h/phone-topic")),
+                event(ackCapablePresence("tablet", "https://h/tablet-topic")),
+            ),
+        )
+        sender(ntfy, ackTracker = recordingTracker(mutableListOf())).dismiss("0|k", sourceDeviceId = "phone")
+        assertEquals(listOf("phone-topic", "tablet-topic"), ntfy.published.map { it.topic })
+        val command = openCommand(ntfy.published.first().body)
+        assertEquals(BROADCAST_TARGET, command.to)
+        assertEquals("phone", command.ackBy)
+        assertEquals("self-topic", command.ackTopic)
+    }
+
+    /** 自端末が転送元の通知を dismiss するときは、自分に応答を求めない。 */
+    @Test
+    fun dismissOfOwnNotificationDoesNotRequestAck() = runTest {
+        val ntfy = RecordingControlNtfy(
+            history = listOf(
+                event(ackCapablePresence(self, "https://h/self-topic")),
+                event(ackCapablePresence("phone", "https://h/phone-topic")),
+            ),
+        )
+        sender(ntfy, ackTracker = recordingTracker(mutableListOf())).dismiss("0|k", sourceDeviceId = self)
+        assertNull(openCommand(ntfy.published.single().body).ackBy)
+    }
+
+    /** 応答を求めたコマンドに応答が来なければ、応答が無いことを知らせる。 */
+    @Test
+    fun unansweredCommandIsReported() = runTest {
+        val reports = mutableListOf<ErrorKind>()
+        val ntfy = RecordingControlNtfy(
+            history = listOf(
+                event(presence(self, "https://h/self-topic")),
+                event(ackCapablePresence("phone", "https://h/phone-topic")),
+            ),
+        )
+        sender(ntfy, ackTracker = recordingTracker(reports)).invokeAction("phone", "0|k", 0)
+        advanceTimeBy(COMMAND_ACK_TIMEOUT_MILLIS + 1)
+        runCurrent()
+        assertEquals(listOf(ErrorKind.COMMAND_UNACKNOWLEDGED), reports)
+    }
+
+    /** 状態同期の設定変更（mute 等）は元通知への操作ではないため、応答を求めない。 */
+    @Test
+    fun muteAppDoesNotRequestAck() = runTest {
+        val ntfy = RecordingControlNtfy(
+            history = listOf(
+                event(presence(self, "https://h/self-topic")),
+                event(ackCapablePresence("phone", "https://h/phone-topic")),
+            ),
+        )
+        sender(ntfy, ackTracker = recordingTracker(mutableListOf())).muteApp("phone", "com.spam")
+        assertNull(openCommand(ntfy.published.single().body).ackBy)
     }
 
     /** control topic が無い端末は一点指定先を引けないため、履歴を引かずに何も送らない。 */

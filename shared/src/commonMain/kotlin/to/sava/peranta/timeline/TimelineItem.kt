@@ -117,6 +117,10 @@ enum class ErrorKind(val origin: ErrorOrigin) {
     @SerialName("commandUnauthorized")
     COMMAND_UNAUTHORIZED(ErrorOrigin.LOCAL_OPERATION),
 
+    /** 送ったコマンドに実行端末から応答が来なかった（§3.4）。コマンドが届いていない可能性を示す。 */
+    @SerialName("commandUnacknowledged")
+    COMMAND_UNACKNOWLEDGED(ErrorOrigin.LOCAL_OPERATION),
+
     @SerialName("other")
     OTHER(ErrorOrigin.LOCAL_OPERATION),
 }

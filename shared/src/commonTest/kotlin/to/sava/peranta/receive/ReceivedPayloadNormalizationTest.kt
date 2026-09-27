@@ -3,10 +3,13 @@ package to.sava.peranta.receive
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BlobEnc
+import to.sava.peranta.model.CommandAckPayload
+import to.sava.peranta.model.CommandOutcome
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.MAX_ACTION_LABEL_BYTES
+import to.sava.peranta.model.MAX_COMMAND_ACK_MESSAGE_BYTES
 import to.sava.peranta.model.MAX_FORWARDED_ACTIONS
 import to.sava.peranta.model.MAX_FORWARDED_TEXT_BYTES
 import to.sava.peranta.model.MAX_FORWARDED_TITLE_BYTES
@@ -272,6 +275,29 @@ class ReceivedPayloadNormalizationTest {
         assertEquals(presence.from, normalized.from)
         assertEquals(presence.endpoint, normalized.endpoint)
         assertEquals(presence.capabilities, normalized.capabilities)
+    }
+
+    /** コマンドへの応答はエラーの文言へ出る失敗理由だけを 1 行へ正規化し、突き合わせに使う値は触らない。 */
+    @Test
+    fun commandAckMessageIsNormalizedButIdentifiersAreUntouched() {
+        val ack = CommandAckPayload(
+            id = "a1",
+            from = "phone",
+            to = "desk",
+            sentAtEpochMillis = 1,
+            commandId = "cmd1",
+            command = CommandType.INVOKE_ACTION,
+            outcome = CommandOutcome.FAILED,
+            message = "通知が$RTL_OVERRIDE 消えて\nいます" + "あ".repeat(MAX_COMMAND_ACK_MESSAGE_BYTES),
+        )
+
+        val normalized = normalizeReceivedPayload(ack) as CommandAckPayload
+
+        val message = requireNotNull(normalized.message)
+        assertTrue(message.startsWith("通知が 消えて います"))
+        assertTrue(message.encodeToByteArray().size <= MAX_COMMAND_ACK_MESSAGE_BYTES)
+        assertEquals(ack.commandId, normalized.commandId)
+        assertEquals(ack.from, normalized.from)
     }
 
     /** 全文添付から取り出した本文は行数では切らない（全文を読むためのものなので）。 */

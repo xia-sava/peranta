@@ -47,6 +47,7 @@ fun buildCommandPayload(
     replyText: String? = null,
     packageName: String? = null,
     appRule: AppRuleSettings? = null,
+    ackRequest: AckRequest? = null,
     idGen: () -> String = ::newPayloadId,
 ): CommandPayload = CommandPayload(
     id = idGen(),
@@ -60,4 +61,6 @@ fun buildCommandPayload(
     packageName = packageName,
     appRule = appRule,
     expiresAtEpochMillis = now + deliveryOf(command).ttlMillis,
+    ackTopic = ackRequest?.ackTopic,
+    ackBy = ackRequest?.ackBy,
 )

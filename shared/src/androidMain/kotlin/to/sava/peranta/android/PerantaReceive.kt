@@ -25,9 +25,12 @@ import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
 import to.sava.peranta.receive.RoutingCommandExecutor
+import to.sava.peranta.receive.publishingCommandAcknowledger
 import to.sava.peranta.roster.RosterFetchResult
 import to.sava.peranta.roster.RosterStore
+import to.sava.peranta.send.CommandAckTracker
 import to.sava.peranta.send.CommandSender
+import to.sava.peranta.send.ntfyCommandAckHistory
 import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
@@ -61,6 +64,10 @@ object PerantaReceive {
     private val errorSuppressor = ErrorSuppressor()
     private val commandScope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val httpClient by lazy { createNtfyHttpClient() }
+
+    /** 送ったコマンドへの応答待ち（§3.4）。コマンドの送信と応答の受信をまたぐため、プロセス内で 1 つを共有する。 */
+    @Volatile
+    private var ackTracker: CommandAckTracker? = null
 
     /** 受信・送信・エラーを載せた現在のタイムライン。UI はこれを購読する。 */
     val items: StateFlow<List<TimelineItem>> get() = PerantaSend.timelineFeed.items
@@ -168,15 +175,18 @@ object PerantaReceive {
                 dismissLocal = { payloadId -> presenter.cancel(payloadId) },
             ),
         )
+        val cipher = perantaCipher(config)
         val created = ReceivePipeline(
             ntfy = null,
-            cipher = perantaCipher(config),
+            cipher = cipher,
             feed = PerantaSend.timelineFeed,
             deviceId = androidConfigRepository(appContext).ensureDeviceId(),
             commandExecutor = commandExecutor,
             persistSensitiveHistory = config.persistSensitiveHistory,
             onItemAppended = { item -> onAppended(presenter, item) },
             onItemUpdated = { item -> onUpdated(appContext, presenter, item) },
+            commandAcknowledger = publishingCommandAcknowledger(cipher, KtorNtfyClient(config, httpClient)),
+            onCommandAck = { ack -> ackTracker(appContext).onAck(ack) },
         )
         created.loadHistory()
         pipeline = created
@@ -253,15 +263,24 @@ object PerantaReceive {
     /**
      * 元通知が生きている通知をまとめて消す（§10.1）。同じ元通知を指すアイテムが複数あっても
      * コマンドは 1 通知につき 1 回にまとめ、ミラー通知はアイテムごとに取り下げる。
+     * 応答（§3.4）は転送元の端末ごとに最初の 1 件だけに求める。実行端末はコマンドを順に処理するため
+     * 後ろのものほど応答が遅れ、全件に求めると届いていても待ち時間を超えてしまう。
      */
     private fun dismissAllFromTimeline(appContext: Context, items: List<ReceivedNotification>) {
         commandScope.launch {
             try {
                 val presenter = AndroidNotificationPresenter(appContext)
                 items.forEach { presenter.cancel(it.payload.id) }
-                items.mapNotNull { it.payload.notificationKeyOrNull() }.distinct().forEach { notificationKey ->
-                    dismissSourceNotification(appContext, notificationKey)
-                }
+                val ackRequestedSources = mutableSetOf<String>()
+                items.mapNotNull { item -> item.payload.notificationKeyOrNull()?.let { it to item.payload.from } }
+                    .distinctBy { (notificationKey, _) -> notificationKey }
+                    .forEach { (notificationKey, sourceDeviceId) ->
+                        dismissSourceNotification(
+                            appContext,
+                            notificationKey,
+                            sourceDeviceId.takeIf { ackRequestedSources.add(it) },
+                        )
+                    }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
@@ -333,10 +352,30 @@ object PerantaReceive {
      * 共通経路。ブロードキャストは自端末を除外するため、マークは自分で付ける。
      */
     suspend fun dismissSourceNotification(context: Context, notificationKey: String) {
+        dismissSourceNotification(context, notificationKey, sourceDeviceOf(notificationKey))
+    }
+
+    /** [ackSourceDeviceId] に応答（§3.4）を求めて dismiss を送る。null なら応答を求めない。 */
+    private suspend fun dismissSourceNotification(
+        context: Context,
+        notificationKey: String,
+        ackSourceDeviceId: String?,
+    ) {
         val appContext = context.applicationContext
-        commandSender(appContext)?.dismiss(notificationKey)
+        commandSender(appContext)?.dismiss(notificationKey, ackSourceDeviceId)
         markSourceDismissed(notificationKey)
     }
+
+    /**
+     * [notificationKey] の元通知を転送した端末（§3.4 の応答を求める相手）をタイムラインから引く。
+     * ミラー通知の操作は key しか運ばないため、受信アイテムの送信元から補う。見つからなければ null。
+     */
+    private fun sourceDeviceOf(notificationKey: String): String? =
+        PerantaSend.timelineFeed.items.value.asSequence()
+            .filterIsInstance<ReceivedNotification>()
+            .lastOrNull { it.payload.notificationKeyOrNull() == notificationKey }
+            ?.payload
+            ?.from
 
     private fun dismissFromTimeline(appContext: Context, item: ReceivedNotification) {
         commandScope.launch {
@@ -399,7 +438,39 @@ object PerantaReceive {
         }
         val cipher = perantaCipher(config)
         val ntfy = KtorNtfyClient(config, httpClient)
-        return CommandSender(config, cipher, ntfy, SendPipeline(cipher, ntfy, PerantaSend.timelineFeed))
+        return CommandSender(
+            config,
+            cipher,
+            ntfy,
+            SendPipeline(cipher, ntfy, PerantaSend.timelineFeed),
+            ackTracker(appContext),
+        )
+    }
+
+    /** プロセス内で共有する応答待ち（[ackTracker]）を返す。初回に作る。 */
+    private fun ackTracker(appContext: Context): CommandAckTracker =
+        ackTracker ?: synchronized(this) {
+            ackTracker ?: CommandAckTracker(
+                scope = commandScope,
+                onProblem = { kind, message -> reportCommandProblem(appContext, kind, message) },
+                history = { topic, sinceEpochMillis ->
+                    val config = androidConfigRepository(appContext).load()
+                    ntfyCommandAckHistory(KtorNtfyClient(config, httpClient), perantaCipher(config))(topic, sinceEpochMillis)
+                },
+            ).also { ackTracker = it }
+        }
+
+    /**
+     * 送ったコマンドへの応答が無い・失敗したこと（§3.4）を、受信エラーと同じ経路（タイムライン＋OS 通知）で知らせる。
+     * 受信設定が揃っていない端末では受信パイプラインを組めないため、タイムラインへの記録だけにする。
+     */
+    private suspend fun reportCommandProblem(appContext: Context, kind: ErrorKind, message: String) {
+        val config = androidConfigRepository(appContext).load()
+        if (!config.isReadyForUnifiedPushReceive) {
+            reportError(appContext, message)
+            return
+        }
+        mutex.withLock { pipelineLocked(appContext, config).reportError(kind, message) }
     }
 
     /** UnifiedPush メッセージ処理をエラーで落とさないためのラッパ。例外はログに残す。 */

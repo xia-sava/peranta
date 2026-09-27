@@ -20,14 +20,21 @@ const val CAPABILITY_DISPLAY: String = "display"
 const val CAPABILITY_COMMAND: String = "command"
 
 /**
+ * コマンドへの応答（§3.4）を返せることを表す capability 文字列。実行状態ではなく版の能力で、
+ * 応答に対応した版はいつも持つ。送信端末は、宛先がこれを持つときだけ応答を求めて待つ。
+ */
+const val CAPABILITY_COMMAND_ACK: String = "commandAck"
+
+/**
  * 自端末の実能力から presence の capability 列を組む（§3.5）。
  * [canDisplay] は受信通知を表示できるか、[canCommand] は逆方向コマンド（通知操作）を実行できるか。
- * 能力を持つものだけを既定順（display, command）で並べる。
+ * 能力を持つものだけを既定順（display, command）で並べ、版の能力（commandAck）を末尾に足す。
  */
 fun presenceCapabilities(canDisplay: Boolean, canCommand: Boolean): List<String> =
     buildList {
         if (canDisplay) add(CAPABILITY_DISPLAY)
         if (canCommand) add(CAPABILITY_COMMAND)
+        add(CAPABILITY_COMMAND_ACK)
     }
 
 /**

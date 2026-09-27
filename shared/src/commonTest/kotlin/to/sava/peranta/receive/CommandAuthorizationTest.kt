@@ -130,7 +130,7 @@ class CommandAuthorizationTest {
         assertTrue(ops.calls.isEmpty())
         val error = p.items.value.single() as ErrorItem
         assertEquals(ErrorKind.COMMAND_UNAUTHORIZED, error.kind)
-        assertTrue(error.message.contains("転送していない"))
+        assertTrue(error.message.contains("転送した記録の無い"))
     }
 
     /** 転送実績が無い通知への reply も同じく拒否される。 */

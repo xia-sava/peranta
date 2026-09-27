@@ -51,8 +51,11 @@ import to.sava.peranta.pairing.SettingsController
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
+import to.sava.peranta.receive.publishingCommandAcknowledger
+import to.sava.peranta.send.CommandAckTracker
 import to.sava.peranta.send.CommandSender
 import to.sava.peranta.send.SendPipeline
+import to.sava.peranta.send.ntfyCommandAckHistory
 import to.sava.peranta.roster.PresenceAnnounceGate
 import to.sava.peranta.roster.PresenceAnnounceScheduler
 import to.sava.peranta.roster.RosterStore
@@ -61,6 +64,7 @@ import to.sava.peranta.roster.presenceCapabilities
 import to.sava.peranta.roster.presenceFingerprint
 import to.sava.peranta.roster.publishPresence
 import to.sava.peranta.timeline.ErrorItem
+import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.JsonlTimelineStore
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
@@ -185,7 +189,14 @@ class DesktopReceiver(
     private val toastJob = SupervisorJob()
     private val toastScope = CoroutineScope(toastJob + ioDispatcher)
     private val sendPipeline = SendPipeline(cipher, ntfy, feed)
-    private val commandSender = CommandSender(config, cipher, ntfy, sendPipeline)
+
+    // 送ったコマンドへの応答が無い・失敗したこと（§3.4）は受信エラーと同じ経路でタイムラインとトーストへ出す。
+    private val ackTracker = CommandAckTracker(
+        scope = toastScope,
+        onProblem = ::reportCommandProblem,
+        history = ntfyCommandAckHistory(ntfy, cipher),
+    )
+    private val commandSender = CommandSender(config, cipher, ntfy, sendPipeline, ackTracker)
     private val composer by lazy { DesktopComposer(config, httpClient, cipher, ntfy, sendPipeline, toastScope) }
     private val announceGate = PresenceAnnounceGate()
     private val presenceScheduler = PresenceAnnounceScheduler<Unit>(toastScope) { announcePresence() }
@@ -220,6 +231,8 @@ class DesktopReceiver(
         onItemAppended = ::handleAppended,
         onItemUpdated = ::handleUpdated,
         interceptRawMessage = selfTestProbe::consumeMarker,
+        commandAcknowledger = publishingCommandAcknowledger(cipher, ntfy),
+        onCommandAck = ackTracker::onAck,
     )
 
     /** UI が購読するタイムライン。 */
@@ -232,6 +245,10 @@ class DesktopReceiver(
     }
 
     private fun currentItems(): List<TimelineItem> = pipeline.items.value
+
+    private suspend fun reportCommandProblem(kind: ErrorKind, message: String) {
+        pipeline.reportError(kind, message)
+    }
 
     /** 起動時剪定と presence 告知を行い、受信 topic の購読を開始する。キャンセルまで戻らない。 */
     suspend fun run() {
@@ -458,7 +475,7 @@ class DesktopReceiver(
             return
         }
         toastScope.launch {
-            commandSender.dismiss(notificationKey)
+            commandSender.dismiss(notificationKey, sourceDeviceId = payload.from)
             pipeline.markSourceDismissed(notificationKey)
         }
     }
@@ -490,14 +507,19 @@ class DesktopReceiver(
     /**
      * 元通知が生きている通知をまとめて消す（§10.1）。同じ元通知を指すアイテムが複数あっても
      * コマンドは 1 通知につき 1 回にまとめ、表示済みトーストはアイテムごとに取り下げる。
+     * 応答（§3.4）は転送元の端末ごとに最初の 1 件だけに求める。実行端末はコマンドを順に処理するため
+     * 後ろのものほど応答が遅れ、全件に求めると届いていても待ち時間を超えてしまう。
      */
     private fun dismissAllFromTimeline(items: List<ReceivedNotification>) {
         toastScope.launch {
             items.forEach { toaster.close(it.payload.id) }
-            items.mapNotNull { it.payload.notificationKeyOrNull() }.distinct().forEach { notificationKey ->
-                commandSender.dismiss(notificationKey)
-                pipeline.markSourceDismissed(notificationKey)
-            }
+            val ackRequestedSources = mutableSetOf<String>()
+            items.mapNotNull { item -> item.payload.notificationKeyOrNull()?.let { it to item.payload.from } }
+                .distinctBy { (notificationKey, _) -> notificationKey }
+                .forEach { (notificationKey, sourceDeviceId) ->
+                    commandSender.dismiss(notificationKey, sourceDeviceId.takeIf { ackRequestedSources.add(it) })
+                    pipeline.markSourceDismissed(notificationKey)
+                }
         }
     }
 
@@ -556,7 +578,7 @@ class DesktopReceiver(
                 log.i { "dismiss ignored (no notification key) payload=${item.payload.id}" }
                 return@launch
             }
-            commandSender.dismiss(notificationKey)
+            commandSender.dismiss(notificationKey, sourceDeviceId = item.payload.from)
             pipeline.markSourceDismissed(notificationKey)
         }
     }

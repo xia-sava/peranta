@@ -25,6 +25,7 @@ import to.sava.peranta.shared.R
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.timeline.errorTitleOf
 
 private val notificationIdAllocatorLock = Any()
 
@@ -156,11 +157,11 @@ class AndroidNotificationPresenter(
         log.i { "notification cancelled id=$notificationId" }
     }
 
-    /** 受信・復号エラーをローカル通知でも知らせる（§10.1）。 */
+    /** 受信・復号エラーと、送ったコマンドへの応答が無い・失敗したこと（§3.4）をローカル通知でも知らせる（§10.1）。 */
     fun showError(item: ErrorItem) {
         val notificationId = idAllocator.idFor(item.id)
         val notification = Notification.Builder(context, CHANNEL_ERROR)
-            .setContentTitle(ERROR_TITLE)
+            .setContentTitle(errorTitleOf(item.kind))
             .setContentText(item.message)
             .setStyle(Notification.BigTextStyle().bigText(item.message))
             .setSmallIcon(R.drawable.ic_notification)
@@ -296,7 +297,6 @@ class AndroidNotificationPresenter(
         private const val CHANNEL_NORMAL = "peranta-normal"
         private const val CHANNEL_LOW = "peranta-low"
         private const val CHANNEL_ERROR = "peranta-error"
-        private const val ERROR_TITLE = "Peranta 受信エラー"
 
         /** 発信元が判らない通知をロック画面で伏せるときの代替の件名。 */
         private const val REDACTED_TITLE = "通知が届いています"

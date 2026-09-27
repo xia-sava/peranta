@@ -1,9 +1,12 @@
 package to.sava.peranta.receive
 
 import to.sava.peranta.model.AppRuleSettings
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.crypto.generateKey
+import to.sava.peranta.model.CommandAckPayload
+import to.sava.peranta.model.CommandOutcome
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.Payload
@@ -18,6 +21,7 @@ import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.TimelineStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -84,11 +88,24 @@ class CommandExecutionTest {
     private fun pipeline(
         executor: CommandExecutor?,
         store: TimelineStore = store(),
+        acknowledger: CommandAcknowledger? = null,
+        onCommandAck: suspend (CommandAckPayload) -> Unit = {},
     ) = ReceivePipeline(
         FakeNtfyClient(), cipher, TimelineFeed(store), deviceId,
         commandExecutor = executor,
         now = { now },
+        commandAcknowledger = acknowledger,
+        onCommandAck = onCommandAck,
     )
+
+    /** 送った応答を宛先 topic ごとに記録する応答口。 */
+    private class RecordingAcknowledger : CommandAcknowledger {
+        val sent = mutableListOf<Pair<String, CommandAckPayload>>()
+
+        override suspend fun acknowledge(topic: String, ack: CommandAckPayload) {
+            sent.add(topic to ack)
+        }
+    }
 
     private fun command(
         command: CommandType,
@@ -100,6 +117,8 @@ class CommandExecutionTest {
         appRule: AppRuleSettings? = null,
         expiresAt: Long? = null,
         id: String = "cmd1",
+        ackTopic: String? = null,
+        ackBy: String? = null,
     ): CommandPayload = CommandPayload(
         id = id,
         from = "desk",
@@ -112,6 +131,8 @@ class CommandExecutionTest {
         replyText = replyText,
         packageName = packageName,
         expiresAtEpochMillis = expiresAt,
+        ackTopic = ackTopic,
+        ackBy = ackBy,
     )
 
     private suspend fun eventFor(payload: Payload): NtfyEvent =
@@ -242,6 +263,126 @@ class CommandExecutionTest {
         val error = p.items.value.single() as ErrorItem
         assertEquals(ErrorKind.COMMAND_EXECUTION, error.kind)
         assertTrue(error.message.contains("見つかりません"))
+    }
+
+    /** 指名されたコマンドを実行したら、送信端末が指定した送り先へ成功を返す（§3.4）。 */
+    @Test
+    fun executedCommandIsAcknowledged() = runTest {
+        val acknowledger = RecordingAcknowledger()
+        pipeline(FakeCommandExecutor(), acknowledger = acknowledger).handleEvent(
+            eventFor(command(CommandType.INVOKE_ACTION, ackTopic = "desk-topic", ackBy = deviceId)),
+        )
+        val (topic, ack) = acknowledger.sent.single()
+        assertEquals("desk-topic", topic)
+        assertEquals("cmd1", ack.commandId)
+        assertEquals("desk", ack.to)
+        assertEquals(deviceId, ack.from)
+        assertEquals(CommandOutcome.EXECUTED, ack.outcome)
+        assertNull(ack.message)
+    }
+
+    /** 実行に失敗したら、失敗と利用者向けの理由を返す。 */
+    @Test
+    fun failedCommandIsAcknowledgedWithReason() = runTest {
+        val acknowledger = RecordingAcknowledger()
+        val executor = FakeCommandExecutor(failWith = CommandExecutionException("対象の通知が見つかりません"))
+        pipeline(executor, acknowledger = acknowledger).handleEvent(
+            eventFor(command(CommandType.INVOKE_ACTION, ackTopic = "desk-topic", ackBy = deviceId)),
+        )
+        val ack = acknowledger.sent.single().second
+        assertEquals(CommandOutcome.FAILED, ack.outcome)
+        assertEquals("対象の通知が見つかりません", ack.message)
+    }
+
+    /** 全端末宛の dismiss でも、指名されていない端末は応答しない。 */
+    @Test
+    fun commandNominatingAnotherDeviceIsNotAcknowledged() = runTest {
+        val acknowledger = RecordingAcknowledger()
+        val executor = FakeCommandExecutor()
+        pipeline(executor, acknowledger = acknowledger).handleEvent(
+            eventFor(command(CommandType.DISMISS, to = "*", ackTopic = "desk-topic", ackBy = "other-phone")),
+        )
+        assertEquals(listOf("dismiss"), executor.calls)
+        assertTrue(acknowledger.sent.isEmpty())
+    }
+
+    /** 応答を求めないコマンド（旧版の送信端末など）には応答しない。 */
+    @Test
+    fun commandWithoutAckRequestIsNotAcknowledged() = runTest {
+        val acknowledger = RecordingAcknowledger()
+        pipeline(FakeCommandExecutor(), acknowledger = acknowledger).handleEvent(
+            eventFor(command(CommandType.INVOKE_ACTION)),
+        )
+        assertTrue(acknowledger.sent.isEmpty())
+    }
+
+    /** 応答の送信に失敗しても、コマンドの実行結果は変わらずエラーも残さない。 */
+    @Test
+    fun acknowledgementFailureDoesNotAffectExecution() = runTest {
+        val executor = FakeCommandExecutor()
+        val p = pipeline(executor, acknowledger = { _, _ -> error("network down") })
+        p.handleEvent(eventFor(command(CommandType.INVOKE_ACTION, ackTopic = "desk-topic", ackBy = deviceId)))
+        assertEquals(listOf("invokeAction"), executor.calls)
+        assertTrue(p.items.value.isEmpty())
+    }
+
+    /** 応答の送り先が ntfy の topic 名の形でなければ、実行はしても応答しない。 */
+    @Test
+    fun malformedAckTopicIsNotAcknowledged() = runTest {
+        val acknowledger = RecordingAcknowledger()
+        val executor = FakeCommandExecutor()
+        pipeline(executor, acknowledger = acknowledger).handleEvent(
+            eventFor(command(CommandType.INVOKE_ACTION, ackTopic = "v1/account", ackBy = deviceId)),
+        )
+        assertEquals(listOf("invokeAction"), executor.calls)
+        assertTrue(acknowledger.sent.isEmpty())
+    }
+
+    /** 応答の publish が返らなくても待ち時間で打ち切り、受信処理を止めない。 */
+    @Test
+    fun hangingAcknowledgementIsAbandonedAfterTimeout() = runTest {
+        val executor = FakeCommandExecutor()
+        val p = pipeline(executor, acknowledger = { _, _ -> awaitCancellation() })
+        p.handleEvent(eventFor(command(CommandType.INVOKE_ACTION, ackTopic = "desk-topic", ackBy = deviceId)))
+        assertEquals(listOf("invokeAction"), executor.calls)
+        assertTrue(p.items.value.isEmpty())
+    }
+
+    /** 想定外の例外で実行が中断したときも、失敗を返してから例外を伝える。 */
+    @Test
+    fun unexpectedFailureIsAcknowledgedAsFailed() = runTest {
+        val acknowledger = RecordingAcknowledger()
+        val executor = object : CommandExecutor by FakeCommandExecutor() {
+            override suspend fun invokeAction(notificationKey: String, actionIndex: Int) {
+                throw IllegalStateException("boom")
+            }
+        }
+        assertFailsWith<IllegalStateException> {
+            pipeline(executor, acknowledger = acknowledger).handleEvent(
+                eventFor(command(CommandType.INVOKE_ACTION, ackTopic = "desk-topic", ackBy = deviceId)),
+            )
+        }
+        assertEquals(CommandOutcome.FAILED, acknowledger.sent.single().second.outcome)
+    }
+
+    /** 自分宛の応答は応答の受け口へ渡し、タイムラインには載せない。 */
+    @Test
+    fun commandAckIsHandedToReceiver() = runTest {
+        val received = mutableListOf<CommandAckPayload>()
+        val p = pipeline(FakeCommandExecutor(), onCommandAck = { received.add(it) })
+        val ack = CommandAckPayload(
+            id = "ack1",
+            from = "desk",
+            to = deviceId,
+            sentAtEpochMillis = now,
+            commandId = "cmd9",
+            command = CommandType.INVOKE_ACTION,
+            outcome = CommandOutcome.EXECUTED,
+        )
+        p.handleEvent(eventFor(ack))
+        p.handleEvent(eventFor(ack))
+        assertEquals(listOf("cmd9"), received.map { it.commandId })
+        assertTrue(p.items.value.isEmpty())
     }
 
     /** 同一 id のコマンドを 2 回受信しても 1 回だけ実行する（再送の二重発火防止）。 */

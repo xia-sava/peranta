@@ -5,9 +5,12 @@ import to.sava.peranta.model.AppRuleSettings
 import co.touchlab.kermit.Logger
 import to.sava.peranta.timeline.TimelineItem
 
-/** 自端末が転送していない通知への操作を拒んだときにタイムラインへ出す文言。 */
+/**
+ * 自端末が転送していない通知への操作を拒んだときにタイムラインへ出す文言。
+ * 応答（§3.4）に載って操作した端末でも表示されるため、どちらの端末で読んでも意味が通る言い方にする。
+ */
 private const val UNAUTHORIZED_MESSAGE =
-    "この端末が転送していない通知は操作できません（履歴から消えた古い通知の可能性もあります）"
+    "転送した記録の無い通知は操作できません（履歴から消えた古い通知の可能性もあります）"
 
 /**
  * 逆方向コマンド（§3.4）の実行先を、通知操作と設定更新で使い分ける [CommandExecutor]。

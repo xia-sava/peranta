@@ -1,7 +1,11 @@
 package to.sava.peranta.receive
 
 import co.touchlab.kermit.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerializationException
 import to.sava.peranta.crypto.DecryptionException
 import to.sava.peranta.crypto.KeyIdMismatchException
@@ -12,9 +16,12 @@ import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.AppRuleSettings
+import to.sava.peranta.model.CommandAckPayload
+import to.sava.peranta.model.CommandOutcome
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.FilePayload
+import to.sava.peranta.model.MAX_COMMAND_ACK_MESSAGE_BYTES
 import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
@@ -24,9 +31,11 @@ import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.model.revisionOrZero
+import to.sava.peranta.model.truncateToUtf8Bytes
 import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyEvent
 import to.sava.peranta.platform.topicForLog
+import to.sava.peranta.send.COMMAND_ACK_TIMEOUT_MILLIS
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.ErrorSuppressor
@@ -43,6 +52,12 @@ private const val KEY_MISMATCH_MESSAGE =
 /** 送信側の封筒の版が新しく開けない場合にタイムラインへ出す文言。 */
 private const val UNSUPPORTED_ENVELOPE_VERSION_MESSAGE =
     "送信側の端末が新しい版です。この端末を更新してください"
+
+/** コマンドの実行に失敗し、実行側が理由を持たないときの文言。 */
+private const val COMMAND_FAILED_MESSAGE = "コマンドの実行に失敗しました"
+
+/** ntfy の topic 名の規則。コマンドへの応答の送り先（§3.4）がこれに合うかを確かめる。 */
+private val NTFY_TOPIC_NAME = Regex("^[-_A-Za-z0-9]{1,64}$")
 
 /** 重複排除で記憶する payload.id の上限。剪定上限と揃える。 */
 private const val DEDUPE_CAPACITY = 1000
@@ -89,6 +104,10 @@ class ReceivePipeline(
     private val onItemUpdated: (TimelineItem) -> Unit = {},
     /** Envelope 解釈の前に生メッセージを検査し、true なら破棄する（自己疎通テストのマーカー等）。 */
     private val interceptRawMessage: (rawMessage: String) -> Boolean = { false },
+    /** 応答を求められたコマンド（§3.4）へ応答を返す口。null の端末は応答しない。 */
+    private val commandAcknowledger: CommandAcknowledger? = null,
+    /** 自端末が送ったコマンドへの応答（§3.4）を受け取ったときに呼ぶ。 */
+    private val onCommandAck: suspend (CommandAckPayload) -> Unit = {},
 ) {
 
     /** 現在のタイムライン。UI はこれを購読する。 */
@@ -99,6 +118,9 @@ class ReceivePipeline(
 
     /** エラー追記の抑止窓（§10.5）。種別ごとの性質は [ErrorKind.origin] が持つ。 */
     private val errorSuppressor = ErrorSuppressor()
+
+    /** 受信処理と [reportError]（受信の外から呼ばれる）が [errorSuppressor] を同時に触らないようにする。 */
+    private val errorSuppressorMutex = Mutex()
 
     /**
      * 保存済み履歴を読み込み、タイムラインと重複排除の初期状態を作る。購読は行わない。
@@ -198,6 +220,14 @@ class ReceivePipeline(
 
             is CommandPayload -> executeCommand(payload)
 
+            is CommandAckPayload -> {
+                if (!rememberId(payload.id)) {
+                    log.d { "dropping duplicate command ack id=${payload.id}" }
+                    return
+                }
+                onCommandAck(payload)
+            }
+
             else -> log.d { "ignoring payload id=${payload.id} type=${payload::class.simpleName} (not displayed)" }
         }
     }
@@ -207,6 +237,7 @@ class ReceivePipeline(
      * 同一 id の再送で操作を二重発火しないよう、実行前に重複排除する。
      * 実行失敗（[CommandExecutionException]）と、自端末が転送していない通知への操作の拒否
      * （[CommandUnauthorizedException]）は、それぞれ別種のエラーとしてタイムラインへ記録する。
+     * 応答を求められていれば、成否と失敗の理由を送信端末へ返す（[acknowledge]）。
      */
     private suspend fun executeCommand(payload: CommandPayload) {
         val executor = commandExecutor ?: run {
@@ -217,22 +248,71 @@ class ReceivePipeline(
             log.d { "dropping duplicate command id=${payload.id}" }
             return
         }
-        try {
+        val failure: String? = try {
             dispatchCommand(executor, payload)
             log.i { "command executed id=${payload.id} command=${payload.command}" }
+            null
         } catch (e: CommandUnauthorizedException) {
-            recordError(
-                ErrorKind.COMMAND_UNAUTHORIZED,
-                e.message ?: "この端末が転送していない通知は操作できません",
-                causeLabel = e::class.simpleName,
-            )
+            (e.message ?: "転送した記録の無い通知は操作できません").also { message ->
+                recordError(ErrorKind.COMMAND_UNAUTHORIZED, message, causeLabel = e::class.simpleName)
+            }
         } catch (e: CommandExecutionException) {
-            recordError(
-                ErrorKind.COMMAND_EXECUTION,
-                e.message ?: "コマンドの実行に失敗しました",
-                causeLabel = e::class.simpleName,
-            )
+            (e.message ?: COMMAND_FAILED_MESSAGE).also { message ->
+                recordError(ErrorKind.COMMAND_EXECUTION, message, causeLabel = e::class.simpleName)
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (e: Exception) {
+            // 想定外の失敗も、送信端末が「応答なし」と取り違えないよう失敗として返してから伝える。
+            acknowledge(payload, COMMAND_FAILED_MESSAGE)
+            throw e
         }
+        acknowledge(payload, failure)
+    }
+
+    /**
+     * 応答を求められたコマンドへ、成否（[failure] が null なら成功）を返す（§3.4）。
+     * 応答するのは指名された端末（[CommandPayload.ackBy]）だけで、全端末宛の dismiss でも他の端末は黙る。
+     * 送り先が ntfy の topic 名の形をしていなければ応答しない（任意のパスへ publish させないため）。
+     * 送信端末が待つ時間を過ぎた応答は意味を持たないため、publish はその時間で打ち切る。
+     * 応答の失敗はコマンドの実行結果を変えないので、ログに残すだけにする。例外は種別名だけを残す
+     * （ktor の例外メッセージには接続先 URL（＝topic）が載る、§16）。
+     */
+    private suspend fun acknowledge(command: CommandPayload, failure: String?) {
+        val topic = command.ackTopic ?: return
+        if (command.ackBy != deviceId) return
+        val acknowledger = commandAcknowledger ?: return
+        if (!NTFY_TOPIC_NAME.matches(topic)) {
+            log.w { "ignoring ack request with malformed topic id=${command.id}" }
+            return
+        }
+        val ack = buildCommandAckPayload(
+            command = command,
+            from = deviceId,
+            outcome = if (failure == null) CommandOutcome.EXECUTED else CommandOutcome.FAILED,
+            message = failure?.let { truncateToUtf8Bytes(it, MAX_COMMAND_ACK_MESSAGE_BYTES) },
+            now = now(),
+        )
+        try {
+            withTimeoutOrNull(COMMAND_ACK_TIMEOUT_MILLIS) { acknowledger.acknowledge(topic, ack) }
+                ?: run {
+                    log.w { "command ack timed out id=${command.id}" }
+                    return
+                }
+            log.i { "command ack sent id=${command.id} outcome=${ack.outcome}" }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            log.w { "failed to send command ack id=${command.id} (${error::class.simpleName})" }
+        }
+    }
+
+    /**
+     * 受信処理の外で生じたエラーを、受信由来のエラーと同じ抑止と表示の経路でタイムラインへ載せる（§10.5）。
+     * 新規に載ったときは [onItemAppended] を通るため、Desktop はトーストを、Android は OS 通知を出す。
+     */
+    suspend fun reportError(kind: ErrorKind, message: String) {
+        recordError(kind, message)
     }
 
     /**
@@ -334,6 +414,7 @@ class ReceivePipeline(
         is SmsPayload -> payload.expiresAtEpochMillis
         is FilePayload -> payload.expiresAtEpochMillis
         is CommandPayload -> payload.expiresAtEpochMillis
+        is CommandAckPayload -> payload.expiresAtEpochMillis
         else -> null
     }
 
@@ -465,10 +546,10 @@ class ReceivePipeline(
         causeLabel: String? = null,
     ) {
         val at = now()
-        if (!errorSuppressor.allows(kind, message, at)) {
-            return
+        val suppressed = errorSuppressorMutex.withLock {
+            if (!errorSuppressor.allows(kind, message, at)) return
+            errorSuppressor.takeSuppressedCount(kind, message)
         }
-        val suppressed = errorSuppressor.takeSuppressedCount(kind, message)
         log.w {
             "receive error [$kind]: $message${causeLabel?.let { " ($it)" } ?: ""}" +
                 if (suppressed > 0) " (suppressed $suppressed since last report)" else ""

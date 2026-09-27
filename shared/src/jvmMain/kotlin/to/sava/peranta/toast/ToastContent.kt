@@ -10,12 +10,10 @@ import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.timeline.errorTitleOf
 
 /** 本文が空のときの代替。 */
 private const val BODY_FALLBACK = "（本文なし）"
-
-/** エラー通知トーストのタイトル。 */
-private const val ERROR_TITLE = "Peranta 受信エラー"
 
 /** ファイル受信通知トーストのタイトル。 */
 private const val FILE_RECEIVED_TITLE = "ファイルを受信しました"
@@ -70,7 +68,7 @@ fun isActionStillOffered(payload: NotificationPayload, action: ToastAction): Boo
 fun toastContentFor(item: ErrorItem): ReceivedNotificationToast =
     ReceivedNotificationToast(
         id = item.id,
-        title = ERROR_TITLE,
+        title = errorTitleOf(item.kind),
         body = item.message.ifBlank { BODY_FALLBACK },
     )
 

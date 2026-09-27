@@ -3,6 +3,7 @@ package to.sava.peranta.send
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.net.NtfyClient
+import to.sava.peranta.roster.RosterFetchResult
 import to.sava.peranta.roster.RosterStore
 import to.sava.peranta.roster.resolveDeliveryTopics
 
@@ -18,7 +19,14 @@ suspend fun resolveSendTopics(
     cipher: MessageCipher,
     ntfy: NtfyClient,
 ): List<String> {
-    val controlTopic = config.controlTopic ?: return config.deliveryTopics
-    val result = RosterStore(ntfy, cipher, controlTopic).fetch()
-    return resolveDeliveryTopics(result, config.deviceId, config.deliveryTopics)
+    val roster = config.controlTopic?.let { RosterStore(ntfy, cipher, it).fetch() }
+    return resolveSendTopics(config, roster)
 }
+
+/**
+ * 取得済みのロスター [roster] から `to: "*"` の配送先 topic を解決する（規則は上と同じ）。
+ * [roster] が null（control topic 未設定）なら静的な配送先 topic へ退避する。
+ * ロスターを宛先の解決以外（コマンドの応答の求め、§3.4）にも使う呼び出し側が、取得を 1 回で済ませるために使う。
+ */
+fun resolveSendTopics(config: PerantaConfig, roster: RosterFetchResult?): List<String> =
+    roster?.let { resolveDeliveryTopics(it, config.deviceId, config.deliveryTopics) } ?: config.deliveryTopics

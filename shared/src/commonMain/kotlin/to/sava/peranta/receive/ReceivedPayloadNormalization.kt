@@ -3,9 +3,11 @@ package to.sava.peranta.receive
 import to.sava.peranta.blob.MAX_ATTACHMENT_FILENAME_BYTES
 import to.sava.peranta.blob.MAX_FULL_TEXT_ATTACHMENT_BYTES
 import to.sava.peranta.model.AttachmentRef
+import to.sava.peranta.model.CommandAckPayload
 import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.MAX_ACTION_LABEL_BYTES
 import to.sava.peranta.model.MAX_CAPTION_BYTES
+import to.sava.peranta.model.MAX_COMMAND_ACK_MESSAGE_BYTES
 import to.sava.peranta.model.MAX_DISPLAY_LINES
 import to.sava.peranta.model.MAX_FORWARDED_ACTIONS
 import to.sava.peranta.model.MAX_FORWARDED_TEXT_BYTES
@@ -53,7 +55,8 @@ private val BLANK_RUN = Regex(" {2,}")
  *
  * 識別子（`id` / `from` / `to` / `packageName` / `notificationKey` / 添付の `blobId`・`url`）は
  * 表示ではなく突き合わせに使う値なので触らない。表示に出ない payload（command）もそのまま返す。
- * presence は端末名だけが端末一覧（§3.5）へ出るため、そこだけ正規化する。
+ * presence は端末名だけが端末一覧（§3.5）へ出るため、そこだけ正規化する。コマンドへの応答も
+ * 失敗理由だけがエラーの文言（§3.4）へ出るため、そこだけ正規化する。
  */
 fun normalizeReceivedPayload(payload: Payload): Payload = when (payload) {
     is NotificationPayload -> payload.copy(
@@ -90,6 +93,10 @@ fun normalizeReceivedPayload(payload: Payload): Payload = when (payload) {
 
     is PresencePayload -> payload.copy(
         deviceName = normalizeDisplayLine(payload.deviceName, MAX_SOURCE_LABEL_BYTES),
+    )
+
+    is CommandAckPayload -> payload.copy(
+        message = payload.message?.let { normalizeDisplayLine(it, MAX_COMMAND_ACK_MESSAGE_BYTES) },
     )
 
     else -> payload

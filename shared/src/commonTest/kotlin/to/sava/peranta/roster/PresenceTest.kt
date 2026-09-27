@@ -36,13 +36,19 @@ class PresenceTest {
         assertEquals(5000, presence.sentAtEpochMillis)
     }
 
-    /** capability 列は実能力のフラグから組み、持つ能力だけを display, command の順で並べる。 */
+    /**
+     * capability 列は実能力のフラグから組み、持つ能力だけを display, command の順で並べる。
+     * 版の能力である commandAck（§3.4）は実能力に依らず末尾に必ず付く。
+     */
     @Test
     fun assemblesCapabilitiesFromRealFlags() {
-        assertEquals(listOf("display", "command"), presenceCapabilities(canDisplay = true, canCommand = true))
-        assertEquals(listOf("display"), presenceCapabilities(canDisplay = true, canCommand = false))
-        assertEquals(listOf("command"), presenceCapabilities(canDisplay = false, canCommand = true))
-        assertEquals(emptyList(), presenceCapabilities(canDisplay = false, canCommand = false))
+        assertEquals(
+            listOf("display", "command", "commandAck"),
+            presenceCapabilities(canDisplay = true, canCommand = true),
+        )
+        assertEquals(listOf("display", "commandAck"), presenceCapabilities(canDisplay = true, canCommand = false))
+        assertEquals(listOf("command", "commandAck"), presenceCapabilities(canDisplay = false, canCommand = true))
+        assertEquals(listOf("commandAck"), presenceCapabilities(canDisplay = false, canCommand = false))
     }
 
     /** publishPresence は control topic へ暗号文を送り、キャッシュ短縮ヘッダは付けない。 */

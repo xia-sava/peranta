@@ -265,6 +265,46 @@ data class CommandPayload(
     /** SET_APP_RULE が運ぶアプリごとの扱い（§7）。他の種別では未設定。 */
     val appRule: AppRuleSettings? = null,
     val expiresAtEpochMillis: Long? = null,
+    /**
+     * 応答（[CommandAckPayload]）の送り先 topic（§3.4）。送信端末の受信 topic で、応答を求めるときだけ持つ。
+     * 実行端末はロスターを引かずにここへ直接応答する。
+     */
+    val ackTopic: String? = null,
+    /**
+     * 応答すべき端末の deviceId（§3.4）。全端末宛の dismiss でも、応答するのは元通知を転送した端末だけに
+     * 絞るために指名する。[ackTopic] と対で持つ。
+     */
+    val ackBy: String? = null,
+) : Payload()
+
+/** コマンドを実行した結果（§3.4）。 */
+@Serializable
+enum class CommandOutcome {
+    @SerialName("executed")
+    EXECUTED,
+
+    @SerialName("failed")
+    FAILED,
+}
+
+/**
+ * コマンドへの応答（§3.4）。指名された実行端末（[CommandPayload.ackBy]）が、コマンドを受け取って
+ * 処理したことを送信端末へ返す。応答が来ないことで、送信端末はコマンドが届いていないことに気づく。
+ */
+@Serializable
+@SerialName("commandAck")
+data class CommandAckPayload(
+    override val id: String,
+    override val from: String,
+    override val to: String,
+    override val sentAtEpochMillis: Long,
+    /** 応答するコマンドの [CommandPayload.id]。 */
+    val commandId: String,
+    val command: CommandType,
+    val outcome: CommandOutcome,
+    /** [CommandOutcome.FAILED] のときの利用者向けの理由。 */
+    val message: String? = null,
+    val expiresAtEpochMillis: Long? = null,
 ) : Payload()
 
 /** 端末の存在通知と能力の告知。 */
