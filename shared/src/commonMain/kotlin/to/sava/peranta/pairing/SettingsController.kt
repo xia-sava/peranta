@@ -39,6 +39,7 @@ class SettingsController(private val repository: ConfigRepository) {
         attachFullTextWhenTruncated: Boolean,
         timelineRetentionDays: Int?,
         autoDisplayImages: Boolean,
+        notifyOnReceive: Boolean,
         attachNotificationImages: Boolean,
         verboseLogging: Boolean,
     ): PerantaConfig {
@@ -51,6 +52,7 @@ class SettingsController(private val repository: ConfigRepository) {
             attachFullTextWhenTruncated = attachFullTextWhenTruncated,
             timelineRetentionDays = timelineRetentionDays,
             autoDisplayImages = autoDisplayImages,
+            notifyOnReceive = notifyOnReceive,
             attachNotificationImages = attachNotificationImages,
             verboseLogging = verboseLogging,
         )

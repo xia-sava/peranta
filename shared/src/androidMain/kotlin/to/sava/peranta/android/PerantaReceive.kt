@@ -13,6 +13,7 @@ import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.PipelineKey
 import to.sava.peranta.blob.AutoFetchRole
 import to.sava.peranta.blob.attachmentKindForMimeType
+import to.sava.peranta.config.notifiesOnReceive
 import to.sava.peranta.config.toPipelineKey
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.newPayloadId
@@ -183,7 +184,7 @@ object PerantaReceive {
             deviceId = androidConfigRepository(appContext).ensureDeviceId(),
             commandExecutor = commandExecutor,
             persistSensitiveHistory = config.persistSensitiveHistory,
-            onItemAppended = { item -> onAppended(presenter, item) },
+            onItemAppended = { item -> onAppended(appContext, presenter, item) },
             onItemUpdated = { item -> onUpdated(appContext, presenter, item) },
             commandAcknowledger = publishingCommandAcknowledger(cipher, KtorNtfyClient(config, httpClient)),
             onCommandAck = { ack -> ackTracker(appContext).onAck(ack) },
@@ -194,16 +195,20 @@ object PerantaReceive {
         return created
     }
 
-    private fun onAppended(presenter: AndroidNotificationPresenter, item: TimelineItem) {
+    /** 受信したアイテムを、設定が通知で知らせるものに限って OS 通知として表示する（§3.2）。 */
+    private fun onAppended(context: Context, presenter: AndroidNotificationPresenter, item: TimelineItem) {
+        if (!androidConfigRepository(context).load().notifiesOnReceive(item)) return
         present(presenter, item)
     }
 
     /**
      * 改版で差し替わった受信通知を表示へ反映する（§4.3.1）。後から届いた画像と送信者アイコンを取得し、
      * 表示済みの通知を音を鳴らさずに出し直す。本文画像は自動表示が OFF なら取得しない。
+     * 通知で知らせない設定のときは出し直さない。
      */
     private fun onUpdated(context: Context, presenter: AndroidNotificationPresenter, item: TimelineItem) {
         if (item !is ReceivedNotification) return
+        if (!androidConfigRepository(context).load().notifiesOnReceive(item)) return
         val imageRef = item.payload.displayAttachments()
             .firstOrNull { attachmentKindForMimeType(it.mimeType) == AttachmentKind.IMAGE }
         val senderIconRef = item.payload.senderIcon()

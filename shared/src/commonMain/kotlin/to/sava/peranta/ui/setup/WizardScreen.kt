@@ -152,6 +152,7 @@ fun WizardScreen(
             attachFullTextWhenTruncated = config.attachFullTextWhenTruncated,
             timelineRetentionDays = config.timelineRetentionDays,
             autoDisplayImages = config.autoDisplayImages,
+            notifyOnReceive = config.notifyOnReceive,
             attachNotificationImages = config.attachNotificationImages,
             verboseLogging = config.verboseLogging,
         )

@@ -184,8 +184,8 @@ class SettingsScreenTest {
 
         setContent { SettingsScreen(controller) }
 
-        onNodeWithTag(TAG_PERSIST_SENSITIVE).performClick()
-        onNodeWithTag(TAG_ATTACH_FULL_TEXT).performClick()
+        onNodeWithTag(TAG_PERSIST_SENSITIVE).performScrollTo().performClick()
+        onNodeWithTag(TAG_ATTACH_FULL_TEXT).performScrollTo().performClick()
 
         val loaded = repo.load()
         assertEquals(true, loaded.persistSensitiveHistory)
@@ -202,11 +202,11 @@ class SettingsScreenTest {
         setContent { SettingsScreen(controller) }
 
         onNodeWithTag(TAG_PERSIST_SENSITIVE).assertIsOff()
-        onNodeWithText("センシティブな通知の本文を履歴に保存する").performClick()
+        onNodeWithText("センシティブな通知の本文を履歴に保存する").performScrollTo().performClick()
         onNodeWithTag(TAG_PERSIST_SENSITIVE).assertIsOn()
 
         onNodeWithTag(TAG_ATTACH_FULL_TEXT).assertIsOn()
-        onNodeWithText("長文本文の全文をシームレスに添付・展開する").performClick()
+        onNodeWithText("長文本文の全文をシームレスに添付・展開する").performScrollTo().performClick()
         onNodeWithTag(TAG_ATTACH_FULL_TEXT).assertIsOff()
     }
 
@@ -246,6 +246,20 @@ class SettingsScreenTest {
         onNodeWithTag(TAG_AUTO_DISPLAY_IMAGES).performScrollTo().performClick()
 
         assertEquals(false, repo.load().autoDisplayImages)
+    }
+
+    /** 受信時の通知チェックボックスは既定 ON で、トグルすると即座に ConfigRepository へ反映される（§10.2）。 */
+    @Test
+    fun togglingNotifyOnReceiveCheckboxPersistsImmediately() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_NOTIFY_ON_RECEIVE).performScrollTo().assertIsOn().performClick()
+
+        assertEquals(false, repo.load().notifyOnReceive)
     }
 
     /** 詳細な記録チェックボックスは既定 OFF で初期表示される（§11）。 */

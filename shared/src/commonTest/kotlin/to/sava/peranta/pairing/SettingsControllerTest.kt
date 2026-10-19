@@ -30,6 +30,7 @@ class SettingsControllerTest {
         attachFullTextWhenTruncated: Boolean = true,
         timelineRetentionDays: Int? = null,
         autoDisplayImages: Boolean = true,
+        notifyOnReceive: Boolean = true,
         attachNotificationImages: Boolean = true,
         verboseLogging: Boolean = false,
     ) = saveConnectionSettings(
@@ -41,6 +42,7 @@ class SettingsControllerTest {
         attachFullTextWhenTruncated = attachFullTextWhenTruncated,
         timelineRetentionDays = timelineRetentionDays,
         autoDisplayImages = autoDisplayImages,
+        notifyOnReceive = notifyOnReceive,
         attachNotificationImages = attachNotificationImages,
         verboseLogging = verboseLogging,
     )
@@ -143,6 +145,20 @@ class SettingsControllerTest {
         controller.saveConnection(autoDisplayImages = true)
 
         assertTrue(repo.load().autoDisplayImages)
+    }
+
+    /** 受信時の通知トグル（§3.2 / §3.3）の保存/読み込みラウンドトリップ。 */
+    @Test
+    fun saveConnectionSettingsPersistsNotifyOnReceive() {
+        val (controller, repo) = controllerWith(PerantaConfig(notifyOnReceive = true))
+
+        controller.saveConnection(notifyOnReceive = false)
+
+        assertFalse(repo.load().notifyOnReceive)
+
+        controller.saveConnection(notifyOnReceive = true)
+
+        assertTrue(repo.load().notifyOnReceive)
     }
 
     /** 通知画像の転送トグル（§4.3.1）の保存/読み込みラウンドトリップ。 */

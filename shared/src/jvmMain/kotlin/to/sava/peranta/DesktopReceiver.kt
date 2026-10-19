@@ -31,6 +31,7 @@ import to.sava.peranta.blob.shouldAutoFetch
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.isDevMode
+import to.sava.peranta.config.notifiesOnReceive
 import to.sava.peranta.config.timelineRetentionMaxAgeMillis
 import to.sava.peranta.config.withDevOverrides
 import to.sava.peranta.crypto.MessageCipher
@@ -307,11 +308,15 @@ class DesktopReceiver(
         }
     }
 
-    /** タイムラインに載った新規アイテムをトースト表示へ回す（受信処理はブロックしない）。 */
+    /**
+     * タイムラインに載った新規アイテムを、設定が通知で知らせるものに限ってトースト表示へ回す
+     * （受信処理はブロックしない）。
+     */
     internal fun handleAppended(item: TimelineItem) {
         // 受信は自端末が動いている証。起動しっぱなしでは告知の機会が無く、control topic の
         // 保持期間を過ぎると presence が消えてロスターから落ちる（§3.5）。
         presenceScheduler.request(Unit)
+        if (!config.notifiesOnReceive(item)) return
         when (item) {
             is ReceivedNotification -> toastScope.launch { showNotificationToast(item) }
             is ErrorItem -> toastScope.launch { showToast(item.id, toastContentFor(item)) }
@@ -324,9 +329,11 @@ class DesktopReceiver(
     /**
      * 改版で差し替わった受信通知を表示へ反映する（§4.3.1）。後から届いた画像と送信者アイコンを取得し、
      * まだ表示中のトーストへ差し込む。タイムラインのバブルは items の更新で自動的に追随する。
+     * 通知で知らせない設定のときはトーストが無いため何もしない。
      */
     internal fun handleUpdated(item: TimelineItem) {
         if (item !is ReceivedNotification) return
+        if (!config.notifiesOnReceive(item)) return
         toastScope.launch { updateToastImages(item) }
     }
 

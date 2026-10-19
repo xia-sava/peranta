@@ -341,6 +341,18 @@ class ConfigRepositoryTest {
         assertTrue(repo.load().autoDisplayImages)
     }
 
+    /** 受信時の通知トグルは既定 true で、false に設定しても save/load で往復する（§3.2 / §3.3）。 */
+    @Test
+    fun notifyOnReceiveToggleRoundTrips() {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
+        assertTrue(repo.load().notifyOnReceive)
+        repo.save(PerantaConfig(notifyOnReceive = false))
+        assertFalse(repo.load().notifyOnReceive)
+        repo.save(PerantaConfig(notifyOnReceive = true))
+        assertTrue(repo.load().notifyOnReceive)
+    }
+
     /** 共有鍵未設定の config を保存すると鍵はクリアされ、load で null になる。 */
     @Test
     fun savingWithoutKeyClearsStoredKey() {

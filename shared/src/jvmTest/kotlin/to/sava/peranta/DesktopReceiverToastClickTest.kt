@@ -38,8 +38,10 @@ class DesktopReceiverToastClickTest {
     private class FixedResultToaster(private val result: ToastResult) : Toaster {
         @Volatile
         var shown: ReceivedNotificationToast? = null
+        val shownIds = ConcurrentLinkedQueue<String>()
         override suspend fun show(item: ReceivedNotificationToast): ToastResult {
             shown = item
+            shownIds.add(item.id)
             return result
         }
         override suspend fun close(id: String) = Unit
@@ -183,6 +185,27 @@ class DesktopReceiverToastClickTest {
                 }
             }
             assertEquals(listOf("notif-1" to 1), replies.toList())
+        } finally {
+            runBlocking { receiver.close() }
+        }
+    }
+
+    /** 受信時の通知を OFF にした端末では、受信アイテムのトーストを出さず、エラーのトーストだけを出す（§3.3）。 */
+    @Test
+    fun notifyOnReceiveOffShowsOnlyErrorToasts() {
+        val toaster = FixedResultToaster(ToastResult.Clicked)
+        val receiver = DesktopReceiver(
+            config = testConfig().copy(notifyOnReceive = false),
+            repository = ConfigRepository(MapSettings()),
+            toaster = toaster,
+        )
+        try {
+            receiver.handleAppended(ReceivedMessage(id = "msg-1", timestampEpochMillis = 1000L, payload = messagePayload))
+            receiver.handleAppended(
+                ErrorItem(id = "err-1", timestampEpochMillis = 1000L, message = "boom", kind = ErrorKind.OTHER),
+            )
+            awaitShownThenSettle(toaster)
+            assertEquals(listOf("err-1"), toaster.shownIds.toList())
         } finally {
             runBlocking { receiver.close() }
         }

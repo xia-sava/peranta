@@ -54,6 +54,7 @@ class ConfigRepository(
             attachFullTextWhenTruncated = settings.getBoolean(KEY_ATTACH_FULL_TEXT, true),
             timelineRetentionDays = ensureTimelineRetentionDays(),
             autoDisplayImages = settings.getBoolean(KEY_AUTO_DISPLAY_IMAGES, true),
+            notifyOnReceive = settings.getBoolean(KEY_NOTIFY_ON_RECEIVE, true),
             attachNotificationImages = settings.getBoolean(KEY_ATTACH_NOTIFICATION_IMAGES, true),
             verboseLogging = settings.getBoolean(KEY_VERBOSE_LOGGING, false),
         )
@@ -94,6 +95,7 @@ class ConfigRepository(
             ?.let { settings.putInt(KEY_TIMELINE_RETENTION_DAYS, it) }
             ?: settings.remove(KEY_TIMELINE_RETENTION_DAYS)
         settings.putBoolean(KEY_AUTO_DISPLAY_IMAGES, config.autoDisplayImages)
+        settings.putBoolean(KEY_NOTIFY_ON_RECEIVE, config.notifyOnReceive)
         settings.putBoolean(KEY_ATTACH_NOTIFICATION_IMAGES, config.attachNotificationImages)
         settings.putBoolean(KEY_VERBOSE_LOGGING, config.verboseLogging)
         putOrClearSecret(SECRET_SHARED_KEY, config.sharedKeyBase64)
@@ -232,6 +234,7 @@ class ConfigRepository(
         const val KEY_ATTACH_FULL_TEXT = "attachFullTextWhenTruncated"
         const val KEY_TIMELINE_RETENTION_DAYS = "timelineRetentionDays"
         const val KEY_AUTO_DISPLAY_IMAGES = "autoDisplayImages"
+        const val KEY_NOTIFY_ON_RECEIVE = "notifyOnReceive"
         const val KEY_ATTACH_NOTIFICATION_IMAGES = "attachNotificationImages"
         const val KEY_VERBOSE_LOGGING = "verboseLogging"
 

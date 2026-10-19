@@ -2,6 +2,8 @@ package to.sava.peranta.config
 
 import to.sava.peranta.filter.FilterMode
 import to.sava.peranta.filter.FilterRule
+import to.sava.peranta.timeline.ErrorItem
+import to.sava.peranta.timeline.TimelineItem
 
 /** サーバホスト名の既定値。 */
 const val DEFAULT_HOST: String = "peranta.example.com"
@@ -22,6 +24,9 @@ const val DEFAULT_HOST: String = "peranta.example.com"
  * [autoDisplayImages] が true のとき、タイムラインに現れた画像添付を自動でダウンロードして表示する（§4.3）。
  * false なら従来どおり手動でダウンロードボタンを押すまで取得しない。端末ローカルの表示設定であり
  * ペアリング QR には含めない。
+ * [notifyOnReceive] が true のとき、受信したアイテムをこの端末の通知（Android の通知・Desktop のトースト）で
+ * 知らせる（§3.2 / §3.3）。false ならタイムラインへ記録するだけにする。受信エラーはこの設定に依らず知らせる。
+ * 端末ローカルの表示設定でありペアリング QR には含めない。
  * [attachNotificationImages] が true のとき、転送する通知に元の画像を添付する（§4.3.1）。
  * 端末ローカルの送信設定でありペアリング QR には含めない。
  * [verboseLogging] が true のとき、ログに Verbose までの行を残す（§11）。false なら Info 以上だけを残す。
@@ -58,6 +63,7 @@ data class PerantaConfig(
     val attachFullTextWhenTruncated: Boolean = true,
     val timelineRetentionDays: Int? = null,
     val autoDisplayImages: Boolean = true,
+    val notifyOnReceive: Boolean = true,
     val attachNotificationImages: Boolean = true,
     val verboseLogging: Boolean = false,
 ) {
@@ -100,6 +106,12 @@ data class PerantaConfig(
             !keyId.isNullOrBlank() &&
             (deliveryTopics.isNotEmpty() || !controlTopic.isNullOrBlank())
 }
+
+/**
+ * 受信した [item] をこの端末の通知で知らせるか（§3.2 / §3.3）。
+ * エラーは [PerantaConfig.notifyOnReceive] に依らず知らせ、受信が壊れたまま気づかれない状態を避ける。
+ */
+fun PerantaConfig.notifiesOnReceive(item: TimelineItem): Boolean = notifyOnReceive || item is ErrorItem
 
 /** 1 日のミリ秒数。保持日数から [TimelineStore.prune] の経過時間へ変換する際に使う（§11）。 */
 private const val MILLIS_PER_DAY: Long = 24L * 60 * 60 * 1000
