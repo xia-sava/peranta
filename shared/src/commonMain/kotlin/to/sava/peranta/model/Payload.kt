@@ -304,6 +304,11 @@ data class CommandAckPayload(
     val outcome: CommandOutcome,
     /** [CommandOutcome.FAILED] のときの利用者向けの理由。 */
     val message: String? = null,
+    /**
+     * 操作の対象通知が既に存在せず失敗したか。[outcome] は [CommandOutcome.FAILED] のままとし、
+     * このフィールドを知らない版の送信端末には従来どおりの失敗として届く。
+     */
+    val targetMissing: Boolean = false,
     val expiresAtEpochMillis: Long? = null,
 ) : Payload()
 

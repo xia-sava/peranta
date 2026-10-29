@@ -10,7 +10,8 @@ import to.sava.peranta.model.AppRuleSettings
  * 自端末が転送した通知だけを操作対象にするための境界で、素の notificationKey では呼べない。
  *
  * 実行に失敗した場合（対象通知が見つからない・actionIndex が範囲外・返信入力欄が無い等）は
- * 理由を添えた [CommandExecutionException] を送出する。
+ * 理由を添えた [CommandExecutionException] を送出する。対象通知が見つからないときは
+ * [CommandTargetMissingException] とする。
  */
 interface NotificationOps {
 

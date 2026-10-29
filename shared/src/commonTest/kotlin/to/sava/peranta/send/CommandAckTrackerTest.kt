@@ -32,20 +32,26 @@ class CommandAckTrackerTest {
         )
     }
 
-    private fun ack(commandId: String, outcome: CommandOutcome = CommandOutcome.EXECUTED, message: String? = null) =
-        CommandAckPayload(
-            id = "ack-$commandId",
-            from = "phone",
-            to = "desk",
-            sentAtEpochMillis = 0,
-            commandId = commandId,
-            command = CommandType.INVOKE_ACTION,
-            outcome = outcome,
-            message = message,
-        )
+    private fun ack(
+        commandId: String,
+        outcome: CommandOutcome = CommandOutcome.EXECUTED,
+        message: String? = null,
+        command: CommandType = CommandType.INVOKE_ACTION,
+        targetMissing: Boolean = false,
+    ) = CommandAckPayload(
+        id = "ack-$commandId",
+        from = "phone",
+        to = "desk",
+        sentAtEpochMillis = 0,
+        commandId = commandId,
+        command = command,
+        outcome = outcome,
+        message = message,
+        targetMissing = targetMissing,
+    )
 
-    private suspend fun Harness.send(commandId: String) {
-        tracker.register(commandId, CommandType.INVOKE_ACTION, request)
+    private suspend fun Harness.send(commandId: String, command: CommandType = CommandType.INVOKE_ACTION) {
+        tracker.register(commandId, command, request)
         tracker.arm(commandId)
     }
 
@@ -121,6 +127,39 @@ class CommandAckTrackerTest {
             listOf(ErrorKind.COMMAND_EXECUTION to failedCommandMessage("AQUOS", "通知はすでに消えています。")),
             harness.reports,
         )
+    }
+
+    /** 対象通知が既に存在しなかったアクション発火の失敗は知らせない。 */
+    @Test
+    fun targetMissingActionAckReportsNothing() = runTest {
+        val harness = Harness(this)
+        harness.send("c1")
+        harness.tracker.onAck(ack("c1", CommandOutcome.FAILED, "理由", targetMissing = true))
+        advanceTimeBy(COMMAND_ACK_TIMEOUT_MILLIS + 1)
+        runCurrent()
+        assertTrue(harness.reports.isEmpty())
+    }
+
+    /** 読み直しで見つかった応答でも、対象通知が既に存在しなかったアクション発火の失敗は知らせない。 */
+    @Test
+    fun targetMissingActionAckRecoveredFromHistoryReportsNothing() = runTest {
+        val harness = Harness(this, reread = listOf(ack("c1", CommandOutcome.FAILED, "理由", targetMissing = true)))
+        harness.send("c1")
+        advanceTimeBy(COMMAND_ACK_TIMEOUT_MILLIS + 1)
+        runCurrent()
+        assertTrue(harness.reports.isEmpty())
+    }
+
+    /** 返信は、対象通知が既に存在しなかった失敗でも理由を添えて知らせる（打った本文が届いていない）。 */
+    @Test
+    fun targetMissingReplyAckReportsReason() = runTest {
+        val harness = Harness(this)
+        harness.send("c1", CommandType.REPLY)
+        harness.tracker.onAck(
+            ack("c1", CommandOutcome.FAILED, "理由", command = CommandType.REPLY, targetMissing = true),
+        )
+        runCurrent()
+        assertEquals(listOf(ErrorKind.COMMAND_EXECUTION to failedCommandMessage("AQUOS", "理由")), harness.reports)
     }
 
     /** 同じ端末の応答なしは最小間隔の間に 1 度しか知らせず、間隔を過ぎればまた知らせる。 */

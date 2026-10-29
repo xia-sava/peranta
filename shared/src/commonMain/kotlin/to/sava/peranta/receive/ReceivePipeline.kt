@@ -237,6 +237,8 @@ class ReceivePipeline(
      * 同一 id の再送で操作を二重発火しないよう、実行前に重複排除する。
      * 実行失敗（[CommandExecutionException]）と、自端末が転送していない通知への操作の拒否
      * （[CommandUnauthorizedException]）は、それぞれ別種のエラーとしてタイムラインへ記録する。
+     * 対象通知が既に存在しなかった失敗（[CommandTargetMissingException]）は記録しない。
+     * 元通知は消えたものとして扱い、知らせるかは送信端末が応答を見て決める。
      * 応答を求められていれば、成否と失敗の理由を送信端末へ返す（[acknowledge]）。
      */
     private suspend fun executeCommand(payload: CommandPayload) {
@@ -248,27 +250,35 @@ class ReceivePipeline(
             log.d { "dropping duplicate command id=${payload.id}" }
             return
         }
-        val failure: String? = try {
+        val failure: CommandFailure? = try {
             dispatchCommand(executor, payload)
             log.i { "command executed id=${payload.id} command=${payload.command}" }
             null
+        } catch (e: CommandTargetMissingException) {
+            log.i { "command target missing id=${payload.id} command=${payload.command}" }
+            CommandFailure(e.message ?: COMMAND_FAILED_MESSAGE, targetMissing = true)
         } catch (e: CommandUnauthorizedException) {
-            (e.message ?: "転送した記録の無い通知は操作できません").also { message ->
+            (e.message ?: "転送した記録の無い通知は操作できません").let { message ->
                 recordError(ErrorKind.COMMAND_UNAUTHORIZED, message, causeLabel = e::class.simpleName)
+                CommandFailure(message)
             }
         } catch (e: CommandExecutionException) {
-            (e.message ?: COMMAND_FAILED_MESSAGE).also { message ->
+            (e.message ?: COMMAND_FAILED_MESSAGE).let { message ->
                 recordError(ErrorKind.COMMAND_EXECUTION, message, causeLabel = e::class.simpleName)
+                CommandFailure(message)
             }
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (e: Exception) {
             // 想定外の失敗も、送信端末が「応答なし」と取り違えないよう失敗として返してから伝える。
-            acknowledge(payload, COMMAND_FAILED_MESSAGE)
+            acknowledge(payload, CommandFailure(COMMAND_FAILED_MESSAGE))
             throw e
         }
         acknowledge(payload, failure)
     }
+
+    /** コマンドの失敗の利用者向けの理由と、対象通知が既に存在しなかったことによる失敗か。 */
+    private data class CommandFailure(val message: String, val targetMissing: Boolean = false)
 
     /**
      * 応答を求められたコマンドへ、成否（[failure] が null なら成功）を返す（§3.4）。
@@ -278,7 +288,7 @@ class ReceivePipeline(
      * 応答の失敗はコマンドの実行結果を変えないので、ログに残すだけにする。例外は種別名だけを残す
      * （ktor の例外メッセージには接続先 URL（＝topic）が載る、§16）。
      */
-    private suspend fun acknowledge(command: CommandPayload, failure: String?) {
+    private suspend fun acknowledge(command: CommandPayload, failure: CommandFailure?) {
         val topic = command.ackTopic ?: return
         if (command.ackBy != deviceId) return
         val acknowledger = commandAcknowledger ?: return
@@ -290,8 +300,9 @@ class ReceivePipeline(
             command = command,
             from = deviceId,
             outcome = if (failure == null) CommandOutcome.EXECUTED else CommandOutcome.FAILED,
-            message = failure?.let { truncateToUtf8Bytes(it, MAX_COMMAND_ACK_MESSAGE_BYTES) },
+            message = failure?.let { truncateToUtf8Bytes(it.message, MAX_COMMAND_ACK_MESSAGE_BYTES) },
             now = now(),
+            targetMissing = failure?.targetMissing ?: false,
         )
         try {
             withTimeoutOrNull(COMMAND_ACK_TIMEOUT_MILLIS) { acknowledger.acknowledge(topic, ack) }

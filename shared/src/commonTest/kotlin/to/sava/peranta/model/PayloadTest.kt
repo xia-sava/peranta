@@ -118,6 +118,18 @@ class PayloadTest {
         assertEquals("phone", decoded.from)
     }
 
+    /** targetMissing（§4.1）を持たない旧版の応答も復号でき、targetMissing は false になる。 */
+    @Test
+    fun commandAckDecodeWithoutTargetMissingFallsBackToFalse() {
+        val json = """
+            {"type":"commandAck","id":"a","from":"phone","to":"desk","sentAtEpochMillis":1,
+            "commandId":"c","command":"invokeAction","outcome":"failed","message":"m"}
+        """.trimIndent()
+        val decoded = decodePayload(json) as CommandAckPayload
+        assertEquals(false, decoded.targetMissing)
+        assertEquals(CommandOutcome.FAILED, decoded.outcome)
+    }
+
     /** fromName ありのペイロードは JSON を往復しても保持される。 */
     @Test
     fun fromNameRoundTrips() {

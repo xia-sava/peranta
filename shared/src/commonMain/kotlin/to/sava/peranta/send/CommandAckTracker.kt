@@ -143,12 +143,20 @@ class CommandAckTracker(
         settle(entry, ack)
     }
 
-    /** 応答を受け取ったコマンドを片づけ、失敗が返っていればその理由を知らせる。 */
+    /**
+     * 応答を受け取ったコマンドを片づけ、失敗が返っていればその理由を知らせる。
+     * 対象通知が既に存在しなかったアクション発火は知らせない。実行端末が同報する dismiss で
+     * アイテムは「元通知は消えた」状態になり、操作できなかったことはそれで分かる。
+     * 返信は打った本文が届かなかったことを知らせるため、対象通知が無くても知らせる。
+     */
     private fun settle(entry: Pending, ack: CommandAckPayload) {
-        log.i { "command acknowledged id=${ack.commandId} command=${entry.command} outcome=${ack.outcome}" }
-        if (ack.outcome == CommandOutcome.FAILED) {
-            report(ErrorKind.COMMAND_EXECUTION, failedCommandMessage(entry.request.targetName, ack.message))
+        log.i {
+            "command acknowledged id=${ack.commandId} command=${entry.command} outcome=${ack.outcome}" +
+                " targetMissing=${ack.targetMissing}"
         }
+        if (ack.outcome != CommandOutcome.FAILED) return
+        if (ack.targetMissing && entry.command != CommandType.REPLY) return
+        report(ErrorKind.COMMAND_EXECUTION, failedCommandMessage(entry.request.targetName, ack.message))
     }
 
     /**

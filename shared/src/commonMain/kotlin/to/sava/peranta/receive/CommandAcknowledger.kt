@@ -31,6 +31,7 @@ fun buildCommandAckPayload(
     outcome: CommandOutcome,
     message: String?,
     now: Long,
+    targetMissing: Boolean = false,
     idGen: () -> String = ::newPayloadId,
 ): CommandAckPayload = CommandAckPayload(
     id = idGen(),
@@ -41,5 +42,6 @@ fun buildCommandAckPayload(
     command = command.command,
     outcome = outcome,
     message = message,
+    targetMissing = targetMissing,
     expiresAtEpochMillis = now + CommandDelivery.IMMEDIATE.ttlMillis,
 )

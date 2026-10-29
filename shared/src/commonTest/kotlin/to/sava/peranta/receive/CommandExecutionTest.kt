@@ -22,6 +22,7 @@ import to.sava.peranta.timeline.TimelineStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -292,6 +293,21 @@ class CommandExecutionTest {
         val ack = acknowledger.sent.single().second
         assertEquals(CommandOutcome.FAILED, ack.outcome)
         assertEquals("対象の通知が見つかりません", ack.message)
+        assertFalse(ack.targetMissing)
+    }
+
+    /** 対象通知が既に存在しなかった失敗は、タイムラインに記録せず、その旨を添えた失敗として返す。 */
+    @Test
+    fun targetMissingIsAcknowledgedWithoutRecordingError() = runTest {
+        val acknowledger = RecordingAcknowledger()
+        val executor = FakeCommandExecutor(failWith = CommandTargetMissingException("通知はすでに消えています"))
+        val p = pipeline(executor, acknowledger = acknowledger)
+        p.handleEvent(eventFor(command(CommandType.INVOKE_ACTION, ackTopic = "desk-topic", ackBy = deviceId)))
+        assertTrue(p.items.value.none { it is ErrorItem })
+        val ack = acknowledger.sent.single().second
+        assertEquals(CommandOutcome.FAILED, ack.outcome)
+        assertEquals("通知はすでに消えています", ack.message)
+        assertTrue(ack.targetMissing)
     }
 
     /** 全端末宛の dismiss でも、指名されていない端末は応答しない。 */

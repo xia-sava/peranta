@@ -24,6 +24,7 @@ import to.sava.peranta.model.NotificationVisibility
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.receive.CommandExecutionException
+import to.sava.peranta.receive.CommandTargetMissingException
 import to.sava.peranta.send.NotificationInput
 import to.sava.peranta.send.prepareForwardedNotification
 import to.sava.peranta.send.withSmsNotificationKey
@@ -147,7 +148,7 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         if (sbn == null) {
             log.w { "target notification not found key=$key" }
             broadcastSourceDismissed(key)
-            throw CommandExecutionException(notFoundMessage)
+            throw CommandTargetMissingException(notFoundMessage)
         }
         return sbn
     }

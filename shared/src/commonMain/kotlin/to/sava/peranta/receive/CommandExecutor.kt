@@ -14,7 +14,8 @@ import to.sava.peranta.model.AppRuleSettings
  *
  * 実行に失敗した場合（対象通知が見つからない・actionIndex が範囲外・返信入力欄が無い等）は
  * 理由を添えた [CommandExecutionException] を送出する。[ReceivePipeline] がこれを捕捉し、
- * タイムラインへエラーとして記録する。
+ * タイムラインへエラーとして記録する。対象通知が見つからなかったときは
+ * [CommandTargetMissingException] を送出し、タイムラインには記録せず送信端末への応答で伝える。
  */
 interface CommandExecutor {
 
@@ -41,7 +42,13 @@ interface CommandExecutor {
 }
 
 /** コマンド実行が失敗したことを、タイムライン表示用の理由付きで表す例外。 */
-class CommandExecutionException(
+open class CommandExecutionException(
     message: String,
     cause: Throwable? = null,
 ) : Exception(message, cause)
+
+/**
+ * 操作の対象通知が既に存在しなかったことを表す例外（§3.4）。元通知は消えたものとして扱う状況で、
+ * 実行端末のタイムラインには残さず、送信端末への応答（[to.sava.peranta.model.CommandAckPayload.targetMissing]）で伝える。
+ */
+class CommandTargetMissingException(message: String) : CommandExecutionException(message)
