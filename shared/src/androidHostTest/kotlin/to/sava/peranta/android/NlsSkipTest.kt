@@ -2,7 +2,9 @@ package to.sava.peranta.android
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class NlsSkipTest {
 
@@ -83,5 +85,32 @@ class NlsSkipTest {
     fun personalProfileNotificationIsUnaffectedByTheWorkProfileSetting() {
         assertNull(reason("com.example.mail"))
         assertNull(reason("com.example.mail", forwardWorkProfile = true))
+    }
+
+    private fun hold(
+        packageName: String = "com.android.messaging",
+        isDirectSmsReceiving: Boolean = true,
+        alreadyHeld: Boolean = false,
+    ): Boolean = shouldHoldForDirectSms(
+        packageName = packageName,
+        defaultSmsPackage = "com.android.messaging",
+        isDirectSmsReceiving = isDirectSmsReceiving,
+        alreadyHeld = alreadyHeld,
+    )
+
+    /** 直接受信が有効なら、既定 SMS アプリの通知は直接受信を待って転送を遅らせる（§3.1）。 */
+    @Test
+    fun smsAppNotificationIsHeldWhileReceivingSmsDirectly() {
+        assertTrue(hold())
+    }
+
+    /** 遅らせるかどうかの判定で、遅らせない条件ごとの結果。 */
+    @Test
+    fun notificationIsNotHeldOtherwise() {
+        listOf(
+            "既定 SMS アプリ以外" to hold(packageName = "com.example.bank"),
+            "直接受信が無効" to hold(isDirectSmsReceiving = false),
+            "遅らせた後の判定し直し" to hold(alreadyHeld = true),
+        ).forEach { (case, held) -> assertFalse(held, case) }
     }
 }

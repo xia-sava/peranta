@@ -7,6 +7,8 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.Process
 import android.provider.Telephony
 import android.service.notification.NotificationListenerService
@@ -39,6 +41,10 @@ class PerantaNotificationListenerService : NotificationListenerService() {
 
     private val log = Logger.withTag("NLS")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** 直接受信の SMS を待って転送を遅らせている通知の key（§3.1）。 */
+    private val heldKeys = mutableSetOf<String>()
 
     override fun onListenerConnected() {
         super.onListenerConnected()
@@ -188,7 +194,11 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         }
     }
 
-    private fun handlePosted(sbn: StatusBarNotification) {
+    /**
+     * [alreadyHeld] は、直接受信の SMS を待って遅らせた通知の判定し直しであることを示す（§3.1）。
+     * 判定し直しでは、その時点の通知と設定でもう一度すべてを判定する。
+     */
+    private fun handlePosted(sbn: StatusBarNotification, alreadyHeld: Boolean = false) {
         val config = androidConfigRepository().load()
         if (!config.sendEnabled) return
         if (!config.isReadyForSend) {
@@ -229,6 +239,11 @@ class PerantaNotificationListenerService : NotificationListenerService() {
             }
             return
         }
+        val isDirectSmsReceiving = config.smsDirectReceive && AndroidSetupProbe(applicationContext).smsGranted()
+        if (shouldHoldForDirectSms(packageName, defaultSmsPackage, isDirectSmsReceiving, alreadyHeld)) {
+            holdForDirectSms(sbn.key)
+            return
+        }
         if (PerantaSend.reposts.isUnchangedRepost(sbn.key, fields.title.orEmpty(), fields.text.orEmpty())) {
             log.d { "skipping unchanged repost from $packageName" }
             return
@@ -250,6 +265,29 @@ class PerantaNotificationListenerService : NotificationListenerService() {
         // 転送を続けているだけでは presence を出す機会が無く、control topic 上の presence が
         // 保持期間を過ぎて消えるとコマンドの宛先として引けなくなる（§3.5）。
         requestPresenceReannounce(this)
+    }
+
+    /**
+     * 通知の転送を [SMS_NOTIFICATION_HOLD_MILLIS] だけ遅らせ、直接受信の SMS が届く余地を残す（§3.1）。
+     * 遅らせている間に同じ key で投稿し直されても、待ちは重ねない。待ちが明けた時点で通知が消えていれば
+     * 転送しない。判定し直しは、重複抑止の記憶（[PerantaSend.dedupe]）を更新する直接受信と同じ
+     * メインスレッドで行う。
+     */
+    private fun holdForDirectSms(key: String) {
+        if (!heldKeys.add(key)) return
+        log.d { "holding sms app notification for direct sms key=$key" }
+        mainHandler.postDelayed({
+            heldKeys.remove(key)
+            try {
+                val current = findActiveNotification(key) ?: run {
+                    log.d { "held notification removed before forwarding key=$key" }
+                    return@postDelayed
+                }
+                handlePosted(current, alreadyHeld = true)
+            } catch (error: Exception) {
+                log.w(error) { "held notification handling failed" }
+            }
+        }, SMS_NOTIFICATION_HOLD_MILLIS)
     }
 
     private fun forward(
@@ -421,6 +459,7 @@ class PerantaNotificationListenerService : NotificationListenerService() {
     override fun onDestroy() {
         if (instance === this) instance = null
         scope.cancel()
+        mainHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
 

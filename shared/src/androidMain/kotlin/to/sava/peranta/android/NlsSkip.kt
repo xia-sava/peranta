@@ -46,3 +46,19 @@ fun notificationSkipReason(
     packageName == defaultSmsPackage && isSmsDuplicate -> NotificationSkipReason.SMS_DUPLICATE
     else -> null
 }
+
+/** 既定 SMS アプリの通知の転送を、直接受信の SMS を待って遅らせる時間（§3.1）。 */
+const val SMS_NOTIFICATION_HOLD_MILLIS: Long = 3 * 1000L
+
+/**
+ * 落とさないと決まった通知の転送を、直接受信の SMS を待って遅らせるべきかを判定する（§3.1）。
+ * 既定 SMS アプリは SMS を直接受信の経路より先に受け取るため、通知が直接受信より先に届くことがある。
+ * そのまま転送すると重複の判定をすり抜けるので、直接受信が届く余地を残してから判定し直す。
+ * [alreadyHeld] は遅らせた後の判定し直しであることを示し、二度は遅らせない。
+ */
+fun shouldHoldForDirectSms(
+    packageName: String,
+    defaultSmsPackage: String?,
+    isDirectSmsReceiving: Boolean,
+    alreadyHeld: Boolean,
+): Boolean = !alreadyHeld && isDirectSmsReceiving && packageName == defaultSmsPackage
