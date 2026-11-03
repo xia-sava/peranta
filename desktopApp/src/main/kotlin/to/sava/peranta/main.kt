@@ -90,6 +90,7 @@ import to.sava.peranta.update.DesktopUpdater
 import to.sava.peranta.update.devVersionName
 import to.sava.peranta.window.WindowGeometry
 import to.sava.peranta.window.WindowGeometryStore
+import to.sava.peranta.window.installGpuResetRecovery
 import to.sava.peranta.window.isOnAnyScreen
 import java.awt.EventQueue
 import java.awt.Frame
@@ -252,6 +253,8 @@ fun main(args: Array<String>) {
     val desktopSettings = DesktopSettings()
     applyLogVerbosity(desktopSettings.config.verboseLogging)
     val log = Logger.withTag("Main")
+    // 描画 API を決めるのはウィンドウを作る前なので、どのウィンドウよりも先に始める（§3.3）。
+    installGpuResetRecovery()
     val settingsController = desktopSettings.controller
     // QR 参加経路（貼り付け取り込み）。カメラは無いため onRequestScan は注入せず貼り付けのみで動く。
     val pairingImportController = PairingImportController(desktopSettings.repository)
