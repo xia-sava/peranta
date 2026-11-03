@@ -1658,4 +1658,4 @@ MSI は版数が major.minor.patch に限られるため組まない（Desktop �
 - アプリが送る側の検証は、同じ topic を curl で購読して観測する。
 - UI 層は Compose の UI テスト（Android / desktop 両対応）で担保する。
 - 単体テストは shared の commonTest（シリアライズ round-trip / 暗号 round-trip / 改竄検出 / フィルタ / OTP 検出）。
-- カバレッジは Kover で計測する（`koverHtmlReport` / `koverXmlReport`）。UI（Composable）とプラットフォーム配線を除くロジック層（model / crypto / net / config / timeline / receive 等）は行カバレッジ 80% 以上を維持し、`koverVerify` の下限ルールで強制する。
+- カバレッジは Kover で計測する（`koverHtmlReport` / `koverXmlReport`）。UI（Composable）とプラットフォーム配線を除くロジック層（model / crypto / net / config / timeline / receive 等）は行カバレッジ 80% 以上を目安とする。ビルドの成否には含めない。

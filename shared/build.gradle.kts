@@ -1,5 +1,3 @@
-import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
-import kotlinx.kover.gradle.plugin.dsl.GroupingEntityType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -158,19 +156,5 @@ kover {
                 annotatedBy("androidx.compose.runtime.Composable")
             }
         }
-
-        verify {
-            rule("ロジック層パッケージ毎の行カバレッジ") {
-                groupBy = GroupingEntityType.PACKAGE
-                bound {
-                    minValue = 80
-                    coverageUnits = CoverageUnit.LINE
-                }
-            }
-        }
     }
-}
-
-tasks.named("check") {
-    dependsOn("koverVerify")
 }

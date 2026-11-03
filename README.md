@@ -102,7 +102,7 @@ Play ストアには出していないため、Android では初回インスト�
 JDK 23 が必要。
 
 ```sh
-# 全テスト + カバレッジ検証
+# 全テスト
 ./gradlew check
 
 # Windows インストーラ（WiX 3 が要る）

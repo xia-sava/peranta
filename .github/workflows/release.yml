@@ -77,7 +77,7 @@ jobs:
           fi
           echo "versionCode: $published → $VERSION_CODE"
 
-  # 配布物を作る前にテストとカバレッジ検証を通す。ここが落ちればリリースまで進まない。
+  # 配布物を作る前にテストを通す。ここが落ちればリリースまで進まない。
   check:
     runs-on: ubuntu-latest
     permissions:
