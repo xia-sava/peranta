@@ -10,7 +10,7 @@ name: peranta-dev
 
 services:
   ntfy:
-    image: binwiederhier/ntfy:v2.11.0
+    image: binwiederhier/ntfy:v2.37.2
     command: serve
     # 平文でトークンが流れるため、LAN の他ホストへは出さない
     ports:

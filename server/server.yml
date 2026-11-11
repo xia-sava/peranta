@@ -30,8 +30,8 @@ attachment-cache-dir: "/var/cache/ntfy/attachments"
 attachment-file-size-limit: "350M"
 # 全添付の合計ディスク上限。超えると新規アップロードを拒む（保持期間切れで空く）
 attachment-total-size-limit: "2G"
-# 添付の保持期間（受信は手動ダウンロード想定のため長め）
-attachment-expiry-duration: "72h"
+# 添付の保持期間。ntfy は添付をメッセージより長く残さないため、cache-duration と揃える
+attachment-expiry-duration: "24h"
 # 1 visitor あたりの添付合計・日次帯域の上限
 visitor-attachment-total-size-limit: "512M"
 visitor-attachment-daily-bandwidth-limit: "3G"
