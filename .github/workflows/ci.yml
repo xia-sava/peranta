@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  JAVA_VERSION: "23"
+  JAVA_VERSION: "25"
 
 jobs:
   check:

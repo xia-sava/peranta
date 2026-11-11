@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  JAVA_VERSION: "23"
+  JAVA_VERSION: "25"
   # jpackage が使えるのは WiX 3 系のみ。ランナーに無いときに入れる版を固定する。
   WIX_VERSION: "3.14.1"
   # マニフェストの署名を確かめる公開鍵（X.509 SubjectPublicKeyInfo の DER を base64）。

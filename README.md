@@ -99,7 +99,8 @@ Play ストアには出していないため、Android では初回インスト�
 
 ## ビルド
 
-JDK 23 が必要。
+ビルドには JDK 25 を使う。`gradle/gradle-daemon-jvm.properties` の指定に従って Gradle が自動で取得するので、
+手元には `gradlew` を起動できる JDK があればよい。
 
 ```sh
 # 全テスト
