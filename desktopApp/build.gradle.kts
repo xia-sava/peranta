@@ -28,6 +28,13 @@ val perantaVersionCode = providers.gradleProperty("peranta.versionCode").getOrEl
 val perantaVersionName = providers.gradleProperty("peranta.versionName").getOrElse("0.0.0")
 val versionResourceDir = layout.buildDirectory.dir("generated/version")
 
+// インストーラの版数は major.minor.patch しか受け付けず、形が合わないとプロジェクトの構成そのものが失敗する。
+// 形の合わない versionName（インストーラを組まない手動実行の dev-<短縮 SHA>）では既定値を渡す。
+val defaultInstallerVersion = "0.0.0"
+val installerVersion = perantaVersionName
+    .takeIf { Regex("""\d+\.\d+\.\d+""").matches(it) }
+    ?: defaultInstallerVersion
+
 // versionCode / versionName を生成リソースへ書き出す。run と jpackage 成果物の双方の classpath に載る。
 val generateVersionProperties = tasks.register<WriteProperties>("generateVersionProperties") {
     destinationFile = versionResourceDir.map { it.file("peranta-version.properties") }
@@ -56,7 +63,7 @@ compose.desktop {
             packageName = perantaPackageName
             // 新版の MSI が旧版を置き換える条件は upgradeUuid の一致と版数の増加の両方なので、
             // インストーラの版数を配布物の versionName に追随させる。
-            packageVersion = perantaVersionName
+            packageVersion = installerVersion
 
             windows {
                 iconFile.set(project.file("icons/peranta.ico"))
