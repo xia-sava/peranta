@@ -4,7 +4,6 @@ import io.ktor.utils.io.ByteReadChannel
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BlobEnc
-import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 /**
@@ -21,7 +20,6 @@ class AttachmentUploadRequest(
 )
 
 /** 新しい blobId 用の UUID 文字列を生成する。 */
-@OptIn(ExperimentalUuidApi::class)
 fun randomBlobId(): String = Uuid.random().toString()
 
 /**

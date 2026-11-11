@@ -3,7 +3,6 @@ package to.sava.peranta.model
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.time.Clock
-import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 /** to フィールドに指定すると全端末宛を意味する。 */
@@ -350,7 +349,6 @@ fun Payload.revisionOrZero(): Int = when (this) {
 }
 
 /** 新しい Payload id 用の UUID 文字列を生成する。 */
-@OptIn(ExperimentalUuidApi::class)
 fun newPayloadId(): String = Uuid.random().toString()
 
 /** 現在時刻をエポックミリ秒で返す。 */

@@ -9,7 +9,6 @@ import to.sava.peranta.filter.FilterMode
 import to.sava.peranta.filter.FilterRule
 import to.sava.peranta.filter.decodeFilterRules
 import to.sava.peranta.filter.encodeFilterRules
-import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 /**
@@ -292,5 +291,4 @@ fun generateControlTopic(): String = "peranta-control-${randomTopicSuffix()}"
 fun generateBlobTopic(): String = "peranta-blob-${randomTopicSuffix()}"
 
 /** 端末の安定 ID（ランダム UUID）を生成する。 */
-@OptIn(ExperimentalUuidApi::class)
 fun generateDeviceId(): String = Uuid.random().toString()
