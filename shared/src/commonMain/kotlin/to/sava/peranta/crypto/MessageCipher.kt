@@ -43,7 +43,7 @@ class MessageCipher(key: ByteArray, val keyId: String) {
         require(key.size == KEY_SIZE) { "key must be $KEY_SIZE bytes, was ${key.size}" }
     }
 
-    private val cipher: IvAuthenticatedCipher =CryptographyProvider.Default
+    private val cipher: IvAuthenticatedCipher = CryptographyProvider.Default
         .get(AES.GCM)
         .keyDecoder()
         .decodeFromByteArrayBlocking(AES.Key.Format.RAW, key.copyOf())
