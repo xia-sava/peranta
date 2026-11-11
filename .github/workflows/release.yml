@@ -30,7 +30,7 @@ jobs:
       code: ${{ steps.compute.outputs.code }}
       name: ${{ steps.compute.outputs.name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
           # versionCode をコミット数で決めるため全履歴を取る（既定の浅い取得では 1 になる）。
@@ -83,19 +83,23 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
       # リポジトリに置いている gradle-wrapper.jar が公式のものであることを確かめる。
-      - uses: gradle/actions/wrapper-validation@v4
+      - uses: gradle/actions/wrapper-validation@v6
 
-      - uses: gradle/actions/setup-gradle@v4
+      # キャッシュ機能は MIT ライセンスの外にあり、利用規約への同意を要する。
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          build-scan-terms-of-use-url: "https://gradle.com/help/legal-terms-of-use"
+          build-scan-terms-of-use-agree: "yes"
 
       # check は androidMain のコンパイルを含まないため、対象を明示して補う。
       - name: Run tests
@@ -111,16 +115,20 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - uses: gradle/actions/setup-gradle@v4
+      # キャッシュ機能は MIT ライセンスの外にあり、利用規約への同意を要する。
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          build-scan-terms-of-use-url: "https://gradle.com/help/legal-terms-of-use"
+          build-scan-terms-of-use-agree: "yes"
 
       # jpackage の MSI 生成は WiX 3 の candle/light を PATH から探す（WiX 4 以降は使えない）。
       # ランナーに入っている版を使い、無いときだけ WIX_VERSION の版を入れる。
@@ -155,7 +163,7 @@ jobs:
       # MSI はタグを打ったときだけ組み、必ずリリースへ載る。成果物として要るのは release ジョブへ
       # 渡すまでなので、保持期間を最短にする。Actions のストレージ枠はアカウント全体で共有していて、
       # 既定の 90 日で抱え続けると他のリポジトリの CI まで止まる。
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: desktop
           path: artifacts/peranta.msi
@@ -169,16 +177,20 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - uses: gradle/actions/setup-gradle@v4
+      # キャッシュ機能は MIT ライセンスの外にあり、利用規約への同意を要する。
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          build-scan-terms-of-use-url: "https://gradle.com/help/legal-terms-of-use"
+          build-scan-terms-of-use-agree: "yes"
 
       # 署名鍵は secrets から復元する。同じ鍵で署名し続ける限り端末上で上書き更新できる。
       - name: Restore keystore
@@ -219,7 +231,7 @@ jobs:
 
       # タグを打ったときの APK はリリースへ載るため、保持期間は release ジョブへ渡すまででよい。
       # 手動実行の APK は成果物としてしか残らないため、実機へ入れるまでの猶予を置く。
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: android
           path: artifacts/peranta.apk
@@ -234,7 +246,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
@@ -288,7 +300,7 @@ jobs:
             -signature "$RUNNER_TEMP/latest.json.sig.der" artifacts/latest.json
 
       # マニフェストもリリースへ載るため、保持期間は release ジョブへ渡すまででよい。
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: manifest
           path: |
@@ -304,7 +316,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
@@ -312,7 +324,7 @@ jobs:
       # 版ごとのリリース。配布物の実物が残るので、後からどの版で何を配ったかを辿れる。
       # 配布物を書き込む唯一の外部コードなので、可変タグではなくコミットで固定する。
       - name: Publish versioned release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ needs.version.outputs.name }}
@@ -328,7 +340,7 @@ jobs:
       # 更新経路。配布済みのアプリは latest からマニフェストと配布物を引くため、
       # 置き場を動かさずに中身だけ差し替える。
       - name: Update latest release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: latest
           name: "Latest build"
