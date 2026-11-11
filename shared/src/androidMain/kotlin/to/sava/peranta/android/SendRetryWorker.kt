@@ -53,7 +53,7 @@ class SendRetryWorker(
             log.w { "retry input has no body; giving up" }
             return Result.failure()
         }
-        val storedTopics = inputData.getStringArray(KEY_TOPICS)?.toList().orEmpty()
+        val storedTopics = inputData.getNullableStringArray(KEY_TOPICS).orEmpty().filterNotNull()
         val cacheSeconds = inputData.getInt(KEY_CACHE_SECONDS, NO_CACHE).takeIf { it != NO_CACHE }
 
         if (runAttemptCount >= MAX_RETRY_ATTEMPTS) {

@@ -3,6 +3,7 @@ package to.sava.peranta.crypto
 import dev.whyoleg.cryptography.CryptographyProvider
 import dev.whyoleg.cryptography.DelicateCryptographyApi
 import dev.whyoleg.cryptography.algorithms.AES
+import dev.whyoleg.cryptography.operations.IvAuthenticatedCipher
 import dev.whyoleg.cryptography.random.CryptographyRandom
 import kotlinx.coroutines.CancellationException
 import to.sava.peranta.model.ENVELOPE_VERSION
@@ -42,7 +43,7 @@ class MessageCipher(key: ByteArray, val keyId: String) {
         require(key.size == KEY_SIZE) { "key must be $KEY_SIZE bytes, was ${key.size}" }
     }
 
-    private val cipher: AES.IvAuthenticatedCipher = CryptographyProvider.Default
+    private val cipher: IvAuthenticatedCipher =CryptographyProvider.Default
         .get(AES.GCM)
         .keyDecoder()
         .decodeFromByteArrayBlocking(AES.Key.Format.RAW, key.copyOf())

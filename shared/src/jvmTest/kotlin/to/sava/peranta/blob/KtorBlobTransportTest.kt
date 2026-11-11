@@ -9,7 +9,7 @@ import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
-import io.ktor.utils.io.readRemaining
+import io.ktor.utils.io.readBuffer
 import io.ktor.utils.io.writeByteArray
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.readByteArray
@@ -95,7 +95,7 @@ class KtorBlobTransportTest {
         }
         var downloaded = ByteArray(0)
         transport.download("http://localhost:8090/file/abc", "abc") {
-            downloaded = it.readRemaining().readByteArray()
+            downloaded = it.readBuffer().readByteArray()
         }
         assertContentEquals(body, downloaded)
 

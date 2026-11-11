@@ -1,7 +1,7 @@
 package to.sava.peranta.blob
 
 import io.ktor.utils.io.ByteReadChannel
-import io.ktor.utils.io.readRemaining
+import io.ktor.utils.io.readBuffer
 import io.ktor.utils.io.writeByteArray
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.readByteArray
@@ -25,7 +25,7 @@ class BlobTransportContractTest {
         }
         assertEquals(9_000, uploaded.blobExpiresAtEpochMillis)
         var downloaded = ByteArray(0)
-        transport.download(uploaded.url, "blob-1") { downloaded = it.readRemaining().readByteArray() }
+        transport.download(uploaded.url, "blob-1") { downloaded = it.readBuffer().readByteArray() }
         assertContentEquals(body, downloaded)
     }
 
@@ -47,7 +47,7 @@ class BlobTransportContractTest {
     fun downloadUnknownUrlFails() = runTest {
         val transport = FakeBlobTransport()
         assertFailsWith<IllegalStateException> {
-            transport.download("https://blob.invalid/file/nope", "nope") { it.readRemaining().readByteArray() }
+            transport.download("https://blob.invalid/file/nope", "nope") { it.readBuffer().readByteArray() }
         }
     }
 
@@ -74,7 +74,7 @@ class BlobTransportContractTest {
 
         val receiver = BlobCipher(sharedKey, "k1")
         var body = ByteArray(0)
-        transport.download(uploaded.url, "blob-e2e") { body = it.readRemaining().readByteArray() }
+        transport.download(uploaded.url, "blob-e2e") { body = it.readBuffer().readByteArray() }
         val roundTripped = drainToBytes { output ->
             receiver.decrypt("blob-e2e", blobEnc, plain.size.toLong(), ByteReadChannel(body), output)
         }

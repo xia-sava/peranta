@@ -6,6 +6,7 @@ import dev.whyoleg.cryptography.DelicateCryptographyApi
 import dev.whyoleg.cryptography.algorithms.AES
 import dev.whyoleg.cryptography.algorithms.HKDF
 import dev.whyoleg.cryptography.algorithms.SHA256
+import dev.whyoleg.cryptography.operations.IvAuthenticatedCipher
 import dev.whyoleg.cryptography.random.CryptographyRandom
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.ByteWriteChannel
@@ -125,7 +126,7 @@ class BlobCipher(sharedKey: ByteArray, val keyId: String) {
             throw BlobFormatException("blob stream truncated at chunk $index")
         }
 
-    private suspend fun blobCipher(salt: ByteArray): AES.IvAuthenticatedCipher {
+    private suspend fun blobCipher(salt: ByteArray): IvAuthenticatedCipher {
         val blobKey = CryptographyProvider.Default
             .get(HKDF)
             .secretDerivation(
