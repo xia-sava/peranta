@@ -4,6 +4,7 @@ import kotlinx.serialization.SerializationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ModelSerializationTest {
@@ -137,5 +138,15 @@ class ModelSerializationTest {
             }
         """.trimIndent()
         assertFailsWith<SerializationException> { decodeEnvelope(json) }
+    }
+
+    /** デコードに失敗したときの例外メッセージが、入力に含まれるタイトルや本文を載せないことを検証する。 */
+    @Test
+    fun decodeFailureMessageOmitsInputContent() {
+        val json = """{"type":"notification","title":"secret-title","sentAtEpochMillis":"x","text":"secret-body"}"""
+        val error = assertFailsWith<SerializationException> { decodePayload(json) }
+        val message = error.message.orEmpty()
+        assertFalse("secret-title" in message)
+        assertFalse("secret-body" in message)
     }
 }
