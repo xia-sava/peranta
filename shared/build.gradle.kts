@@ -30,7 +30,7 @@ kotlin {
 
     sourceSets {
         // jvmMain・androidMain 双方が依存する JVM 系中間ソースセット（zxing 等の pure Java 実装を共有する）。
-        val jvmShared by creating {
+        val jvmShared = create("jvmShared") {
             dependsOn(commonMain.get())
             dependencies {
                 implementation(libs.zxing.core)
