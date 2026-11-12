@@ -4,29 +4,25 @@ import to.sava.peranta.model.ActionExecutionKind
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.actionKindAt
-import to.sava.peranta.receive.displayFor
-import to.sava.peranta.timeline.ErrorItem
-import to.sava.peranta.timeline.ReceivedFile
-import to.sava.peranta.timeline.ReceivedMessage
+import to.sava.peranta.receive.notificationDisplayFor
 import to.sava.peranta.timeline.ReceivedNotification
-import to.sava.peranta.timeline.errorTitleOf
-
-/** 本文が空のときの代替。 */
-private const val BODY_FALLBACK = "（本文なし）"
+import to.sava.peranta.timeline.TimelineItem
 
 /**
- * 受信通知アイテムをトースト表示内容へ変換する。表示対象外の payload は null を返す。
- * 文言の組み立ては OS 通知（§3.2）と共通のため [displayFor] に委ねる。
+ * タイムラインのアイテムをトースト表示内容へ変換する。トーストで知らせない種別と、元通知が
+ * 既に消えている受信通知は null を返す。
+ * 種別ごとの文言と知らせるかどうかの規則は OS 通知（§3.2）と共通のため [notificationDisplayFor] に委ねる。
+ * 受信通知にだけ、元通知のアクションを載せる。
  */
-fun toastContentFor(item: ReceivedNotification): ReceivedNotificationToast? =
-    displayFor(item)?.let {
+fun toastContentFor(item: TimelineItem): ReceivedNotificationToast? =
+    notificationDisplayFor(item)?.let {
         ReceivedNotificationToast(
             id = it.id,
             title = it.title,
             body = it.body,
             source = it.source,
             openUrl = it.openUrl,
-            actions = toastActionsFor(item.payload),
+            actions = if (item is ReceivedNotification) toastActionsFor(item.payload) else emptyList(),
         )
     }
 
@@ -56,26 +52,3 @@ private fun toastActionsFor(payload: Payload): List<ToastAction> {
  */
 fun isActionStillOffered(payload: NotificationPayload, action: ToastAction): Boolean =
     payload.actions.getOrNull(action.index) == action.label
-
-/** エラーアイテムを軽い通知トーストへ変換する（§10.1 のローカル通知）。 */
-fun toastContentFor(item: ErrorItem): ReceivedNotificationToast =
-    ReceivedNotificationToast(
-        id = item.id,
-        title = errorTitleOf(item.kind),
-        body = item.message.ifBlank { BODY_FALLBACK },
-    )
-
-/**
- * 受信ファイルを「届いた」ことだけ知らせる軽いトーストへ変換する（§4.3、判断4）。
- * 文言の組み立ては OS 通知（§3.2）と共通のため [displayFor] に委ねる。
- */
-fun toastContentFor(item: ReceivedFile): ReceivedNotificationToast =
-    displayFor(item).let {
-        ReceivedNotificationToast(id = item.id, title = it.title, body = it.body, source = it.source)
-    }
-
-/** 受信メッセージをトースト表示内容へ変換する。タイトルは送信元端末名。 */
-fun toastContentFor(item: ReceivedMessage): ReceivedNotificationToast =
-    displayFor(item).let {
-        ReceivedNotificationToast(id = it.id, title = it.title, body = it.body)
-    }

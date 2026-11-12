@@ -16,17 +16,15 @@ import co.touchlab.kermit.Logger
 import to.sava.peranta.model.NotificationVisibility
 import to.sava.peranta.model.SwipeBehavior
 import to.sava.peranta.model.nowEpochMillis
+import to.sava.peranta.receive.DISMISS_SOURCE_ACTION_LABEL
 import to.sava.peranta.receive.NotificationChannelKind
 import to.sava.peranta.receive.NotificationDisplay
 import to.sava.peranta.receive.NotificationIdAllocator
+import to.sava.peranta.receive.OPEN_URL_ACTION_LABEL
 import to.sava.peranta.receive.channelKindFor
 import to.sava.peranta.receive.displayFor
 import to.sava.peranta.shared.R
-import to.sava.peranta.timeline.ErrorItem
-import to.sava.peranta.timeline.ReceivedFile
-import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
-import to.sava.peranta.timeline.errorTitleOf
 
 private val notificationIdAllocatorLock = Any()
 
@@ -65,23 +63,9 @@ class AndroidNotificationPresenter(
         createChannels()
     }
 
-    /** 受信通知を優先度に応じたチャネルで表示する。表示対象外の payload は何もしない。 */
-    fun show(item: ReceivedNotification) {
-        val display = displayFor(item) ?: run {
-            log.d { "notification skipped (not displayable) id=${item.id}" }
-            return
-        }
-        show(display)
-    }
-
-    /** 受信メッセージを NORMAL チャネルで表示する。 */
-    fun show(item: ReceivedMessage) {
-        show(displayFor(item))
-    }
-
-    /** 受信ファイルを、届いたことだけ知らせる通知として優先度に応じたチャネルで表示する（§4.3）。 */
-    fun show(item: ReceivedFile) {
-        show(displayFor(item))
+    /** [display] を、種別と優先度に応じたチャネル（[channelKindFor]）で表示する。 */
+    fun show(display: NotificationDisplay) {
+        post(display)
     }
 
     /**
@@ -93,16 +77,16 @@ class AndroidNotificationPresenter(
             log.d { "notification update skipped (not displayable) id=${item.id}" }
             return
         }
-        show(display, image, senderIcon, silent = true)
+        post(display, image, senderIcon, silent = true)
     }
 
-    private fun show(
+    private fun post(
         display: NotificationDisplay,
         image: Bitmap? = null,
         senderIcon: Bitmap? = null,
         silent: Boolean = false,
     ) {
-        val channelId = channelIdFor(channelKindFor(display.priority))
+        val channelId = channelIdFor(channelKindFor(display))
         val notificationId = idAllocator.idFor(display.id)
         val notification = Notification.Builder(context, channelId)
             .setContentTitle(display.title)
@@ -161,20 +145,6 @@ class AndroidNotificationPresenter(
         val notificationId = idAllocator.idFor(payloadId)
         manager.cancel(notificationId)
         log.i { "notification cancelled id=$notificationId" }
-    }
-
-    /** 受信・復号エラーと、送ったコマンドへの応答が無い・失敗したこと（§3.4）をローカル通知でも知らせる（§10.1）。 */
-    fun showError(item: ErrorItem) {
-        val notificationId = idAllocator.idFor(item.id)
-        val notification = Notification.Builder(context, CHANNEL_ERROR)
-            .setContentTitle(errorTitleOf(item.kind))
-            .setContentText(item.message)
-            .setStyle(Notification.BigTextStyle().bigText(item.message))
-            .setSmallIcon(R.drawable.ic_notification)
-            .setAutoCancel(true)
-            .applyContentIntent(notificationId, item.id)
-            .build()
-        notify(notificationId, notification)
     }
 
     /**
@@ -265,7 +235,7 @@ class AndroidNotificationPresenter(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val icon = Icon.createWithResource(context, R.drawable.ic_notification)
-        return addAction(Notification.Action.Builder(icon, OPEN_ACTION_LABEL, pendingIntent).build())
+        return addAction(Notification.Action.Builder(icon, OPEN_URL_ACTION_LABEL, pendingIntent).build())
     }
 
     private fun notify(notificationId: Int, notification: Notification) {
@@ -296,6 +266,7 @@ class AndroidNotificationPresenter(
         NotificationChannelKind.HIGH -> CHANNEL_HIGH
         NotificationChannelKind.NORMAL -> CHANNEL_NORMAL
         NotificationChannelKind.LOW -> CHANNEL_LOW
+        NotificationChannelKind.ERROR -> CHANNEL_ERROR
     }
 
     companion object {
@@ -306,12 +277,6 @@ class AndroidNotificationPresenter(
 
         /** 発信元が判らない通知をロック画面で伏せるときの代替の件名。 */
         private const val REDACTED_TITLE = "通知が届いています"
-
-        /** 「開く」アクションのラベル（§3.2）。 */
-        private const val OPEN_ACTION_LABEL = "開く"
-
-        /** 「送信元の通知を消す」アクションのラベル（§3.2 / §3.4）。Desktop のトーストと同じ文言。 */
-        private const val DISMISS_SOURCE_ACTION_LABEL = "送信元の通知を消す"
 
         /** 通知 ID 対応表を保持する SharedPreferences 名。 */
         const val PREFS_NOTIFICATION_IDS = "peranta-notification-ids"

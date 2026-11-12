@@ -67,11 +67,8 @@ import to.sava.peranta.roster.buildPresencePayload
 import to.sava.peranta.roster.presenceCapabilities
 import to.sava.peranta.roster.presenceFingerprint
 import to.sava.peranta.roster.publishPresence
-import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.JsonlTimelineStore
-import to.sava.peranta.timeline.ReceivedFile
-import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.TimelineItem
@@ -320,12 +317,16 @@ class DesktopReceiver(
         // 保持期間を過ぎると presence が消えてロスターから落ちる（§3.5）。
         presenceScheduler.request(Unit)
         if (!config.notifiesOnReceive(item)) return
-        when (item) {
-            is ReceivedNotification -> toastScope.launch { showNotificationToast(item) }
-            is ErrorItem -> toastScope.launch { showToast(item.id, toastContentFor(item)) }
-            is ReceivedFile -> toastScope.launch { showToast(item.id, toastContentFor(item)) }
-            is ReceivedMessage -> toastScope.launch { showToast(item.id, toastContentFor(item)) }
-            else -> Unit
+        toastScope.launch {
+            if (item !is ReceivedNotification) {
+                toastContentFor(item)?.let { showToast(item.id, it) }
+                return@launch
+            }
+            // 表示は受信とは別のコルーチンで走るため、元通知の消去が先に処理されていることがある。
+            // 消えた通知のトーストは、取り下げる相手がもういないので出さない（表示直前の現在の内容で判定する）。
+            val current = currentNotification(item.id) ?: item
+            val content = toastContentFor(current)?.withCachedImages(current) ?: return@launch
+            showNotificationToast(item, content)
         }
     }
 
@@ -398,11 +399,7 @@ class DesktopReceiver(
             .filterIsInstance<ReceivedNotification>()
             .firstOrNull { it.id == itemId }
 
-    private suspend fun showNotificationToast(item: ReceivedNotification) {
-        // 表示は受信とは別のコルーチンで走るため、元通知の消去が先に処理されていることがある。
-        // 消えた通知のトーストは、取り下げる相手がもういないので出さない。
-        if ((currentNotification(item.id) ?: item).sourceDismissed) return
-        val content = toastContentFor(item)?.withCachedImages(item) ?: return
+    private suspend fun showNotificationToast(item: ReceivedNotification, content: ReceivedNotificationToast) {
         when (val result = toaster.show(content)) {
             ToastResult.ButtonDismiss -> requestDismiss(currentPayload(item.id) ?: item.payload)
             ToastResult.ButtonOpen -> content.openUrl?.let { openUrlInBrowser(it) }

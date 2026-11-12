@@ -26,6 +26,7 @@ import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
 import to.sava.peranta.receive.RoutingCommandExecutor
+import to.sava.peranta.receive.notificationDisplayFor
 import to.sava.peranta.receive.publishingCommandAcknowledger
 import to.sava.peranta.roster.RosterFetchResult
 import to.sava.peranta.roster.RosterStore
@@ -33,10 +34,7 @@ import to.sava.peranta.send.CommandAckTracker
 import to.sava.peranta.send.CommandSender
 import to.sava.peranta.send.ntfyCommandAckHistory
 import to.sava.peranta.send.SendPipeline
-import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
-import to.sava.peranta.timeline.ReceivedFile
-import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.ui.AppFilterController
@@ -188,7 +186,7 @@ object PerantaReceive {
         // 保持期間を過ぎると presence が消えてロスターから落ちる（§3.5）。
         requestPresenceReannounce(context)
         if (!androidConfigRepository(context).load().notifiesOnReceive(item)) return
-        present(presenter, item)
+        notificationDisplayFor(item)?.let { presenter.show(it) }
     }
 
     /**
@@ -211,16 +209,6 @@ object PerantaReceive {
                 ?.let { AndroidAttachmentReceive.notificationImage(context, config, it, AutoFetchRole.SENDER_ICON) }
             if (image == null && senderIcon == null) return@launch
             presenter.update(item, image, senderIcon)
-        }
-    }
-
-    private fun present(presenter: AndroidNotificationPresenter, item: TimelineItem) {
-        when (item) {
-            is ReceivedNotification -> presenter.show(item)
-            is ReceivedMessage -> presenter.show(item)
-            is ReceivedFile -> presenter.show(item)
-            is ErrorItem -> presenter.showError(item)
-            else -> Unit
         }
     }
 

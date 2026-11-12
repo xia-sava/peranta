@@ -29,18 +29,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import to.sava.peranta.receive.DISMISS_SOURCE_ACTION_LABEL
+import to.sava.peranta.receive.OPEN_URL_ACTION_LABEL
 
 /** トーストを出しているアプリの名前。発信元が判れば「・」でつないで並べる。 */
 private const val TOAST_APP_NAME = "Peranta"
 
 /** アプリ名と発信元の区切り。 */
 private const val TOAST_CAPTION_SEPARATOR = " ・ "
-
-/** 「開く」ボタンのラベル。本文から URL が抽出できたときだけ出す（§3.3）。 */
-private const val OPEN_BUTTON_LABEL = "開く"
-
-/** 既読同期ボタンのラベル。押下は発出元の通知を消すコマンドになる（§3.4）。 */
-private const val DISMISS_BUTTON_LABEL = "送信元の通知を消す"
 
 /**
  * 元通知のアクションを並べる段に出すボタンの数の上限（§3.3）。トーストの幅を等分して 1 行に
@@ -149,11 +145,11 @@ internal fun ToastCard(
                 }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (item.openUrl != null) {
-                    ToastButton(OPEN_BUTTON_LABEL, palette, Modifier.weight(1f)) {
+                    ToastButton(OPEN_URL_ACTION_LABEL, palette, Modifier.weight(1f)) {
                         onResult(ToastResult.ButtonOpen)
                     }
                 }
-                ToastButton(DISMISS_BUTTON_LABEL, palette, Modifier.weight(1f)) {
+                ToastButton(DISMISS_SOURCE_ACTION_LABEL, palette, Modifier.weight(1f)) {
                     onResult(ToastResult.ButtonDismiss)
                 }
             }

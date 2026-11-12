@@ -15,6 +15,7 @@ import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.timeline.SentNotification
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -237,13 +238,13 @@ class ToastContentTest {
     /** 複数ファイルは先頭名と残り件数を本文に載せる。 */
     @Test
     fun receivedMultipleFilesSummarizesCount() {
-        assertEquals("photo.jpg ほか 2 件", toastContentFor(receivedFile("photo.jpg", "a.png", "b.pdf")).body)
+        assertEquals("photo.jpg ほか 2 件", toastContentFor(receivedFile("photo.jpg", "a.png", "b.pdf"))?.body)
     }
 
     /** ファイル名が空なら代替表示にフォールバックする。 */
     @Test
     fun receivedFileFallsBackWhenNameBlank() {
-        assertEquals("ファイル", toastContentFor(receivedFile("")).body)
+        assertEquals("ファイル", toastContentFor(receivedFile(""))?.body)
     }
 
     private fun receivedMessage(text: String = "会議は 15 時からです", fromName: String? = "xia-phone") = ReceivedMessage(
@@ -271,13 +272,13 @@ class ToastContentTest {
     /** fromName が無ければ from（deviceId）をタイトルに使う。 */
     @Test
     fun messageFallsBackToFromWhenFromNameAbsent() {
-        assertEquals("phone", toastContentFor(receivedMessage(fromName = null)).title)
+        assertEquals("phone", toastContentFor(receivedMessage(fromName = null))?.title)
     }
 
     /** 本文が空なら本文なしラベルにフォールバックする。 */
     @Test
     fun messageFallsBackWhenBodyBlank() {
-        assertEquals("（本文なし）", toastContentFor(receivedMessage(text = "")).body)
+        assertEquals("（本文なし）", toastContentFor(receivedMessage(text = ""))?.body)
     }
 
     /** エラーアイテムは受信エラー見出しとメッセージ本文のトーストになる。 */
@@ -299,7 +300,29 @@ class ToastContentTest {
     @Test
     fun errorWithBlankMessageFallsBack() {
         val item = ErrorItem(id = "e2", timestampEpochMillis = 1_000, message = "", kind = ErrorKind.OTHER)
-        assertEquals("（本文なし）", toastContentFor(item).body)
+        assertEquals("（本文なし）", toastContentFor(item)?.body)
+    }
+
+    /** 元通知が既に消えている受信通知は、取り下げる相手がいないのでトースト内容を作らない（§3.3）。 */
+    @Test
+    fun sourceDismissedNotificationReturnsNull() {
+        assertNull(toastContentFor(notification().copy(sourceDismissed = true)))
+    }
+
+    /** 受信アイテムではない送信済みの通知は、トーストで知らせない。 */
+    @Test
+    fun sentNotificationReturnsNull() {
+        val item = SentNotification(id = "n1", timestampEpochMillis = 1_000, payload = notification().payload)
+        assertNull(toastContentFor(item))
+    }
+
+    /** 受信メッセージ・受信ファイル・エラーのトーストは、元通知のアクションを持たない。 */
+    @Test
+    fun nonNotificationItemsCarryNoActions() {
+        val error = ErrorItem(id = "e3", timestampEpochMillis = 1_000, message = "失敗", kind = ErrorKind.OTHER)
+        assertEquals(emptyList(), toastContentFor(receivedMessage())?.actions)
+        assertEquals(emptyList(), toastContentFor(receivedFile("photo.jpg"))?.actions)
+        assertEquals(emptyList(), toastContentFor(error)?.actions)
     }
 
     /** 発出元で完結する（画面を開かない）アクション。 */

@@ -8,10 +8,19 @@ import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.SwipeBehavior
 import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.model.swipeBehaviorOrDefault
+import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.timeline.TimelineItem
+import to.sava.peranta.timeline.errorTitleOf
 import to.sava.peranta.ui.firstUrl
+
+/** 「開く」アクションのラベル（§3.2 / §3.3）。 */
+const val OPEN_URL_ACTION_LABEL: String = "開く"
+
+/** 「送信元の通知を消す」のラベル（§3.2 / §3.3 / §10.1）。 */
+const val DISMISS_SOURCE_ACTION_LABEL: String = "送信元の通知を消す"
 
 /** タイトルが空のときの代替表示。 */
 private const val TITLE_FALLBACK = "Peranta"
@@ -62,6 +71,8 @@ data class NotificationDisplay(
      * 元通知を持たない受信メッセージ・受信ファイルは [NotificationVisibility.PRIVATE] とする。
      */
     val visibility: NotificationVisibility = NotificationVisibility.PRIVATE,
+    /** 受信アイテムではなくエラーの知らせか（§10.1）。 */
+    val isError: Boolean = false,
 )
 
 /**
@@ -141,11 +152,37 @@ fun displayFor(item: ReceivedFile): NotificationDisplay {
     )
 }
 
-/** 通知チャネルの区分。優先度から一意に定まり、OS の重要度へ対応させる（§4）。 */
+/**
+ * エラーを通知で知らせるときの表示内容（§10.1）。優先度は NORMAL で、失効せず、
+ * 発信元・元通知のキー・「開く」の URL は持たない。
+ */
+fun displayFor(item: ErrorItem): NotificationDisplay = NotificationDisplay(
+    id = item.id,
+    title = errorTitleOf(item.kind),
+    body = item.message.ifBlank { BODY_FALLBACK },
+    priority = Priority.NORMAL,
+    expiresAtEpochMillis = null,
+    isError = true,
+)
+
+/**
+ * タイムラインに載った [item] を通知で知らせるときの表示内容。知らせない種別は null。
+ * 元通知が既に消えている受信通知も null（取り下げる相手がいない、§3.3）。
+ */
+fun notificationDisplayFor(item: TimelineItem): NotificationDisplay? = when (item) {
+    is ReceivedNotification -> if (item.sourceDismissed) null else displayFor(item)
+    is ReceivedMessage -> displayFor(item)
+    is ReceivedFile -> displayFor(item)
+    is ErrorItem -> displayFor(item)
+    else -> null
+}
+
+/** 通知チャネルの区分。受信は優先度から一意に定まり、OS の重要度へ対応させる（§4）。エラーは専用の区分。 */
 enum class NotificationChannelKind {
     HIGH,
     NORMAL,
     LOW,
+    ERROR,
 }
 
 /** 優先度に対応する通知チャネル区分を返す。 */
@@ -154,3 +191,7 @@ fun channelKindFor(priority: Priority): NotificationChannelKind = when (priority
     Priority.NORMAL -> NotificationChannelKind.NORMAL
     Priority.LOW -> NotificationChannelKind.LOW
 }
+
+/** 表示内容に対応する通知チャネル区分。エラーは優先度に依らず [NotificationChannelKind.ERROR]。 */
+fun channelKindFor(display: NotificationDisplay): NotificationChannelKind =
+    if (display.isError) NotificationChannelKind.ERROR else channelKindFor(display.priority)

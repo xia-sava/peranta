@@ -12,12 +12,17 @@ import to.sava.peranta.model.NotificationVisibility
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.SwipeBehavior
+import to.sava.peranta.timeline.ErrorItem
+import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
+import to.sava.peranta.timeline.SentNotification
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class NotificationDisplayTest {
 
@@ -380,5 +385,113 @@ class NotificationDisplayTest {
         assertEquals(NotificationChannelKind.HIGH, channelKindFor(Priority.HIGH))
         assertEquals(NotificationChannelKind.NORMAL, channelKindFor(Priority.NORMAL))
         assertEquals(NotificationChannelKind.LOW, channelKindFor(Priority.LOW))
+    }
+
+    private fun error(message: String = "通知の復号に失敗しました", kind: ErrorKind = ErrorKind.DECRYPTION) = ErrorItem(
+        id = "e1",
+        timestampEpochMillis = 1_000L,
+        message = message,
+        kind = kind,
+    )
+
+    /** エラーは種別に応じた件名とメッセージ本文を載せ、エラーの知らせである印を付ける。 */
+    @Test
+    fun errorShowsTitleAndMessage() {
+        val display = displayFor(error())
+        assertEquals("e1", display.id)
+        assertEquals("Peranta 受信エラー", display.title)
+        assertEquals("通知の復号に失敗しました", display.body)
+        assertTrue(display.isError)
+    }
+
+    /** メッセージが空白だけのエラーは固定の代替本文になる。 */
+    @Test
+    fun errorBlankMessageFallsBackToConstant() {
+        assertEquals("（本文なし）", displayFor(error(message = " ")).body)
+    }
+
+    /** エラーは優先度が通常で、失効せず、発信元・元通知のキー・URL を持たず、ロック画面で伏せる。 */
+    @Test
+    fun errorHasNoSourceExpiryOrActions() {
+        val display = displayFor(error())
+        assertEquals(Priority.NORMAL, display.priority)
+        assertNull(display.expiresAtEpochMillis)
+        assertNull(display.source)
+        assertNull(display.notificationKey)
+        assertNull(display.openUrl)
+        assertEquals(NotificationVisibility.PRIVATE, display.visibility)
+    }
+
+    /** 受信アイテムの表示内容はエラーの印を持たない。 */
+    @Test
+    fun receivedItemsAreNotMarkedAsError() {
+        assertFalse(displayFor(received(notification()))!!.isError)
+        assertFalse(displayFor(message()).isError)
+        assertFalse(displayFor(file("photo.jpg")).isError)
+    }
+
+    /** 通知・メッセージ・ファイル・エラーは、種別ごとの [displayFor] と同じ表示内容になる。 */
+    @Test
+    fun notificationDisplayForDispatchesByItemType() {
+        val receivedNotification = received(notification())
+        val receivedMessage = message()
+        val receivedFile = file("photo.jpg")
+        val errorItem = error()
+        assertEquals(displayFor(receivedNotification), notificationDisplayFor(receivedNotification))
+        assertEquals(displayFor(receivedMessage), notificationDisplayFor(receivedMessage))
+        assertEquals(displayFor(receivedFile), notificationDisplayFor(receivedFile))
+        assertEquals(displayFor(errorItem), notificationDisplayFor(errorItem))
+    }
+
+    /** 元通知が既に消えている受信通知は、取り下げる相手がいないので知らせない（§3.3）。 */
+    @Test
+    fun notificationDisplayForSkipsSourceDismissedNotification() {
+        assertNull(notificationDisplayFor(received(notification()).copy(sourceDismissed = true)))
+    }
+
+    /** 表示対象外の payload（command 等）の受信アイテムは知らせない。 */
+    @Test
+    fun notificationDisplayForSkipsNonDisplayablePayload() {
+        val command = CommandPayload(
+            id = "c1",
+            from = "desk",
+            to = "phone",
+            sentAtEpochMillis = 900L,
+            command = CommandType.DISMISS,
+            targetNotificationKey = "0|com.example|1|null|10",
+        )
+        assertNull(notificationDisplayFor(received(command)))
+    }
+
+    /** 自端末が送った通知は、通知で知らせる対象ではない。 */
+    @Test
+    fun notificationDisplayForSkipsSentNotification() {
+        val sent = SentNotification(id = "n1", timestampEpochMillis = 1_000L, payload = notification())
+        assertNull(notificationDisplayFor(sent))
+    }
+
+    /** 受信の表示内容は、優先度に対応するチャネル区分になる。 */
+    @Test
+    fun displayChannelKindFollowsPriority() {
+        assertEquals(NotificationChannelKind.HIGH, channelKindFor(displayFor(received(notification(priority = Priority.HIGH)))!!))
+        assertEquals(NotificationChannelKind.LOW, channelKindFor(displayFor(received(notification(priority = Priority.LOW)))!!))
+        assertEquals(NotificationChannelKind.NORMAL, channelKindFor(displayFor(message())))
+    }
+
+    /** エラーの表示内容は、優先度に依らずエラー用のチャネル区分になる。 */
+    @Test
+    fun errorDisplayUsesErrorChannelKind() {
+        assertEquals(NotificationChannelKind.ERROR, channelKindFor(displayFor(error())))
+        assertEquals(
+            NotificationChannelKind.ERROR,
+            channelKindFor(displayFor(error()).copy(priority = Priority.HIGH)),
+        )
+    }
+
+    /** 通知アクションのラベルは仕様の文言のまま。 */
+    @Test
+    fun actionLabelsKeepSpecWording() {
+        assertEquals("開く", OPEN_URL_ACTION_LABEL)
+        assertEquals("送信元の通知を消す", DISMISS_SOURCE_ACTION_LABEL)
     }
 }

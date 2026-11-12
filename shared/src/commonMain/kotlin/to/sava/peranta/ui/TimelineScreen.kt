@@ -67,6 +67,7 @@ import to.sava.peranta.model.actionKindAt
 import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.model.MAX_REPLY_TEXT_BYTES
+import to.sava.peranta.receive.DISMISS_SOURCE_ACTION_LABEL
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
@@ -134,7 +135,7 @@ const val TAG_TIMELINE_REPLY_SEND: String = "timeline-reply-send"
 const val TAG_TIMELINE_REPLY_LIMIT_WARNING: String = "timeline-reply-limit-warning"
 
 /** 元通知が生きていることを示すボタンの説明（§10.1）。押すと元端末と他の受信端末から消す。 */
-const val SOURCE_ALIVE_DESCRIPTION: String = "送信元の通知を消す"
+const val SOURCE_ALIVE_DESCRIPTION: String = DISMISS_SOURCE_ACTION_LABEL
 
 /** 元通知が消えていることを示すボタンの説明（§10.1）。押すとこの端末のタイムラインから消す。 */
 const val SOURCE_DISMISSED_DESCRIPTION: String = "タイムラインから消す"
@@ -800,7 +801,7 @@ private fun ContextMenu(
         }
         if (showActionItems) {
             DropdownMenuItem(
-                text = { Text("送信元の通知を消す") },
+                text = { Text(DISMISS_SOURCE_ACTION_LABEL) },
                 onClick = {
                     onDismissRequest()
                     onDismissNotification()
