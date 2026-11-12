@@ -72,13 +72,13 @@ import to.sava.peranta.pairing.pairingQrMatrix
 import to.sava.peranta.send.MESSAGE_SEND_FAILED_MESSAGE
 import to.sava.peranta.send.sharedStreamItems
 import to.sava.peranta.timeline.defaultTimelineFile
-import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.AppFilterScreen
 import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.DEFAULT_EMPTY_TIMELINE_MESSAGE
 import to.sava.peranta.ui.HealthCheckScreen
 import to.sava.peranta.ui.failingHealthCheckIds
+import to.sava.peranta.ui.findAttachmentRef
 import to.sava.peranta.ui.MessageComposer
 import to.sava.peranta.ui.MessageComposerUi
 import to.sava.peranta.ui.PairingScanScreen
@@ -627,18 +627,11 @@ class MainActivity : ComponentActivity() {
     private fun buildAttachmentActions(config: PerantaConfig): AndroidAttachmentActions =
         AndroidAttachmentActions(
             context = this,
-            refFor = { blobId -> findAttachmentRef(blobId) },
+            refFor = { blobId -> findAttachmentRef(PerantaReceive.items.value, blobId) },
             cachedFileFor = { ref -> AndroidAttachmentReceive.cache(this, config).cachedFile(ref) },
             launchSaveDocument = { fileName, _ -> createDocumentLauncher.launch(fileName) },
             reportError = { message -> reportTimelineError(message) },
         )
-
-    /** タイムライン履歴から blobId に一致する添付参照を引く。未取得・履歴消失時は null。 */
-    private fun findAttachmentRef(blobId: String): AttachmentRef? =
-        PerantaReceive.items.value
-            .filterIsInstance<ReceivedFile>()
-            .flatMap { it.payload.attachments }
-            .firstOrNull { it.blobId == blobId }
 
     /**
      * 起動時に添付キャッシュを剪定し、以後タイムラインの更新ごとに取得済み添付を「完了」状態へ反映する（§4.3）。

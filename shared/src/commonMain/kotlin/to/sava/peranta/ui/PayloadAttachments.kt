@@ -38,6 +38,15 @@ internal fun TimelineItem.displayAttachments(): List<AttachmentRef> = when (this
 internal fun TimelineItem.referencedAttachments(): List<AttachmentRef> =
     displayAttachments() + listOfNotNull((this as? ReceivedNotification)?.payload?.senderIcon())
 
+/**
+ * タイムラインの [items] から、[blobId] に一致する画像・ファイル添付の参照を引く。無ければ null。
+ * 添付の操作（開く・保存・共有）が、受信ファイルと通知に付いた画像のどちらにも届くようにする。
+ */
+fun findAttachmentRef(items: List<TimelineItem>, blobId: String): AttachmentRef? =
+    items.asSequence()
+        .flatMap { it.displayAttachments() }
+        .firstOrNull { it.blobId == blobId }
+
 private fun attachmentsOf(payload: Payload): List<AttachmentRef> = when (payload) {
     is NotificationPayload -> payload.attachments
     is SmsPayload -> payload.attachments
