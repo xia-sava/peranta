@@ -157,6 +157,30 @@ class ShellNavigationTest {
         }
     }
 
+    /**
+     * 起動時に開く設定のタスクの真理値表（§10.7）。ペアリング済みなら行き先に依らず開かない。
+     * 未ペアリングは取り込み画面を開いていたときだけ開かず、それ以外の行き先ではウィザードから始める。
+     */
+    @Test
+    fun initialSetupTaskTruthTable() {
+        ShellDestination.entries.forEach { destination ->
+            assertNull(initialSetupTask(paired = true, destination = destination), "ペアリング済み・$destination")
+            val expectedUnpaired = if (destination == ShellDestination.PairingImport) null else SetupTask.Wizard
+            assertEquals(
+                expectedUnpaired,
+                initialSetupTask(paired = false, destination = destination),
+                "未ペアリング・$destination",
+            )
+        }
+    }
+
+    /** ウィザードを閉じたあと、ペアリング済みならシェルへ戻り、未ペアリングなら待機画面に着地する（§10.7）。 */
+    @Test
+    fun setupTaskAfterWizardCloseTruthTable() {
+        assertNull(setupTaskAfterWizardClose(paired = true))
+        assertEquals(SetupTask.PairingLanding, setupTaskAfterWizardClose(paired = false))
+    }
+
     private companion object {
         /** 遷移元を1段だけ覚えて戻る対象の設定サブ画面（§10.0）。 */
         val subScreenDestinations = listOf(

@@ -81,9 +81,12 @@ import to.sava.peranta.ui.setup.WizardFlow
 import to.sava.peranta.ui.setup.WizardScreen
 import to.sava.peranta.ui.shell.PerantaShell
 import to.sava.peranta.ui.shell.RosterDropdown
+import to.sava.peranta.ui.shell.SetupTask
 import to.sava.peranta.ui.shell.SetupWarningBanner
 import to.sava.peranta.ui.shell.ShellDestination
+import to.sava.peranta.ui.shell.initialSetupTask
 import to.sava.peranta.ui.shell.setupBannerTarget
+import to.sava.peranta.ui.shell.setupTaskAfterWizardClose
 import to.sava.peranta.ui.shell.shellNavigate
 import to.sava.peranta.ui.shell.shellReturnDestination
 import to.sava.peranta.update.DesktopUpdater
@@ -335,8 +338,11 @@ fun main(args: Array<String>) {
         val updateInstallState by updater.installState.collectAsState()
 
         var windowVisible by remember { mutableStateOf(!startMinimized) }
-        // 初回起動（未ペアリング）はウィザードを自動で開始する。ウィザードは画面シェルの外に置く。
-        var showWizard by remember { mutableStateOf(!desktopSettings.config.hasSharedKey) }
+        // 初回起動（未ペアリング）はウィザードを自動で開始する。ウィザードと、閉じたあとの待機画面は
+        // 画面シェルの外に置く（§10.7）。
+        var setupTask by remember {
+            mutableStateOf(initialSetupTask(desktopSettings.config.hasSharedKey, ShellDestination.Timeline))
+        }
         // 画面シェル内の現在地。
         var destination by remember { mutableStateOf(ShellDestination.Timeline) }
         // 設定サブ画面（受信のセットアップ・動作チェック・接続設定と暗号キーの取り込み）へ入ったときの
@@ -364,8 +370,8 @@ fun main(args: Array<String>) {
         // 警告バナーの誘導先を確定する（§10.5）。取得が済むまで・未達が無いときは null でバナーを出さない。
         // 誘導先の画面で未達を直して戻ったときにバナーが実態へ追従するよう、表示のたびに再評価する。
         var bannerTarget by remember { mutableStateOf<ShellDestination?>(null) }
-        LaunchedEffect(destination, showWizard) {
-            if (!showWizard && destination == ShellDestination.Timeline &&
+        LaunchedEffect(destination, setupTask) {
+            if (setupTask == null && destination == ShellDestination.Timeline &&
                 withContext(ioDispatcher) { desktopSettings.reloadConfig() }.hasSharedKey
             ) {
                 bannerTarget = setupBannerTarget(
@@ -487,8 +493,8 @@ fun main(args: Array<String>) {
             // アプリバー・ドロワーのラベルは config 由来（ネットワーク不要）。受信機があればその設定を、
             // 無ければ起動時設定を使う。
             val labelConfig = currentReceiver?.config ?: desktopSettings.config
-            if (showWizard) {
-                PerantaTheme {
+            when (setupTask) {
+                SetupTask.Wizard -> PerantaTheme {
                     WizardScreen(
                         caps = platformCapabilities(),
                         controller = settingsController,
@@ -498,12 +504,31 @@ fun main(args: Array<String>) {
                         qrContent = { uri -> DesktopQrCode(uri) },
                         onCopyPairingUri = ::copySensitiveTextToClipboard,
                         scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
-                        onClose = { showWizard = false },
+                        onClose = {
+                            setupTask = setupTaskAfterWizardClose(desktopSettings.reloadConfig().hasSharedKey)
+                        },
                         onSaved = { configGeneration++ },
                     )
                 }
-            } else {
-                PerantaTheme {
+
+                SetupTask.PairingLanding -> PerantaTheme {
+                    PairingScanScreen(
+                        controller = pairingImportController,
+                        onOpenSettings = {
+                            setupTask = null
+                            onNavigate(ShellDestination.Settings)
+                        },
+                        onOpenWizard = { setupTask = SetupTask.Wizard },
+                        onImported = {
+                            setupTask = null
+                            onNavigate(ShellDestination.Timeline)
+                            configGeneration++
+                        },
+                        scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
+                    )
+                }
+
+                null -> PerantaTheme {
                     PerantaShell(
                         destination = destination,
                         onNavigate = onNavigate,
@@ -544,7 +569,7 @@ fun main(args: Array<String>) {
                                 qrContent = { uri -> DesktopQrCode(uri) },
                                 scrollbarContent = { scrollState -> DesktopScrollbar(scrollState) },
                                 onCopyPairingUri = ::copySensitiveTextToClipboard,
-                                onOpenWizard = { showWizard = true },
+                                onOpenWizard = { setupTask = SetupTask.Wizard },
                                 loadHealthItems = { DesktopHealthChecker(autoStart, selfTestProvider).check() },
                                 onOpenHealthCheck = { onNavigate(ShellDestination.HealthCheck) },
                                 onOpenPairingImport = { onNavigate(ShellDestination.PairingImport) },

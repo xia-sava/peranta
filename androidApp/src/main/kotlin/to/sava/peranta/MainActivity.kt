@@ -90,9 +90,12 @@ import to.sava.peranta.ui.ZoomableQrCode
 import to.sava.peranta.ui.setup.ReceiveSetupScreen
 import to.sava.peranta.ui.shell.PerantaShell
 import to.sava.peranta.ui.shell.RosterDropdown
+import to.sava.peranta.ui.shell.SetupTask
 import to.sava.peranta.ui.shell.SetupWarningBanner
 import to.sava.peranta.ui.shell.ShellDestination
+import to.sava.peranta.ui.shell.initialSetupTask
 import to.sava.peranta.ui.shell.setupBannerTarget
+import to.sava.peranta.ui.shell.setupTaskAfterWizardClose
 import to.sava.peranta.ui.shell.shellNavigate
 import to.sava.peranta.ui.shell.shellReturnDestination
 import to.sava.peranta.ui.setup.WizardScreen
@@ -129,12 +132,11 @@ private const val KEY_PENDING_SAVE_BLOB_ID = "pendingSaveBlobId"
 
 /**
  * 画面シェルの外にあるモーダルなタスク（§10.7）。null のときは [PerantaShell] を表示する。
- * [Wizard] は設定・診断をページ列で案内するウィザード、[PairingLanding] は未ペアリング端末の
- * 取り込み待機画面、[Share] は共有シートから渡されたファイルの送信画面を出す。
+ * [Setup] は共通の設定のタスク（ウィザード、未ペアリング端末の取り込み待機画面）、
+ * [Share] は共有シートから渡されたファイルの送信画面を出す。
  */
 private sealed interface Overlay {
-    data object Wizard : Overlay
-    data object PairingLanding : Overlay
+    data class Setup(val task: SetupTask) : Overlay
     data class Share(val files: List<Uri>, val fileNames: List<String>, val text: String?) : Overlay
 }
 
@@ -151,16 +153,18 @@ private const val OVERLAY_SHARE = "share"
 private fun overlaySaver(share: Overlay.Share?): Saver<Overlay?, String> = Saver(
     save = { overlay ->
         when (overlay) {
-            Overlay.Wizard -> OVERLAY_WIZARD
-            Overlay.PairingLanding -> OVERLAY_PAIRING_LANDING
+            is Overlay.Setup -> when (overlay.task) {
+                SetupTask.Wizard -> OVERLAY_WIZARD
+                SetupTask.PairingLanding -> OVERLAY_PAIRING_LANDING
+            }
             is Overlay.Share -> OVERLAY_SHARE
             null -> OVERLAY_NONE
         }
     },
     restore = { saved ->
         when (saved) {
-            OVERLAY_WIZARD -> Overlay.Wizard
-            OVERLAY_PAIRING_LANDING -> Overlay.PairingLanding
+            OVERLAY_WIZARD -> Overlay.Setup(SetupTask.Wizard)
+            OVERLAY_PAIRING_LANDING -> Overlay.Setup(SetupTask.PairingLanding)
             OVERLAY_SHARE -> share
             else -> null
         }
@@ -300,9 +304,7 @@ class MainActivity : ComponentActivity() {
                 mutableStateOf(
                     when {
                         share != null && config.hasSharedKey -> share
-                        config.hasSharedKey -> null
-                        destination == ShellDestination.PairingImport -> null
-                        else -> Overlay.Wizard
+                        else -> initialSetupTask(config.hasSharedKey, destination)?.let(Overlay::Setup)
                     },
                 )
             }
@@ -351,10 +353,11 @@ class MainActivity : ComponentActivity() {
             }
             // ペアリング済みならタイムラインへ、未ペアリングならウィザード再開導線つきの待機画面へ着地する。
             val onWizardClose: () -> Unit = {
-                if (androidConfigRepository().load().hasSharedKey) {
+                val next = setupTaskAfterWizardClose(androidConfigRepository().load().hasSharedKey)
+                if (next == null) {
                     onReturnToTimeline()
                 } else {
-                    overlay = Overlay.PairingLanding
+                    overlay = Overlay.Setup(next)
                 }
             }
             val onPairingLandingBack: (() -> Unit)? = if (config.hasSharedKey) {
@@ -369,9 +372,11 @@ class MainActivity : ComponentActivity() {
             // タスクは各タスク固有の後処理を通す。設定から戻る時は onNavigate 経由で設定反映を通し、
             // 既存の後処理の共有を崩さない。
             BackHandler(enabled = overlay != null || destination != ShellDestination.Timeline) {
-                when (overlay) {
-                    Overlay.Wizard -> onWizardClose()
-                    Overlay.PairingLanding -> (onPairingLandingBack ?: { overlay = null })()
+                when (val current = overlay) {
+                    is Overlay.Setup -> when (current.task) {
+                        SetupTask.Wizard -> onWizardClose()
+                        SetupTask.PairingLanding -> (onPairingLandingBack ?: { overlay = null })()
+                    }
                     is Overlay.Share -> onShareCancel()
                     null -> onNavigate(shellReturnDestination(destination, subScreenOrigin))
                 }
@@ -388,34 +393,36 @@ class MainActivity : ComponentActivity() {
                         .safeDrawingPadding(),
                 ) {
                     when (val current = overlay) {
-                        Overlay.Wizard -> WizardScreen(
-                            caps = platformCapabilities(),
-                            controller = SettingsController(androidConfigRepository()),
-                            provider = wizardSetupProvider,
-                            healthChecker = healthChecker,
-                            importController = importController,
-                            qrContent = { uri ->
-                                ZoomableQrCode(pairingQrMatrix(uri))
-                            },
-                            onCopyPairingUri = { text -> copyPairingUri(text) },
-                            onCopyText = { text, sensitive -> copyText(text, sensitive) },
-                            onRequestScan = { onResult -> requestScan(onResult) },
-                            externalRefreshKey = resumeTick,
-                            onClose = onWizardClose,
-                            onSaved = { applySavedSettings() },
-                        )
+                        is Overlay.Setup -> when (current.task) {
+                            SetupTask.Wizard -> WizardScreen(
+                                caps = platformCapabilities(),
+                                controller = SettingsController(androidConfigRepository()),
+                                provider = wizardSetupProvider,
+                                healthChecker = healthChecker,
+                                importController = importController,
+                                qrContent = { uri ->
+                                    ZoomableQrCode(pairingQrMatrix(uri))
+                                },
+                                onCopyPairingUri = { text -> copyPairingUri(text) },
+                                onCopyText = { text, sensitive -> copyText(text, sensitive) },
+                                onRequestScan = { onResult -> requestScan(onResult) },
+                                externalRefreshKey = resumeTick,
+                                onClose = onWizardClose,
+                                onSaved = { applySavedSettings() },
+                            )
 
-                        Overlay.PairingLanding -> PairingScanScreen(
-                            controller = importController,
-                            onRequestScan = { onResult -> requestScan(onResult) },
-                            onOpenSettings = {
-                                overlay = null
-                                destination = ShellDestination.Settings
-                            },
-                            onOpenWizard = { overlay = Overlay.Wizard },
-                            onImported = onReturnToTimeline,
-                            onBack = onPairingLandingBack,
-                        )
+                            SetupTask.PairingLanding -> PairingScanScreen(
+                                controller = importController,
+                                onRequestScan = { onResult -> requestScan(onResult) },
+                                onOpenSettings = {
+                                    overlay = null
+                                    destination = ShellDestination.Settings
+                                },
+                                onOpenWizard = { overlay = Overlay.Setup(SetupTask.Wizard) },
+                                onImported = onReturnToTimeline,
+                                onBack = onPairingLandingBack,
+                            )
+                        }
 
                         is Overlay.Share -> {
                             val files = current.files
@@ -495,7 +502,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onCopyPairingUri = { text -> copyPairingUri(text) },
                                     showSendRoleOptions = true,
-                                    onOpenWizard = { overlay = Overlay.Wizard },
+                                    onOpenWizard = { overlay = Overlay.Setup(SetupTask.Wizard) },
                                     loadHealthItems = { healthChecker.check() },
                                     onOpenHealthCheck = { onNavigate(ShellDestination.HealthCheck) },
                                     onOpenPairingImport = { onNavigate(ShellDestination.PairingImport) },
