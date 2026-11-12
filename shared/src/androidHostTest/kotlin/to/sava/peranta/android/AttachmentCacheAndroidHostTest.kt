@@ -1,7 +1,15 @@
-package to.sava.peranta.blob
+package to.sava.peranta.android
 
 import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.test.runTest
+import to.sava.peranta.blob.ATTACHMENT_CACHE_MAX_AGE_MILLIS
+import to.sava.peranta.blob.AttachmentCache
+import to.sava.peranta.blob.AttachmentUploadRequest
+import to.sava.peranta.blob.BlobCipher
+import to.sava.peranta.blob.BlobTransport
+import to.sava.peranta.blob.DEFAULT_CHUNK_SIZE
+import to.sava.peranta.blob.FakeBlobTransport
+import to.sava.peranta.blob.uploadAttachment
 import to.sava.peranta.crypto.DecryptionException
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
@@ -16,10 +24,10 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class DesktopAttachmentCacheTest {
+class AttachmentCacheAndroidHostTest {
 
-    private val sharedKey: ByteArray = ByteArray(32) { (it * 3 + 2).toByte() }
-    private val baseDir: File = Files.createTempDirectory("peranta-attach-test").toFile()
+    private val sharedKey: ByteArray = ByteArray(32) { (it * 5 + 1).toByte() }
+    private val baseDir: File = Files.createTempDirectory("peranta-android-attach-test").toFile()
 
     @AfterTest
     fun cleanup() {
@@ -46,12 +54,12 @@ class DesktopAttachmentCacheTest {
     )
 
     private fun cache(transport: BlobTransport, now: () -> Long = { 1_000_000L }) =
-        DesktopAttachmentCache(transport, sharedKey, "k1", baseDir = baseDir, now = now)
+        AttachmentCache(transport, sharedKey, "k1", baseDir = baseDir, now = now)
 
     /** ダウンロードは blob を復号してキャッシュへ保存し、内容が元の平文と一致する。 */
     @Test
     fun downloadDecryptsToCache() = runTest {
-        val plain = Random(11).nextBytes(2 * DEFAULT_CHUNK_SIZE + 77)
+        val plain = Random(21).nextBytes(2 * DEFAULT_CHUNK_SIZE + 33)
         val transport = FakeBlobTransport()
         val ref = uploadPlain(transport, plain)
 
@@ -67,12 +75,11 @@ class DesktopAttachmentCacheTest {
     /** 一度ダウンロードした添付は再ダウンロードせずキャッシュから返る。 */
     @Test
     fun cachedFileReturnedWithoutRedownload() = runTest {
-        val plain = Random(12).nextBytes(1024)
+        val plain = Random(22).nextBytes(1024)
         val transport = FakeBlobTransport()
         val ref = uploadPlain(transport, plain)
         val cache = cache(transport)
         cache.download(ref)
-        assertEquals(1, transport.uploads.size)
         val cached = cache.cachedFile(ref)
         assertTrue(cached != null && cached.exists())
     }
@@ -80,7 +87,7 @@ class DesktopAttachmentCacheTest {
     /** 改竄された暗号文は復号に失敗し、部分ファイル（.part）を残さない。 */
     @Test
     fun tamperedBlobLeavesNoPartialFile() = runTest {
-        val plain = Random(13).nextBytes(4096)
+        val plain = Random(23).nextBytes(4096)
         val source = FakeBlobTransport()
         val ref = uploadPlain(source, plain)
         val ciphertext = source.uploads.single().body.copyOf()
@@ -90,8 +97,7 @@ class DesktopAttachmentCacheTest {
         assertFailsWith<DecryptionException> {
             cache(transport).download(ref)
         }
-        val blobDir = baseDir.resolve("blob-1")
-        val leftovers = blobDir.listFiles()?.toList().orEmpty()
+        val leftovers = baseDir.resolve("blob-1").listFiles()?.toList().orEmpty()
         assertTrue(leftovers.isEmpty(), "unexpected leftovers: ${leftovers.map { it.name }}")
         assertNull(cache(transport).cachedFile(ref))
     }
@@ -99,15 +105,15 @@ class DesktopAttachmentCacheTest {
     /** パストラバーサルを狙うファイル名・blobId でもキャッシュ基点ディレクトリの外へ書かない。 */
     @Test
     fun pathTraversalIsContained() = runTest {
-        val plain = Random(14).nextBytes(512)
+        val plain = Random(24).nextBytes(512)
         val transport = FakeBlobTransport()
         val ref = uploadPlain(transport, plain, fileName = "../../evil.jpg", blobId = "../escape")
         val file = cache(transport).download(ref)
         assertTrue(file.canonicalPath.startsWith(baseDir.canonicalPath), "escaped base dir: ${file.canonicalPath}")
-        assertTrue(file.name == "evil.jpg")
+        assertEquals("evil.jpg", file.name)
     }
 
-    /** 剪定は保持上限を超えたキャッシュディレクトリを削除する。 */
+    /** 剪定は保持上限を過ぎたキャッシュディレクトリを削除する。 */
     @Test
     fun prunesExpiredEntries() {
         val stale = File(baseDir, "stale").apply { mkdirs() }
@@ -115,8 +121,7 @@ class DesktopAttachmentCacheTest {
         stale.listFiles()!!.forEach { it.setLastModified(0L) }
         stale.setLastModified(0L)
 
-        val cache = cache(FakeBlobTransport(), now = { ATTACHMENT_CACHE_MAX_AGE_MILLIS + 1_000_000L })
-        cache.prune()
+        cache(FakeBlobTransport(), now = { ATTACHMENT_CACHE_MAX_AGE_MILLIS + 1_000_000L }).prune()
         assertTrue(!stale.exists())
     }
 
@@ -130,7 +135,7 @@ class DesktopAttachmentCacheTest {
             blobId: String,
             contentLength: Long,
             writeBody: suspend (io.ktor.utils.io.ByteWriteChannel) -> Unit,
-        ): UploadedBlob = error("not used")
+        ) = error("not used")
 
         override suspend fun download(url: String, blobId: String, consume: suspend (ByteReadChannel) -> Unit) {
             check(url == this.url) { "unexpected url $url" }

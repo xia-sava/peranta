@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import to.sava.peranta.blob.AttachmentCache
 import to.sava.peranta.blob.AutoFetchRole
 import to.sava.peranta.blob.BlobTransport
 import to.sava.peranta.blob.KtorBlobTransport
@@ -87,8 +88,8 @@ object AndroidAttachmentReceive {
     private val fullTextCache = ConcurrentHashMap<String, String>()
 
     /** [context] のキャッシュ領域を基点にした添付キャッシュを組む。 */
-    fun cache(context: Context, config: PerantaConfig): AndroidAttachmentCache =
-        AndroidAttachmentCache(
+    fun cache(context: Context, config: PerantaConfig): AttachmentCache =
+        AttachmentCache(
             transport = transport(context, config),
             sharedKey = config.sharedKeyBytes(),
             keyId = config.requireKeyId(),

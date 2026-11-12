@@ -1,4 +1,4 @@
-package to.sava.peranta.android
+package to.sava.peranta.blob
 
 import co.touchlab.kermit.Logger
 import io.ktor.utils.io.ByteChannel
@@ -7,12 +7,6 @@ import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import to.sava.peranta.blob.BlobCipher
-import to.sava.peranta.blob.BlobTransport
-import to.sava.peranta.blob.CachedAttachment
-import to.sava.peranta.blob.normalizeAttachmentFileName
-import to.sava.peranta.blob.sanitizeAttachmentFileName
-import to.sava.peranta.blob.selectAttachmentsToPrune
 import to.sava.peranta.model.AttachmentRef
 import java.io.File
 import java.io.FileOutputStream
@@ -24,19 +18,20 @@ import java.nio.file.StandardCopyOption
 private const val COPY_BUFFER_SIZE: Int = 64 * 1024
 
 /**
- * Android の復号済み添付キャッシュ（§4.3）。Desktop の同名層と同じ設計思想で、blob ごとに
- * `<baseDir>/<blobId>/<サニタイズ済みfileName>` へ置く。ダウンロードは必ず一時ファイルへ復号し、
- * 全チャンクの検証が完走してから最終ファイル名へ rename する。復号に失敗したら一時ファイルを消して
- * 例外を送出し、部分ファイルを残さない。[baseDir] は `context.cacheDir/attachments` を渡す。
- * android 依存を持たない（[baseDir] を注入する）ので、フェイク transport でホストテストできる。
+ * 復号済み添付のキャッシュ（§4.3）。blob ごとに `<baseDir>/<blobId>/<サニタイズ済みfileName>` へ置く。
+ * ダウンロードは必ず一時ファイルへ復号し、全チャンクの検証が完走してから最終ファイル名へ rename する。
+ * 復号に失敗したら一時ファイルを消して例外を送出し、部分ファイルを残さない。
+ * [sharedKey]/[keyId] は [AttachmentRef.enc] の検証と blobKey 導出に使う。
+ * [baseDir] はプラットフォームごとのアプリ専用ディレクトリを呼び出し側が渡す。
+ * プラットフォーム API に依存しないので、フェイク transport でホストテストできる。
  */
-class AndroidAttachmentCache(
+class AttachmentCache(
     private val transport: BlobTransport,
     private val sharedKey: ByteArray,
     private val keyId: String,
     private val baseDir: File,
     private val now: () -> Long = { System.currentTimeMillis() },
-    private val log: Logger = Logger.withTag("AndroidAttachmentCache"),
+    private val log: Logger = Logger.withTag("AttachmentCache"),
 ) {
 
     /** 既に復号済みのファイルがあれば返し、最終アクセス時刻を更新する。無ければ null。 */

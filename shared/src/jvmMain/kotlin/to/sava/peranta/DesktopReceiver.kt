@@ -17,9 +17,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import to.sava.peranta.blob.AttachmentCache
 import to.sava.peranta.blob.AttachmentOpenDecision
 import to.sava.peranta.blob.AutoFetchRole
-import to.sava.peranta.blob.DesktopAttachmentCache
 import to.sava.peranta.blob.KtorBlobTransport
 import to.sava.peranta.blob.MAX_THUMBNAIL_DECODE_BYTES
 import to.sava.peranta.blob.TransferProgress
@@ -50,6 +50,7 @@ import to.sava.peranta.net.SelfTestProbe
 import to.sava.peranta.net.SelfTestStatus
 import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.pairing.SettingsController
+import to.sava.peranta.platform.JvmPaths
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
@@ -205,10 +206,11 @@ class DesktopReceiver(
     )
     private val selfTestProbe = SelfTestProbe()
 
-    private val attachmentCache = DesktopAttachmentCache(
+    private val attachmentCache = AttachmentCache(
         transport = KtorBlobTransport(config, httpClient),
         sharedKey = config.sharedKeyBytes(),
         keyId = config.requireKeyId(),
+        baseDir = JvmPaths.attachmentsDir,
     )
     private val attachmentStates = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
 
