@@ -7,7 +7,6 @@ import co.touchlab.kermit.Logger
 import io.ktor.client.HttpClient
 import to.sava.peranta.android.fileProviderAuthority
 import java.io.File
-import java.io.IOException
 
 /** APK の MIME タイプ。 */
 private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
@@ -26,11 +25,14 @@ fun isExpectedApkPackage(actualPackage: String?, expectedPackage: String): Boole
     actualPackage != null && actualPackage == expectedPackage
 
 /**
- * Android の APK 自己更新（§12）。APK をアプリ専用領域へ落とし、照合してから
- * FileProvider 経由でインストール確認の Intent を発行する（自動実行はしない。
+ * Android の APK 自己更新（§12）。APK をアプリ専用領域へ落とす、自アプリの APK かを確かめる、
+ * FileProvider 経由でインストール確認の Intent を発行する、の 3 つを受け持つ（自動実行はしない。
  * ユーザー操作でインストールされる）。
  *
  * 外部から落とした APK は、HTTP ステータス・sha256・packageName を検証してからインストールへ回す。
+ * HTTP ステータスは [download]、sha256 は [downloadVerifiedRelease]、packageName は [hasOwnPackageName] が
+ * 確かめる。[hasOwnPackageName] と [launch] は sha256 を照合しないので、照合を通った配布物に対してだけ
+ * 呼ぶ。この順序は [downloadAndHandOffApk] が守る。
  */
 class AndroidUpdateInstaller(
     private val context: Context,
@@ -50,22 +52,23 @@ class AndroidUpdateInstaller(
     }
 
     /**
-     * ダウンロード物が配布元の意図した実体で、かつ自アプリの APK であることを確かめる。
-     * どちらかが食い違えば破棄して中断する。
+     * [apk] が自アプリの packageName を持つかを返す。解析できない APK は持たないとする。
+     * 見るのは packageName だけなので、sha256 の照合を通った配布物に対して呼ぶ。
+     * 破棄は呼び出し側が受け持つ（[handOffVerifiedApk]）。
      */
-    fun verify(apk: File, expectedSha256: String) {
-        if (!matchesSha256(apk, expectedSha256)) {
-            apk.delete()
-            throw IOException("apk digest mismatch")
-        }
+    fun hasOwnPackageName(apk: File): Boolean {
         val packageName = context.packageManager.getPackageArchiveInfo(apk.absolutePath, 0)?.packageName
-        if (!isExpectedApkPackage(packageName, context.packageName)) {
-            apk.delete()
-            throw IOException("apk package mismatch: expected=${context.packageName} actual=$packageName")
+        return isExpectedApkPackage(packageName, context.packageName).also { matches ->
+            if (!matches) {
+                log.w { "apk package mismatch: expected=${context.packageName} actual=$packageName" }
+            }
         }
     }
 
-    /** インストール確認の Intent を発行する。実際のインストールはユーザーが承認して進む。 */
+    /**
+     * インストール確認の Intent を発行する。実際のインストールはユーザーが承認して進む。
+     * ここでは照合しないので、sha256 と packageName の照合を通った配布物に対して呼ぶ。
+     */
     fun launch(apk: File) {
         val uri = FileProvider.getUriForFile(context, fileProviderAuthority(context.packageName), apk)
         val intent = Intent(Intent.ACTION_VIEW).apply {

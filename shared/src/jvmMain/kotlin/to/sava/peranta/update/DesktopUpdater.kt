@@ -1,7 +1,6 @@
 package to.sava.peranta.update
 
 import co.touchlab.kermit.Logger
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -55,30 +54,20 @@ class DesktopUpdater(
      * 実行中は多重に走らせない。
      */
     fun install(available: UpdateStatus.Available) {
-        if (isRunning()) {
+        if (_installState.value.isInProgress()) {
             return
         }
         _installState.value = UpdateInstallState.Downloading(0, 0)
         scope.launch {
-            try {
-                val msi = downloadRelease(available.url) { received, total ->
-                    _installState.value = UpdateInstallState.Downloading(received, total)
-                }
-                _installState.value = UpdateInstallState.Verifying
-                if (!matchesSha256(msi, available.sha256)) {
-                    discardDownload(msi)
-                    log.w { "downloaded update rejected: sha256 mismatch" }
-                    _installState.value = UpdateInstallState.Failed("ダウンロードした更新の照合に失敗しました")
-                    return@launch
-                }
-                verified = VerifiedRelease(msi, available.sha256)
-                _installState.value = UpdateInstallState.ReadyToApply
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (error: Exception) {
-                log.e(error) { "update download failed" }
-                _installState.value = UpdateInstallState.Failed("更新のダウンロードに失敗しました")
-            }
+            val msi = downloadVerifiedRelease(
+                available = available,
+                download = downloadRelease,
+                discard = ::discardDownload,
+                onState = { _installState.value = it },
+                log = log,
+            ) ?: return@launch
+            verified = VerifiedRelease(msi, available.sha256)
+            _installState.value = UpdateInstallState.ReadyToApply
         }
     }
 
@@ -87,15 +76,15 @@ class DesktopUpdater(
      * 終了を待ってからインストールを始めるため、呼び出し側はここでアプリを終了させる。
      *
      * 引き渡す直前にもう一度照合する。適用の確認を待つあいだに中身が入れ替われば、
-     * 照合を通ったバイト列とインストーラへ渡すバイト列が食い違うため。
+     * 照合を通ったバイト列とインストーラへ渡すバイト列が食い違うため。再照合に落ちたとき
+     * （配布物を読めなかったときを含む）は破棄し、[UPDATE_REVERIFY_FAILED_MESSAGE] で止まる。
      */
     fun applyNow(onReadyToExit: () -> Unit) {
         val release = verified ?: return
-        if (!matchesSha256(release.file, release.sha256)) {
+        if (!matchesBeforeApply(release)) {
             discardDownload(release.file)
             verified = null
-            log.w { "verified update rejected before apply: sha256 mismatch" }
-            _installState.value = UpdateInstallState.Failed("適用する更新の照合に失敗しました")
+            _installState.value = UpdateInstallState.Failed(UPDATE_REVERIFY_FAILED_MESSAGE)
             return
         }
         try {
@@ -104,21 +93,29 @@ class DesktopUpdater(
             onReadyToExit()
         } catch (error: Exception) {
             log.e(error) { "update apply failed" }
-            _installState.value = UpdateInstallState.Failed("更新の適用に失敗しました")
+            _installState.value = UpdateInstallState.Failed(UPDATE_APPLY_FAILED_MESSAGE)
         }
     }
+
+    /** 保持している配布物が、照合に使った期待値と今も一致するか。読めなければ一致しないとする。 */
+    private fun matchesBeforeApply(release: VerifiedRelease): Boolean =
+        try {
+            matchesSha256(release.file, release.sha256).also { matches ->
+                if (!matches) {
+                    log.w { "verified update rejected before apply: sha256 mismatch" }
+                }
+            }
+        } catch (error: Exception) {
+            // 例外そのものは流さない。読み取りの例外のメッセージには配布物のパスが載る。
+            log.e { "verified update could not be read before apply (${error::class.simpleName})" }
+            false
+        }
 
     /** 適用を取りやめ、ダウンロード済みの配布物を捨てる。 */
     fun cancelApply() {
         verified?.let { discardDownload(it.file) }
         verified = null
         _installState.value = null
-    }
-
-    private fun isRunning(): Boolean = when (_installState.value) {
-        is UpdateInstallState.Downloading -> true
-        UpdateInstallState.Verifying, UpdateInstallState.ReadyToApply, UpdateInstallState.Launching -> true
-        else -> false
     }
 
     /** 保持するスコープと HTTP クライアントを閉じる。 */

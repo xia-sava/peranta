@@ -69,7 +69,7 @@ class DesktopUpdaterTest {
 
             assertFalse(exitRequested.get())
             assertTrue(launched.isEmpty())
-            assertTrue(updater.installState.value is UpdateInstallState.Failed)
+            assertEquals(UpdateInstallState.Failed(UPDATE_VERIFY_FAILED_MESSAGE), updater.installState.value)
         } finally {
             updater.close()
         }
@@ -94,7 +94,39 @@ class DesktopUpdaterTest {
             assertTrue(launched.isEmpty(), "tampered release reached the installer")
             assertFalse(exitRequested.get())
             assertFalse(release.exists(), "tampered release was left on disk")
-            assertTrue(updater.installState.value is UpdateInstallState.Failed)
+            assertEquals(UpdateInstallState.Failed(UPDATE_REVERIFY_FAILED_MESSAGE), updater.installState.value)
+        } finally {
+            updater.close()
+        }
+    }
+
+    /**
+     * 適用の確認を待つあいだに読めなくなった配布物は、引き渡す直前の再照合で弾く。例外を呼び出し側へ
+     * 漏らさず、保持していた配布物を外して再照合の失敗で止まり、もう一度適用しても引き渡さない。
+     */
+    @Test
+    fun unreadableReleaseIsRejectedBeforeApplying() = runBlocking {
+        val release = downloadedRelease()
+        val launched = mutableListOf<File>()
+        val updater = updater(release, launched)
+        try {
+            updater.install(available(sha256HexOf(release)))
+            withTimeout(AWAIT_TIMEOUT_MILLIS) {
+                updater.installState.first { it == UpdateInstallState.ReadyToApply }
+            }
+
+            assertTrue(release.delete())
+            val exitRequested = AtomicBoolean(false)
+            updater.applyNow { exitRequested.set(true) }
+
+            assertTrue(launched.isEmpty(), "unreadable release reached the installer")
+            assertFalse(exitRequested.get())
+            assertEquals(UpdateInstallState.Failed(UPDATE_REVERIFY_FAILED_MESSAGE), updater.installState.value)
+
+            updater.applyNow { exitRequested.set(true) }
+
+            assertTrue(launched.isEmpty(), "release was handed off after the rejection")
+            assertFalse(exitRequested.get())
         } finally {
             updater.close()
         }

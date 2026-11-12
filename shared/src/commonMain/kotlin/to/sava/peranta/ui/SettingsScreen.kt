@@ -56,6 +56,7 @@ import to.sava.peranta.ui.setup.setupOverview
 import to.sava.peranta.update.UpdateController
 import to.sava.peranta.update.UpdateInstallState
 import to.sava.peranta.update.UpdateStatus
+import to.sava.peranta.update.isInProgress
 
 /** 鍵を作り直すと全端末で QR の読み直しが必要になる旨の警告文（§6）。 */
 private const val ROTATE_WARNING_BODY: String =
@@ -753,7 +754,7 @@ private fun UpdateSection(update: UpdateUi) {
     if (available != null && onInstall != null) {
         OutlinedButton(
             onClick = { onInstall(available) },
-            enabled = !isInstallRunning(installState),
+            enabled = !installState.isInProgress(),
             modifier = Modifier.testTag(TAG_UPDATE_INSTALL),
         ) {
             Text(text = "ダウンロードして更新")
@@ -848,13 +849,6 @@ private fun downloadProgressText(state: UpdateInstallState.Downloading): String 
     } else {
         "ダウンロード中... ${formatFileSize(state.receivedBytes)}"
     }
-
-/** 適用が進行中か。進行中は適用ボタンを押せなくする。 */
-private fun isInstallRunning(state: UpdateInstallState?): Boolean = when (state) {
-    is UpdateInstallState.Downloading -> true
-    UpdateInstallState.Verifying, UpdateInstallState.ReadyToApply, UpdateInstallState.Launching -> true
-    else -> false
-}
 
 const val TAG_AUTOSAVE_NOTE: String = "settings-autosave-note"
 const val TAG_OPEN_WIZARD: String = "settings-open-wizard"
