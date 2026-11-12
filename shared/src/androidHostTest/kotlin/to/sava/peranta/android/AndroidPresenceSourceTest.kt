@@ -8,6 +8,7 @@ import to.sava.peranta.roster.buildPresencePayload
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -52,6 +53,19 @@ class AndroidPresenceSourceTest {
     @Test
     fun readyForUnifiedPushReceiveCanDisplay() {
         assertTrue(assertNotNull(source()).canDisplay)
+    }
+
+    /** 届け先を見分ける値は、control topic か keyId が変わると変わる。 */
+    @Test
+    fun destinationFollowsControlTopicAndKeyId() {
+        val base = assertNotNull(source()).destination
+
+        assertEquals(base, assertNotNull(source(config = ready.copy(deviceName = "renamed"))).destination)
+        assertNotEquals(base, assertNotNull(source(config = ready.copy(keyId = "k2"))).destination)
+        assertNotEquals(
+            base,
+            assertNotNull(source(config = ready.copy(controlTopic = "peranta-control-other"))).destination,
+        )
     }
 
     /** keyId が空で受信設定が揃っていなければ、自端末の情報は組むが表示能力は持たない。 */

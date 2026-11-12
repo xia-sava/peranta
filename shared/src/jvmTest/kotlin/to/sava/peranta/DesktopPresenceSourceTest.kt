@@ -8,6 +8,7 @@ import to.sava.peranta.roster.buildPresencePayload
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -37,6 +38,19 @@ class DesktopPresenceSourceTest {
         assertEquals("dev-1", source.deviceId)
         assertEquals("desktop", source.deviceName)
         assertTrue(source.sender)
+    }
+
+    /** 届け先を見分ける値は、control topic か keyId が変わると変わる。 */
+    @Test
+    fun destinationFollowsControlTopicAndKeyId() {
+        val base = assertNotNull(source(config = ready.copy(keyId = "k1"))).destination
+
+        assertEquals(base, assertNotNull(source(config = ready.copy(keyId = "k1", deviceName = "renamed"))).destination)
+        assertNotEquals(base, assertNotNull(source(config = ready.copy(keyId = "k2"))).destination)
+        assertNotEquals(
+            base,
+            assertNotNull(source(config = ready.copy(keyId = "k1", controlTopic = "peranta-control-other"))).destination,
+        )
     }
 
     /** 送信が無効（sendEnabled が偽）なら、sender を偽にする。 */

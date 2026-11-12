@@ -51,6 +51,7 @@ class PresenceAnnouncerTest {
     private var configured = true
     private var deviceName = "phone"
     private var canCommand = false
+    private var destination = "$CONTROL_TOPIC|k1"
     private var publishDelayMillis = 0L
     private var publishCalls = 0
     private var sourceFailure: Throwable? = null
@@ -70,6 +71,7 @@ class PresenceAnnouncerTest {
             canDisplay = true,
             canCommand = canCommand,
             sender = true,
+            destination = destination,
             publish = { presence ->
                 publishCalls++
                 if (publishDelayMillis > 0) delay(publishDelayMillis)
@@ -161,6 +163,21 @@ class PresenceAnnouncerTest {
         announcer.announce()
 
         assertEquals(listOf("phone", "phone-renamed"), publishedPresences().map { it.deviceName })
+    }
+
+    /** 届け先（control topic や keyId）が変われば、同じ内容でも最小間隔の内に告知する。 */
+    @Test
+    fun changedDestinationPassesWithinMinInterval() = runTest {
+        val announcer = announcer()
+
+        announcer.announce()
+        now = 1
+        destination = "$CONTROL_TOPIC|k2"
+        announcer.announce()
+        now = 2
+        announcer.announce()
+
+        assertEquals(2, recorded.published.size)
     }
 
     /** 抑止されるときは [PresenceSource.publish] を呼ばない（通信の支度もしない）。 */

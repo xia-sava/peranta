@@ -85,7 +85,8 @@ internal fun androidPresenceSource(
     val controlTopic = config.controlTopic ?: return null
     val endpoint = config.unifiedPushEndpoint ?: return null
     val deviceName = config.deviceName ?: return null
-    if (config.sharedKeyBase64 == null || config.keyId == null) return null
+    val keyId = config.keyId ?: return null
+    if (config.sharedKeyBase64 == null) return null
     return PresenceSource(
         deviceId = deviceId(),
         deviceName = deviceName,
@@ -93,6 +94,7 @@ internal fun androidPresenceSource(
         canDisplay = config.isReadyForUnifiedPushReceive,
         canCommand = canCommand,
         sender = config.sendEnabled,
+        destination = "$controlTopic|$keyId",
         publish = { presence -> publish(controlTopic, presence) },
     )
 }

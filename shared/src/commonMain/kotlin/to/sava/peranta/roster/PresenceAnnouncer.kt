@@ -17,6 +17,11 @@ class PresenceSource(
     val canDisplay: Boolean,
     val canCommand: Boolean,
     val sender: Boolean,
+    /**
+     * publish の届け先を見分ける値（control topic と keyId）。
+     * 届け先が変わると、同じ内容でも他端末にはまだ届いていないため、抑止せずに告知する。
+     */
+    val destination: String,
     /** control topic へ publish する。抑止されたときは呼ばれない。 */
     val publish: suspend (PresencePayload) -> Unit,
 )
@@ -44,7 +49,7 @@ class PresenceAnnouncer(
     }
 
     /**
-     * その場で告知する。呼び出しは直列化し、同じ内容の連続は最小間隔で抑止する。
+     * その場で告知する。呼び出しは直列化し、同じ届け先への同じ内容の連続は最小間隔で抑止する。
      * 失敗はログに残して呼び出し元へ伝えない。publish に失敗した内容は記録せず、次の契機で送り直す。
      */
     suspend fun announce() {
@@ -70,7 +75,7 @@ class PresenceAnnouncer(
             sender = current.sender,
             now = now(),
         )
-        val fingerprint = presenceFingerprint(presence)
+        val fingerprint = "${presenceFingerprint(presence)}|${current.destination}"
         // 抑止されるときは通信の支度もしない。通知の転送ごとに呼ばれるため、空振りを安く済ませる。
         if (!gate.shouldAnnounce(fingerprint, presence.sentAtEpochMillis)) {
             log.d { "presence unchanged; skipping announce" }

@@ -27,6 +27,7 @@ internal fun desktopPresenceSource(
         canDisplay = true,
         canCommand = false,
         sender = config.sendEnabled,
+        destination = "$controlTopic|${config.keyId.orEmpty()}",
         publish = { presence -> publish(controlTopic, presence) },
     )
 }
