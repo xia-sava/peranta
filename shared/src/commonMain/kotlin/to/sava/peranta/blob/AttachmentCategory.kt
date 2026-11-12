@@ -42,11 +42,16 @@ private val AUDIO_EXTENSIONS: Set<String> = setOf("mp3", "wav", "flac", "aac", "
 private val IMAGE_EXTENSIONS: Set<String> = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif")
 
 /**
- * mimeType が image で始まれば [AttachmentKind.IMAGE]、それ以外は [AttachmentKind.FILE] とする（§4.3）。
- * 送信側の共有シート・受信側の表示で共通に使う。
+ * mimeType を第一に、判らなければファイル名の拡張子から、画像かそれ以外かを決める（§4.3）。
+ * 送信側が `kind` を決めるのに使う。表示種別（[attachmentCategoryFor]）が [AttachmentCategory.IMAGE] になるものを
+ * [AttachmentKind.IMAGE] とし、受信側が `kind` で決める表示と、mimeType と拡張子で決める表示を一致させる。
  */
-fun attachmentKindForMimeType(mimeType: String): AttachmentKind =
-    if (mimeType.startsWith("image/")) AttachmentKind.IMAGE else AttachmentKind.FILE
+fun attachmentKindFor(mimeType: String, fileName: String): AttachmentKind =
+    if (attachmentCategoryFor(mimeType, fileName) == AttachmentCategory.IMAGE) {
+        AttachmentKind.IMAGE
+    } else {
+        AttachmentKind.FILE
+    }
 
 /**
  * mimeType だけから表示種別を決める。トップレベル型（image・video・audio・text）と

@@ -12,9 +12,11 @@ import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.crypto.generateKey
 import to.sava.peranta.filter.SENSITIVE_HISTORY_PLACEHOLDER
+import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.net.FakeNtfyClient
+import to.sava.peranta.send.FILE_SEND_FAILED_MESSAGE
 import to.sava.peranta.send.FakeTimelineStore
 import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.timeline.ErrorItem
@@ -129,6 +131,28 @@ class DesktopComposerTest {
         assertEquals(2, payload.attachments.size)
         assertEquals("デスクトップ", payload.fromName)
         assertTrue(composer.ui().attachments!!.staged.value.isEmpty())
+    }
+
+    /** `.png` のファイルを送ると、載せる添付の mimeType は `image/png`、kind は IMAGE になる（§4.3）。 */
+    @Test
+    fun sendPngFileCarriesImageMimeTypeAndKind() = runTest {
+        val store = FakeTimelineStore()
+        val pipeline = SendPipeline(MessageCipher(generateKey(), "k1"), FakeNtfyClient(), store)
+        val composer = DesktopComposer(
+            config = config(persistSensitiveHistory = true),
+            httpClient = successHttpClient(),
+            cipher = MessageCipher(generateKey(), "k1"),
+            ntfy = FakeNtfyClient(),
+            sendPipeline = pipeline,
+            scope = this,
+        )
+        composer.addStaged(listOf(tempImageFile("png")))
+
+        assertTrue(composer.ui().send("キャプション"))
+
+        val attachment = ((store.appended.single() as SentNotification).payload as FilePayload).attachments.single()
+        assertEquals("image/png", attachment.mimeType)
+        assertEquals(AttachmentKind.IMAGE, attachment.kind)
     }
 
     /**

@@ -12,6 +12,7 @@ import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.webkit.MimeTypeMap
 import co.touchlab.kermit.Logger
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.jvm.javaio.toByteReadChannel
@@ -23,27 +24,27 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import to.sava.peranta.blob.AttachmentUploadRequest
 import to.sava.peranta.blob.BlobCipher
+import to.sava.peranta.blob.CountingSource
 import to.sava.peranta.blob.KtorBlobTransport
-import to.sava.peranta.blob.attachmentKindForMimeType
 import to.sava.peranta.blob.decodeAttachmentRef
 import to.sava.peranta.blob.encodeAttachmentRef
 import to.sava.peranta.blob.uploadAttachment
 import to.sava.peranta.config.blobCipher
 import to.sava.peranta.config.requireKeyId
-import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.platform.ioDispatcher
+import to.sava.peranta.send.FILE_SEND_FAILED_MESSAGE
+import to.sava.peranta.send.FILE_SEND_NOT_CONFIGURED_MESSAGE
 import to.sava.peranta.send.buildFilePayloads
+import to.sava.peranta.send.buildFileUploadRequest
 import to.sava.peranta.shared.R
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.ui.ATTACHMENT_DOWNLOAD_FAILED_MESSAGE
 import java.io.File
-import java.io.FilterInputStream
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
@@ -103,7 +104,7 @@ class AttachmentTransferService : Service() {
             } catch (error: Exception) {
                 // 例外そのものは流さない。ktor の例外メッセージには blob の送り先 URL（＝ホスト）が載る（§11）。
                 log.w { "attachment upload failed transferId=$transferId (${error::class.simpleName})" }
-                recordError(UPLOAD_FAILED_MESSAGE)
+                recordError(FILE_SEND_FAILED_MESSAGE)
             } finally {
                 finishTransfer(transferId)
             }
@@ -221,7 +222,7 @@ class AttachmentTransferService : Service() {
         val repo = androidConfigRepository(applicationContext)
         val config = repo.loadWithDeviceId()
         if (!config.isReadyForSend) {
-            recordError(NOT_CONFIGURED_MESSAGE)
+            recordError(FILE_SEND_NOT_CONFIGURED_MESSAGE)
             return
         }
         val blobTopic = config.blobTopic ?: repo.ensureBlobTopic()
@@ -232,7 +233,7 @@ class AttachmentTransferService : Service() {
             uploadOne(transferId, notificationId, uri, cipher, transport, blobTopic)
         }
         if (attachments.isEmpty()) {
-            recordError(UPLOAD_FAILED_MESSAGE)
+            recordError(FILE_SEND_FAILED_MESSAGE)
             return
         }
         // 複数添付の Envelope が UnifiedPush の実質上限を超えないよう、収まる範囲で複数ペイロードに分割する（§4.3）。
@@ -275,11 +276,11 @@ class AttachmentTransferService : Service() {
                     transport = transport,
                     blobCipher = cipher,
                     blobTopic = blobTopic,
-                    request = AttachmentUploadRequest(
+                    request = buildFileUploadRequest(
                         fileName = meta.fileName,
                         mimeType = meta.mimeType,
                         sizeBytes = meta.sizeBytes,
-                        kind = kindFor(meta.mimeType),
+                        mimeTypeForExtension = ::mimeTypeForExtension,
                         openSource = { countingChannel(spool, transferred) },
                     ),
                 )
@@ -308,20 +309,21 @@ class AttachmentTransferService : Service() {
             null
         }
 
+    /** 共有された [uri] の名前・種別・長さ。種別は共有元が返さなければ null。 */
     private fun attachmentMeta(uri: Uri, spool: File): AttachmentMeta = AttachmentMeta(
         fileName = sharedStreamDisplayName(uri),
-        mimeType = contentResolver.getType(uri) ?: DEFAULT_IMAGE_MIME,
+        mimeType = contentResolver.getType(uri),
         sizeBytes = spool.length(),
     )
+
+    /** 拡張子から MIME を引く（[MimeTypeMap]）。判らなければ null。 */
+    private fun mimeTypeForExtension(extension: String): String? =
+        MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
 
     /** カウント付き入力ストリームから blob 本体のチャンネルを開く。読み取りバイト数を [transferred] に反映する。 */
     private fun countingChannel(spool: File, transferred: AtomicLong): ByteReadChannel {
         transferred.set(0)
-        val counting = object : FilterInputStream(spool.inputStream()) {
-            override fun read(b: ByteArray, off: Int, len: Int): Int =
-                super.read(b, off, len).also { if (it > 0) transferred.addAndGet(it.toLong()) }
-        }
-        return counting.toByteReadChannel()
+        return CountingSource(spool.inputStream()) { read -> transferred.addAndGet(read) }.toByteReadChannel()
     }
 
     private fun percentOf(totalBytes: Long, transferredBytes: Long): Int =
@@ -395,9 +397,7 @@ class AttachmentTransferService : Service() {
         super.onDestroy()
     }
 
-    private fun kindFor(mimeType: String): AttachmentKind = attachmentKindForMimeType(mimeType)
-
-    private data class AttachmentMeta(val fileName: String, val mimeType: String, val sizeBytes: Long)
+    private data class AttachmentMeta(val fileName: String, val mimeType: String?, val sizeBytes: Long)
 
     @Suppress("DEPRECATION")
     private fun Intent.uris(): List<Uri> {
@@ -425,10 +425,9 @@ class AttachmentTransferService : Service() {
         private const val CHANNEL_ID = "peranta-attachment-transfer"
         private const val CHANNEL_NAME = "添付の転送"
         private const val UMBRELLA_TITLE = "ファイルを転送中"
-        private const val UPLOAD_TITLE = "画像をアップロード中"
+        private const val UPLOAD_TITLE = "ファイルをアップロード中"
         private const val DOWNLOAD_TITLE = "ファイルをダウンロード中"
         private const val CANCEL_LABEL = "キャンセル"
-        private const val DEFAULT_IMAGE_MIME = "image/*"
         private const val CLIP_LABEL = "peranta-attachments"
         private const val PROGRESS_POLL_MILLIS = 500L
 
@@ -438,8 +437,6 @@ class AttachmentTransferService : Service() {
         /** 転送ごとの進捗通知 ID の起点（umbrella と重ならないよう十分離す）。 */
         private const val PROGRESS_NOTIFICATION_ID_BASE = 4310
 
-        private const val UPLOAD_FAILED_MESSAGE = "画像のアップロードに失敗しました。もう一度お試しください"
-        private const val NOT_CONFIGURED_MESSAGE = "送信の設定が未完了のため画像を送れません"
         private const val NOT_CONFIGURED_DOWNLOAD_MESSAGE = "設定が未完了のためファイルを受け取れません"
 
         /**

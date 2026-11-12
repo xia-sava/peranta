@@ -12,12 +12,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.jetbrains.skia.Image as SkiaImage
-import to.sava.peranta.blob.AttachmentUploadRequest
 import to.sava.peranta.blob.BlobCipher
+import to.sava.peranta.blob.CountingSource
 import to.sava.peranta.blob.KtorBlobTransport
 import to.sava.peranta.blob.TransferProgress
 import to.sava.peranta.blob.TransferState
-import to.sava.peranta.blob.attachmentKindForMimeType
 import to.sava.peranta.blob.uploadAttachment
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.blobCipher
@@ -28,8 +27,10 @@ import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.platform.JvmPaths
 import to.sava.peranta.platform.failureForLog
+import to.sava.peranta.send.FILE_SEND_FAILED_MESSAGE
 import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.send.buildFilePayloads
+import to.sava.peranta.send.buildFileUploadRequest
 import to.sava.peranta.send.resolveSendTopics
 import to.sava.peranta.send.sendMessage
 import to.sava.peranta.ui.ComposerAttachmentsUi
@@ -45,15 +46,12 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
 import java.io.File
-import java.io.FilterInputStream
+import java.net.URLConnection
 import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import javax.imageio.ImageIO
 import kotlin.math.roundToInt
-
-/** ファイル送信に失敗したときにタイムラインへ出す文言（§13 M9d）。 */
-internal const val FILE_SEND_FAILED_MESSAGE: String = "ファイルの送信に失敗しました。もう一度お試しください"
 
 /** クリップボード貼り付けでステージする画像の一時ファイル名（[sequence] は 1 始まりの連番）。 */
 internal fun clipboardImageFileName(sequence: Long): String = "clipboard-$sequence.png"
@@ -292,21 +290,19 @@ class DesktopComposer(
         transferred: AtomicLong,
         totalBytes: Long,
         sources: MutableList<Closeable>,
-    ): AttachmentRef {
-        val mimeType = mimeTypeFor(file)
-        return uploadAttachment(
+    ): AttachmentRef =
+        uploadAttachment(
             transport = transport,
             blobCipher = blobCipher,
             blobTopic = blobTopic,
-            request = AttachmentUploadRequest(
+            request = buildFileUploadRequest(
                 fileName = file.name,
-                mimeType = mimeType,
+                mimeType = mimeTypeFor(file),
                 sizeBytes = file.length(),
-                kind = attachmentKindForMimeType(mimeType),
+                mimeTypeForExtension = ::mimeTypeForExtension,
                 openSource = { countingChannel(file, transferred, totalBytes, sources) },
             ),
         )
-    }
 
     /**
      * [file] を読みながらバイト数を [transferred] へ積み上げ、複数ファイル合計の進捗を [uploadProgress] へ直接反映する。
@@ -318,28 +314,27 @@ class DesktopComposer(
         totalBytes: Long,
         sources: MutableList<Closeable>,
     ): ByteReadChannel {
-        val counting = object : FilterInputStream(file.inputStream()) {
-            override fun read(b: ByteArray, off: Int, len: Int): Int =
-                super.read(b, off, len).also { read ->
-                    if (read > 0) {
-                        val total = transferred.addAndGet(read.toLong())
-                        uploadProgress.value = TransferProgress(total, totalBytes, TransferState.RUNNING)
-                    }
-                }
+        val counting = CountingSource(file.inputStream()) { read ->
+            val total = transferred.addAndGet(read)
+            uploadProgress.value = TransferProgress(total, totalBytes, TransferState.RUNNING)
         }
         sources.add(counting)
         return counting.toByteReadChannel()
     }
 
-    private fun mimeTypeFor(file: File): String =
+    /** OS が [file] に対して返す MIME。判らなければ null。 */
+    private fun mimeTypeFor(file: File): String? =
         try {
-            Files.probeContentType(file.toPath()) ?: DEFAULT_MIME_TYPE
+            Files.probeContentType(file.toPath())
         } catch (error: Exception) {
             log.w(error) { "failed to probe content type for ${file.name}" }
-            DEFAULT_MIME_TYPE
+            null
         }
 
-    private companion object {
-        const val DEFAULT_MIME_TYPE: String = "application/octet-stream"
-    }
+    /**
+     * 拡張子から MIME を引く（JDK の [java.net.FileNameMap]）。FileNameMap はファイル名で引くため、
+     * その拡張子を付けた名前で引く。判らなければ null。
+     */
+    private fun mimeTypeForExtension(extension: String): String? =
+        URLConnection.getFileNameMap().getContentTypeFor("file.$extension")
 }
