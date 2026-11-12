@@ -13,11 +13,11 @@ import to.sava.peranta.model.Payload
 import to.sava.peranta.model.encodeEnvelope
 import to.sava.peranta.net.FakeNtfyClient
 import to.sava.peranta.net.NtfyEvent
+import to.sava.peranta.send.CommandDelivery
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.FakeTimelineFile
 import to.sava.peranta.timeline.JsonlTimelineStore
-import to.sava.peranta.send.CommandDelivery
 import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.TimelineStore
 import kotlin.test.Test
