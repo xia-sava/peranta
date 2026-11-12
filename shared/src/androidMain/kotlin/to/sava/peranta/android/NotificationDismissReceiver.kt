@@ -17,8 +17,9 @@ import kotlinx.coroutines.launch
  * [SwipeBehavior.DISMISS_SOURCE] を指示した通知の払いのけ（§3.3）の両方を受ける。
  * アプリの画面を開かずに起こされるため、プロセスが通知表示だけのために起きた状態でも動く。
  *
- * ボタン押下では表示中のミラー通知を先に取り下げる。払いのけでは OS が既に消しているため
- * 取り下げは要らず、そのぶん [EXTRA_PAYLOAD_ID] を伴わない。
+ * ボタン押下では表示中のミラー通知を先に取り下げる（[AndroidNotificationPresenter.cancel]。直近に出した
+ * 記録もここで消える）。払いのけでは OS が既に通知を消しているため [AndroidNotificationPresenter.cancel] を
+ * 通さず、そのぶん [EXTRA_PAYLOAD_ID] を伴わない。直近に出した記録は、出してからの時間が過ぎれば効かなくなる。
  */
 class NotificationDismissReceiver : BroadcastReceiver() {
 

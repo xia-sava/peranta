@@ -18,6 +18,10 @@ internal fun Payload.fullTextAttachment(): AttachmentRef? =
 internal fun Payload.displayAttachments(): List<AttachmentRef> =
     attachmentsOf(this).filterNot { it.kind == AttachmentKind.TEXT }
 
+/** 通知・トーストに載せる本文画像（§4.3.1）。画像添付が無ければ null。 */
+internal fun Payload.notificationImage(): AttachmentRef? =
+    displayAttachments().firstOrNull { it.kind == AttachmentKind.IMAGE }
+
 /** payload に載っている送信者アイコン（§4.3.1）を返す。無ければ null。 */
 internal fun Payload.senderIcon(): AttachmentRef? = (this as? NotificationPayload)?.senderIcon
 

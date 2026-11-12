@@ -56,6 +56,7 @@ import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
 import to.sava.peranta.receive.publishingCommandAcknowledger
+import to.sava.peranta.receive.revisionRefreshFor
 import to.sava.peranta.send.CommandAckTracker
 import to.sava.peranta.send.CommandSender
 import to.sava.peranta.send.SendPipeline
@@ -82,7 +83,7 @@ import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.AttachmentDownloadState
 import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.FullTextUi
-import to.sava.peranta.ui.displayAttachments
+import to.sava.peranta.ui.notificationImage
 import to.sava.peranta.ui.referencedAttachments
 import to.sava.peranta.ui.senderIcon
 import to.sava.peranta.ui.MessageComposerUi
@@ -331,25 +332,34 @@ class DesktopReceiver(
     }
 
     /**
-     * 改版で差し替わった受信通知を表示へ反映する（§4.3.1）。後から届いた画像と送信者アイコンを取得し、
-     * まだ表示中のトーストへ差し込む。タイムラインのバブルは items の更新で自動的に追随する。
-     * 通知で知らせない設定のときはトーストが無いため何もしない。
+     * 改版で [previous] から [updated] へ差し替わった受信通知を表示へ反映する（§4.3.1）。
+     * 表示内容が変わったときは、まだ表示中のトーストを取得済みの画像を添えて差し替える。後から届いた
+     * 画像と送信者アイコンは取得し、まだ表示中のトーストへ差し込む。タイムラインのバブルは items の
+     * 更新で自動的に追随する。通知で知らせない設定のときはトーストが無いため何もしない。
      */
-    internal fun handleUpdated(item: TimelineItem) {
-        if (item !is ReceivedNotification) return
-        if (!config.notifiesOnReceive(item)) return
-        toastScope.launch { updateToastImages(item) }
+    internal fun handleUpdated(previous: TimelineItem, updated: TimelineItem) {
+        if (updated !is ReceivedNotification) return
+        if (!config.notifiesOnReceive(updated)) return
+        val refresh = revisionRefreshFor(previous, updated) ?: return
+        toastScope.launch {
+            if (refresh.redisplay) {
+                toastContentFor(updated)?.withCachedImages(updated)?.let { toaster.update(it) }
+            }
+            if (refresh.image != null || refresh.senderIcon != null) updateToastImages(updated)
+        }
     }
 
     /**
      * 通知に後から付いた画像・送信者アイコンを取得し、表示中のトーストへ差し込む（§4.3.1）。
      * どちらも取得できなければ何もしない。トーストが既に消えていれば [Toaster.update] が空振りする。
+     * 差し替える内容は、取得が終わった時点のタイムライン上のアイテムから組む。
      */
     private suspend fun updateToastImages(item: ReceivedNotification) {
-        val image = fetchThumbnail(item.payload.toastImage(), AutoFetchRole.DISPLAY_IMAGE)
+        val image = fetchThumbnail(item.payload.notificationImage(), AutoFetchRole.DISPLAY_IMAGE)
         val senderIcon = fetchThumbnail(item.payload.senderIcon(), AutoFetchRole.SENDER_ICON)
         if (image == null && senderIcon == null) return
-        toastContentFor(item)?.let { toaster.update(it.copy(image = image, senderIcon = senderIcon)) }
+        val current = currentNotification(item.id) ?: item
+        toastContentFor(current)?.let { toaster.update(it.copy(image = image, senderIcon = senderIcon)) }
     }
 
     /**
@@ -383,7 +393,7 @@ class DesktopReceiver(
 
     /** 取得済みのサムネイルだけを添える。初回表示を待たせないため、ここではダウンロードを起こさない。 */
     private fun ReceivedNotificationToast.withCachedImages(item: ReceivedNotification): ReceivedNotificationToast {
-        val image = item.payload.toastImage()?.let { attachmentStates.value[it.blobId]?.thumbnail }
+        val image = item.payload.notificationImage()?.let { attachmentStates.value[it.blobId]?.thumbnail }
         val senderIcon = item.payload.senderIcon()?.let { attachmentStates.value[it.blobId]?.thumbnail }
         return copy(image = image, senderIcon = senderIcon)
     }
@@ -777,7 +787,3 @@ class DesktopReceiver(
         const val TOAST_IMAGE_WAIT_MILLIS: Long = 10_000
     }
 }
-
-/** トーストへ差し込む本文画像の参照（§4.3.1）。画像添付が無ければ null。 */
-private fun Payload.toastImage(): AttachmentRef? =
-    displayAttachments().firstOrNull { it.kind == AttachmentKind.IMAGE }

@@ -81,4 +81,21 @@ class PayloadAttachmentsTest {
     fun returnsNullForUnknownBlob() {
         assertNull(findAttachmentRef(listOf(receivedFile("blob-a")), "blob-x"))
     }
+
+    /** 通知に載せる本文画像は、kind が IMAGE の先頭の添付になる。 */
+    @Test
+    fun notificationImageIsFirstImageKindAttachment() {
+        val payload = receivedNotification(
+            attachment("blob-file", AttachmentKind.FILE),
+            attachment("blob-image"),
+        ).payload
+        assertEquals("blob-image", payload.notificationImage()?.blobId)
+    }
+
+    /** MIME が画像でも kind が FILE の添付は、通知に載せる本文画像に選ばない。 */
+    @Test
+    fun notificationImageIgnoresFileKindEvenWithImageMime() {
+        val payload = receivedNotification(attachment("blob-file", AttachmentKind.FILE)).payload
+        assertNull(payload.notificationImage())
+    }
 }

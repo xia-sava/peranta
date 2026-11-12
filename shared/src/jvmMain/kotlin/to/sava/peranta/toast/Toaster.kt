@@ -72,7 +72,8 @@ interface Toaster {
     suspend fun close(id: String)
 
     /**
-     * 表示中のトーストの内容を [item] へ差し替える（後から届いた画像の差し込み、§4.3.1）。
+     * 表示中のトーストの内容を [item] へ差し替える（表示内容が変わった改版の反映や、後から届いた画像の
+     * 差し込み、§4.3.1）。
      * 同じ id のトーストが表示されていなければ何もしない。
      */
     suspend fun update(item: ReceivedNotificationToast)

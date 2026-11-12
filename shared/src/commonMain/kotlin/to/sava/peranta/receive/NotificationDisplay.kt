@@ -52,6 +52,11 @@ data class NotificationDisplay(
     val priority: Priority,
     /** 失効時刻。設定時は表示後にこの時刻で自動的に消せる（OTP の短寿命）。 */
     val expiresAtEpochMillis: Long?,
+    /**
+     * タイムラインのアイテムの時刻（受信したアイテムは受信時刻、エラーは記録した時刻）。
+     * OS 通知の時刻に当てる。改版で差し替わっても変わらないため、出し直しても同じ値になる（§4.3.1）。
+     */
+    val timestampEpochMillis: Long,
     /** 本文から抽出した先頭 URL。あれば「開く」アクションを追加する（§3.2）。 */
     val openUrl: String? = null,
     /** 発信元の表示名（§3.2）。タイトルだけでは何の通知か分からないため添える。 */
@@ -103,6 +108,7 @@ fun displayFor(item: ReceivedNotification): NotificationDisplay? =
             body = payload.text.ifBlank { BODY_FALLBACK },
             priority = payload.priority,
             expiresAtEpochMillis = payload.expiresAtEpochMillis,
+            timestampEpochMillis = item.timestampEpochMillis,
             openUrl = firstUrl("${payload.title} ${payload.text}"),
             source = sourceLabelFor(payload),
             notificationKey = payload.notificationKeyOrNull(),
@@ -116,6 +122,7 @@ fun displayFor(item: ReceivedNotification): NotificationDisplay? =
             body = payload.text.ifBlank { BODY_FALLBACK },
             priority = payload.priority,
             expiresAtEpochMillis = payload.expiresAtEpochMillis,
+            timestampEpochMillis = item.timestampEpochMillis,
             openUrl = firstUrl(payload.text),
             source = sourceLabelFor(payload),
             notificationKey = payload.notificationKeyOrNull(),
@@ -131,6 +138,7 @@ fun displayFor(item: ReceivedMessage): NotificationDisplay = NotificationDisplay
     body = item.payload.text.ifBlank { BODY_FALLBACK },
     priority = Priority.NORMAL,
     expiresAtEpochMillis = null,
+    timestampEpochMillis = item.timestampEpochMillis,
 )
 
 /**
@@ -148,6 +156,7 @@ fun displayFor(item: ReceivedFile): NotificationDisplay {
         body = listOfNotNull(files, item.payload.caption?.ifBlank { null }).joinToString("\n"),
         priority = item.payload.priority,
         expiresAtEpochMillis = item.payload.expiresAtEpochMillis,
+        timestampEpochMillis = item.timestampEpochMillis,
         source = sourceLabelFor(item.payload),
     )
 }
@@ -162,6 +171,7 @@ fun displayFor(item: ErrorItem): NotificationDisplay = NotificationDisplay(
     body = item.message.ifBlank { BODY_FALLBACK },
     priority = Priority.NORMAL,
     expiresAtEpochMillis = null,
+    timestampEpochMillis = item.timestampEpochMillis,
     isError = true,
 )
 

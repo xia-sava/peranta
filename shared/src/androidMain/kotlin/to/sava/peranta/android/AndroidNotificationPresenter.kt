@@ -12,6 +12,7 @@ import android.graphics.Bitmap
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import co.touchlab.kermit.Logger
 import to.sava.peranta.model.NotificationVisibility
 import to.sava.peranta.model.SwipeBehavior
@@ -22,9 +23,14 @@ import to.sava.peranta.receive.NotificationDisplay
 import to.sava.peranta.receive.NotificationIdAllocator
 import to.sava.peranta.receive.OPEN_URL_ACTION_LABEL
 import to.sava.peranta.receive.channelKindFor
-import to.sava.peranta.receive.displayFor
 import to.sava.peranta.shared.R
-import to.sava.peranta.timeline.ReceivedNotification
+
+/**
+ * プロセス内で共有する、直近に出したミラー通知の記録。presenter は呼び出しのたびに作られるため、
+ * 取り下げ（[AndroidNotificationPresenter.cancel]）と出し直し（[AndroidNotificationPresenter.refresh]）が
+ * 同じ記録を見るよう、インスタンスには持たない。
+ */
+private val sharedRecentMirrorPosts = RecentMirrorPosts(clock = SystemClock::elapsedRealtime)
 
 private val notificationIdAllocatorLock = Any()
 
@@ -48,6 +54,8 @@ private fun sharedNotificationIdAllocator(context: Context): NotificationIdAlloc
 /**
  * 受信通知・受信エラーを Android の [NotificationManager] で表示する（§3.2 / §10.1）。
  * 優先度別のチャネルを用意し、payload.id とローカル通知 ID の対応を保持する。
+ * この presenter が出す通知（ミラー通知とエラーの知らせ）にはすべて [MIRROR_NOTIFICATION_TAG] を付け、
+ * 取り下げと表示中の照会も同じ tag で行う。
  */
 class AndroidNotificationPresenter(
     private val context: Context,
@@ -59,39 +67,69 @@ class AndroidNotificationPresenter(
     private val manager: NotificationManager =
         context.getSystemService(NotificationManager::class.java)
 
+    private val recentPosts: RecentMirrorPosts = sharedRecentMirrorPosts
+
     init {
         createChannels()
     }
 
-    /** [display] を、種別と優先度に応じたチャネル（[channelKindFor]）で表示する。 */
+    /**
+     * [display] を、種別と優先度に応じたチャネル（[channelKindFor]）で表示する。
+     * 出したことを記録し、直後に届いた改版の出し直し（[refresh]）で表示中とみなせるようにする。
+     * 記録は出す前に付け、出せなかったら消す。出している最中に別のスレッドで取り下げ（[cancel]）が
+     * 走っても、取り下げたものの記録が後から残らないようにするため。
+     */
     fun show(display: NotificationDisplay) {
-        post(display)
+        val notificationId = idAllocator.idFor(display.id)
+        recentPosts.recordPosted(display.id)
+        if (!post(display, notificationId)) recentPosts.forget(display.id)
     }
 
     /**
-     * 表示済みの受信通知を、後から届いた画像・送信者アイコンを付けて出し直す（§4.3.1）。
-     * 同じ通知 ID へ [Notification.Builder.setOnlyAlertOnce] 付きで出すため、音も振動も鳴らない。
+     * 表示中の通知を、音も振動も無しに [display] の内容で出し直す（§4.3.1）。
+     * 表示中でなければ何もしない。払いのけた・タップした・取り下げた・失効した通知は戻さない。
+     * ただし出してから [RECENT_MIRROR_POST_WINDOW_MILLIS] の間は表示中とみなすため、その間に払いのけた・
+     * タップした通知は戻りうる。表示中かは [shouldRefreshMirrorNotification] で決め、通知 ID は新たに
+     * 割り当てずに引く。
+     * [image] は本文画像、[senderIcon] は送信者アイコンで、渡さなければ載せない。
      */
-    fun update(item: ReceivedNotification, image: Bitmap?, senderIcon: Bitmap?) {
-        val display = displayFor(item) ?: run {
-            log.d { "notification update skipped (not displayable) id=${item.id}" }
+    fun refresh(display: NotificationDisplay, image: Bitmap? = null, senderIcon: Bitmap? = null) {
+        val notificationId = idAllocator.existingIdFor(display.id) ?: run {
+            log.d { "notification refresh skipped (never shown) payload=${display.id}" }
             return
         }
-        post(display, image, senderIcon, silent = true)
+        val showing = shouldRefreshMirrorNotification(
+            notificationId = notificationId,
+            activeMirrorNotificationIds = activeMirrorNotificationIds(),
+            recentlyPosted = recentPosts.isRecentlyPosted(display.id),
+            expiresAtEpochMillis = display.expiresAtEpochMillis,
+            nowEpochMillis = now(),
+        )
+        if (!showing) {
+            log.d { "notification refresh skipped (not showing) id=$notificationId" }
+            return
+        }
+        post(display, notificationId, image, senderIcon, silent = true)
     }
 
+    /**
+     * [display] を通知 ID [notificationId] で出す。[silent] なら同じ ID の通知の差し替えで音も振動も
+     * 鳴らさない（[Notification.Builder.setOnlyAlertOnce]）。通知の時刻はアイテムの時刻に固定し、
+     * 出し直しで通知シェードの並びが動かないようにする。通知を出せたら true。
+     */
     private fun post(
         display: NotificationDisplay,
+        notificationId: Int,
         image: Bitmap? = null,
         senderIcon: Bitmap? = null,
         silent: Boolean = false,
-    ) {
+    ): Boolean {
         val channelId = channelIdFor(channelKindFor(display))
-        val notificationId = idAllocator.idFor(display.id)
         val notification = Notification.Builder(context, channelId)
             .setContentTitle(display.title)
             .setContentText(display.body)
             .setSubText(display.source)
+            .setWhen(display.timestampEpochMillis)
             .setStyle(styleFor(display, image))
             .setLargeIcon(senderIcon?.let { Icon.createWithBitmap(it) })
             .setOnlyAlertOnce(silent)
@@ -104,7 +142,7 @@ class AndroidNotificationPresenter(
             .applyDismissSourceAction(notificationId, display)
             .applyOpenUrlAction(display)
             .build()
-        notify(notificationId, notification)
+        return notify(notificationId, notification)
     }
 
     /**
@@ -138,14 +176,52 @@ class AndroidNotificationPresenter(
 
     /**
      * 表示済みの受信通知を取り下げる（既読同期、§3.4）。
-     * payload.id から割り当て済みローカル通知 ID を引いて [NotificationManager] から消す。
-     * 対応 ID が無い（未表示）場合も cancel は無害に空振りする。
+     * payload.id から割り当て済みローカル通知 ID を引いて [NotificationManager] から消し、直近に出した
+     * 記録（[RecentMirrorPosts]）も消す。通知 ID が割り当てられていなければ、表示していないので何もしない。
+     * 旧バージョンが tag を付けずに出した通知が同じ ID で残っていれば、それも取り下げる。
      */
     fun cancel(payloadId: String) {
-        val notificationId = idAllocator.idFor(payloadId)
-        manager.cancel(notificationId)
+        recentPosts.forget(payloadId)
+        val notificationId = idAllocator.existingIdFor(payloadId) ?: run {
+            log.d { "notification cancel skipped (never shown) payload=$payloadId" }
+            return
+        }
+        manager.cancel(MIRROR_NOTIFICATION_TAG, notificationId)
+        cancelUntaggedMirrorNotification(notificationId)
         log.i { "notification cancelled id=$notificationId" }
     }
+
+    /**
+     * 旧バージョンが tag を付けずに出した通知が [notificationId] で表示中なら取り下げる。
+     * 添付の転送と通知の再送の進行中に出す通知も固定の ID を tag を付けずに使うため、ID だけで取り下げずに
+     * この presenter のチャネルのものに限る（[isUntaggedMirrorNotification]）。
+     * 表示中の照会に失敗しても、呼び出し元の処理（tag 付きの取り下げに続く既読同期の送信など）は止めない。
+     */
+    private fun cancelUntaggedMirrorNotification(notificationId: Int) {
+        val shown = try {
+            manager.activeNotifications.any {
+                isUntaggedMirrorNotification(
+                    tag = it.tag,
+                    id = it.id,
+                    channelId = it.notification.channelId,
+                    notificationId = notificationId,
+                    mirrorChannelIds = MIRROR_CHANNEL_IDS,
+                )
+            }
+        } catch (error: Exception) {
+            log.w { "active notification lookup failed id=$notificationId (${error::class.simpleName})" }
+            return
+        }
+        if (!shown) return
+        manager.cancel(notificationId)
+        log.i { "untagged notification cancelled id=$notificationId" }
+    }
+
+    /** OS が表示中として返す一覧のうち、[MIRROR_NOTIFICATION_TAG] が付いたものの通知 ID。 */
+    private fun activeMirrorNotificationIds(): Set<Int> =
+        manager.activeNotifications
+            .filter { it.tag == MIRROR_NOTIFICATION_TAG }
+            .mapTo(HashSet()) { it.id }
 
     /**
      * タップでアプリ本体を開き、タイムラインの [itemId] アイテムまでスクロールさせる PendingIntent を
@@ -238,13 +314,15 @@ class AndroidNotificationPresenter(
         return addAction(Notification.Action.Builder(icon, OPEN_URL_ACTION_LABEL, pendingIntent).build())
     }
 
-    private fun notify(notificationId: Int, notification: Notification) {
+    /** [notification] を [MIRROR_NOTIFICATION_TAG] 付きで出す。通知の権限が無く出せなければ false。 */
+    private fun notify(notificationId: Int, notification: Notification): Boolean {
         if (!isPostNotificationsGranted()) {
             log.w { "POST_NOTIFICATIONS not granted; notification id=$notificationId not shown" }
-            return
+            return false
         }
-        manager.notify(notificationId, notification)
+        manager.notify(MIRROR_NOTIFICATION_TAG, notificationId, notification)
         log.i { "notification shown id=$notificationId" }
+        return true
     }
 
     private fun isPostNotificationsGranted(): Boolean {
@@ -274,6 +352,9 @@ class AndroidNotificationPresenter(
         private const val CHANNEL_NORMAL = "peranta-normal"
         private const val CHANNEL_LOW = "peranta-low"
         private const val CHANNEL_ERROR = "peranta-error"
+
+        /** この presenter が通知を出すチャネル。tag の無い通知が旧バージョンの出したものかを見分けるのに使う。 */
+        private val MIRROR_CHANNEL_IDS = setOf(CHANNEL_HIGH, CHANNEL_NORMAL, CHANNEL_LOW, CHANNEL_ERROR)
 
         /** 発信元が判らない通知をロック画面で伏せるときの代替の件名。 */
         private const val REDACTED_TITLE = "通知が届いています"

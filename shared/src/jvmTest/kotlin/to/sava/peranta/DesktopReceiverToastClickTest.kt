@@ -31,21 +31,25 @@ import kotlin.test.assertTrue
 /**
  * 受信ファイル・受信メッセージ・エラーのトーストクリックが前面化＋スクロール（onToastClicked）へ
  * 配線されていることを検証する（§3.3）。「消す」ボタン押下（ButtonDismiss）は何もしないことも確認する。
+ * あわせて、改版による表示中のトーストの差し替え（§4.3.1）への配線も確かめる。
  */
 class DesktopReceiverToastClickTest {
 
-    /** [result] を即答するフェイク。表示内容は [shown] に記録する。 */
+    /** [result] を即答するフェイク。表示内容は [shown] に、差し替えたトーストの id は [updatedIds] に記録する。 */
     private class FixedResultToaster(private val result: ToastResult) : Toaster {
         @Volatile
         var shown: ReceivedNotificationToast? = null
         val shownIds = ConcurrentLinkedQueue<String>()
+        val updatedIds = ConcurrentLinkedQueue<String>()
         override suspend fun show(item: ReceivedNotificationToast): ToastResult {
             shown = item
             shownIds.add(item.id)
             return result
         }
         override suspend fun close(id: String) = Unit
-        override suspend fun update(item: ReceivedNotificationToast) = Unit
+        override suspend fun update(item: ReceivedNotificationToast) {
+            updatedIds.add(item.id)
+        }
     }
 
     private fun testConfig(): PerantaConfig = PerantaConfig(
@@ -230,6 +234,52 @@ class DesktopReceiverToastClickTest {
             )
             awaitShownThenSettle(toaster)
             assertEquals(listOf("err-1"), toaster.shownIds.toList())
+        } finally {
+            runBlocking { receiver.close() }
+        }
+    }
+
+    /** 表示内容が変わった改版は、表示中のトーストの差し替え（[Toaster.update]）へ回る（§3.3 / §4.3.1）。 */
+    @Test
+    fun displayChangingRevisionUpdatesToast() {
+        val toaster = FixedResultToaster(ToastResult.Clicked)
+        val receiver = receiver(toaster, ConcurrentLinkedQueue())
+        try {
+            val previous = ReceivedNotification(
+                id = replyNotification.id,
+                timestampEpochMillis = 1000L,
+                payload = replyNotification,
+            )
+            receiver.handleUpdated(previous, previous.copy(payload = replyNotification.copy(text = "おやすみ", revision = 1)))
+            runBlocking {
+                withTimeout(5_000) {
+                    while (toaster.updatedIds.isEmpty()) delay(20)
+                }
+            }
+            assertEquals(listOf("notif-1"), toaster.updatedIds.toList())
+        } finally {
+            runBlocking { receiver.close() }
+        }
+    }
+
+    /** 元通知が既に消えている受信通知の改版では、トーストを差し替えない（§3.3）。 */
+    @Test
+    fun sourceDismissedRevisionDoesNotUpdateToast() {
+        val toaster = FixedResultToaster(ToastResult.Clicked)
+        val receiver = receiver(toaster, ConcurrentLinkedQueue())
+        try {
+            val previous = ReceivedNotification(
+                id = replyNotification.id,
+                timestampEpochMillis = 1000L,
+                payload = replyNotification,
+                sourceDismissed = true,
+            )
+            receiver.handleUpdated(previous, previous.copy(payload = replyNotification.copy(text = "おやすみ", revision = 1)))
+            receiver.handleAppended(
+                ErrorItem(id = "err-1", timestampEpochMillis = 1000L, message = "boom", kind = ErrorKind.OTHER),
+            )
+            awaitShownThenSettle(toaster)
+            assertTrue(toaster.updatedIds.isEmpty())
         } finally {
             runBlocking { receiver.close() }
         }

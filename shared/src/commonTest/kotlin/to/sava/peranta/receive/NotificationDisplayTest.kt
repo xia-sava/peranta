@@ -430,6 +430,15 @@ class NotificationDisplayTest {
         assertFalse(displayFor(file("photo.jpg")).isError)
     }
 
+    /** 表示内容の時刻は、種別に依らずタイムラインのアイテムの時刻（OS 通知の時刻に当てる）になる。 */
+    @Test
+    fun displayCarriesItemTimestamp() {
+        assertEquals(1_000L, displayFor(received(notification()))!!.timestampEpochMillis)
+        assertEquals(1_000L, displayFor(message()).timestampEpochMillis)
+        assertEquals(1_000L, displayFor(file("photo.jpg")).timestampEpochMillis)
+        assertEquals(1_000L, displayFor(error()).timestampEpochMillis)
+    }
+
     /** 通知・メッセージ・ファイル・エラーは、種別ごとの [displayFor] と同じ表示内容になる。 */
     @Test
     fun notificationDisplayForDispatchesByItemType() {

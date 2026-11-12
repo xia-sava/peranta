@@ -4,6 +4,7 @@ import com.russhwolf.settings.MapSettings
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 
 class NotificationIdAllocatorTest {
 
@@ -64,5 +65,28 @@ class NotificationIdAllocatorTest {
         assertEquals(2, allocator.idFor("b"))
         assertEquals(3, allocator.idFor("c"))
         assertNotEquals(1, allocator.idFor("a"))
+    }
+
+    /** 割り当て済みの payload.id には、[NotificationIdAllocator.idFor] と同じ通知 ID を返す。 */
+    @Test
+    fun existingIdForReturnsAssignedId() {
+        val allocator = NotificationIdAllocator(MapSettings())
+        val assigned = allocator.idFor("shown")
+        assertEquals(assigned, allocator.existingIdFor("shown"))
+    }
+
+    /** 未知の payload.id には null を返す。 */
+    @Test
+    fun existingIdForUnknownPayloadIsNull() {
+        val allocator = NotificationIdAllocator(MapSettings())
+        assertNull(allocator.existingIdFor("unknown"))
+    }
+
+    /** 未知の payload.id を引いても連番を消費しない（次の割り当ては 1 番のまま）。 */
+    @Test
+    fun existingIdForDoesNotConsumeSequence() {
+        val allocator = NotificationIdAllocator(MapSettings())
+        allocator.existingIdFor("unknown")
+        assertEquals(NotificationIdAllocator.FIRST_ID, allocator.idFor("first"))
     }
 }

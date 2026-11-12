@@ -6,8 +6,7 @@ import com.russhwolf.settings.Settings
  * payload.id とローカル通知 ID（Int）の対応表（§3.4）。
  * 既読同期で他端末から消された通知を OS 通知としても取り下げられるよう、
  * 同じ payload.id には常に同じ通知 ID を割り当てて永続化する。
- * コマンド受信の配線は M8 だが、対応表の土台をここで用意する。
- * 複数スレッドから呼ばれても対応表が壊れないよう [idFor] は排他制御する。
+ * 複数スレッドから呼ばれても対応表が壊れないよう [idFor] と [existingIdFor] は排他制御する。
  * プロセス内では単一インスタンスを共有して通知 ID の衝突を避ける。
  */
 class NotificationIdAllocator(
@@ -28,6 +27,10 @@ class NotificationIdAllocator(
         pruneToCapacity()
         return assigned
     }
+
+    /** [payloadId] に割り当て済みの通知 ID。未割り当てなら null（新たに割り当てない）。 */
+    @Synchronized
+    fun existingIdFor(payloadId: String): Int? = settings.getIntOrNull(keyFor(payloadId))
 
     /** 対応表が [capacity] を超えたら、割り当て番号が小さい（＝古い）ものから FIFO で取り除く。 */
     private fun pruneToCapacity() {

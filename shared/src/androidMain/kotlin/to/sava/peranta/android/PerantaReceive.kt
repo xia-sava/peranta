@@ -12,11 +12,9 @@ import kotlinx.coroutines.sync.withLock
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.PipelineKey
 import to.sava.peranta.blob.AutoFetchRole
-import to.sava.peranta.blob.attachmentKindForMimeType
 import to.sava.peranta.config.messageCipher
 import to.sava.peranta.config.notifiesOnReceive
 import to.sava.peranta.config.toPipelineKey
-import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
@@ -25,9 +23,12 @@ import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
+import to.sava.peranta.receive.RevisionRefresh
 import to.sava.peranta.receive.RoutingCommandExecutor
+import to.sava.peranta.receive.isRevisionImagesCurrent
 import to.sava.peranta.receive.notificationDisplayFor
 import to.sava.peranta.receive.publishingCommandAcknowledger
+import to.sava.peranta.receive.revisionRefreshFor
 import to.sava.peranta.roster.RosterFetchResult
 import to.sava.peranta.roster.RosterStore
 import to.sava.peranta.send.CommandAckTracker
@@ -39,7 +40,7 @@ import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.TimelineActions
-import to.sava.peranta.ui.displayAttachments
+import to.sava.peranta.ui.notificationImage
 import to.sava.peranta.ui.senderIcon
 import to.sava.peranta.ui.shell.RosterUi
 
@@ -170,7 +171,7 @@ object PerantaReceive {
             commandExecutor = commandExecutor,
             persistSensitiveHistory = config.persistSensitiveHistory,
             onItemAppended = { item -> onAppended(appContext, presenter, item) },
-            onItemUpdated = { item -> onUpdated(appContext, presenter, item) },
+            onItemUpdated = { previous, updated -> onUpdated(appContext, presenter, previous, updated) },
             commandAcknowledger = publishingCommandAcknowledger(cipher, KtorNtfyClient(config, httpClient)),
             onCommandAck = { ack -> ackTracker(appContext).onAck(ack) },
         )
@@ -190,27 +191,90 @@ object PerantaReceive {
     }
 
     /**
-     * 改版で差し替わった受信通知を表示へ反映する（§4.3.1）。後から届いた画像と送信者アイコンを取得し、
-     * 表示済みの通知を音を鳴らさずに出し直す。本文画像は自動表示が OFF なら取得しない。
-     * 通知で知らせない設定のときは出し直さない。
+     * 改版で [previous] から [updated] へ差し替わった受信通知を表示へ反映する（§4.3.1）。
+     * 表示中のミラー通知だけを、音を鳴らさずに出し直す（[AndroidNotificationPresenter.refresh]）。
+     * 通知で知らせない設定のときは何もしない。
+     *
+     * 表示内容が変わったときは、この呼び出しの中で出し直す。UnifiedPush に起こされた受信枠（§3.2）の中で
+     * 済ませるためで、載せ済みの画像・送信者アイコンは取得済みのものだけを通信せずに引き継ぐ。
+     * この出し直しに失敗しても、後から届いた画像の取得は続ける。
+     * 後から届いた画像と送信者アイコンは裏で取得する（[refreshWithFetchedImages]）。
      */
-    private fun onUpdated(context: Context, presenter: AndroidNotificationPresenter, item: TimelineItem) {
+    private fun onUpdated(
+        context: Context,
+        presenter: AndroidNotificationPresenter,
+        previous: TimelineItem,
+        updated: TimelineItem,
+    ) {
+        val config = androidConfigRepository(context).load()
+        if (!config.notifiesOnReceive(updated)) return
+        val refresh = revisionRefreshFor(previous, updated) ?: return
+        if (refresh.redisplay) redisplayWithCachedImages(context, config, presenter, updated)
+        if (refresh.image == null && refresh.senderIcon == null) return
+        commandScope.launch { refreshWithFetchedImages(context, presenter, updated.id, refresh) }
+    }
+
+    /**
+     * [item] の内容で表示中のミラー通知を出し直す。画像・送信者アイコンは取得済みのものだけを載せる。
+     * 失敗してもログに残すだけにし、呼び出し元の処理を止めない。
+     */
+    private fun redisplayWithCachedImages(
+        context: Context,
+        config: PerantaConfig,
+        presenter: AndroidNotificationPresenter,
+        item: TimelineItem,
+    ) {
         if (item !is ReceivedNotification) return
-        if (!androidConfigRepository(context).load().notifiesOnReceive(item)) return
-        val imageRef = item.payload.displayAttachments()
-            .firstOrNull { attachmentKindForMimeType(it.mimeType) == AttachmentKind.IMAGE }
-        val senderIconRef = item.payload.senderIcon()
-        if (imageRef == null && senderIconRef == null) return
-        commandScope.launch {
-            val config = androidConfigRepository(context).load()
-            val image = imageRef
-                ?.let { AndroidAttachmentReceive.notificationImage(context, config, it, AutoFetchRole.DISPLAY_IMAGE) }
-            val senderIcon = senderIconRef
-                ?.let { AndroidAttachmentReceive.notificationImage(context, config, it, AutoFetchRole.SENDER_ICON) }
-            if (image == null && senderIcon == null) return@launch
-            presenter.update(item, image, senderIcon)
+        try {
+            val display = notificationDisplayFor(item) ?: return
+            val image = item.payload.notificationImage()
+                ?.let { AndroidAttachmentReceive.cachedNotificationImage(context, config, it) }
+            val senderIcon = item.payload.senderIcon()
+                ?.let { AndroidAttachmentReceive.cachedNotificationImage(context, config, it) }
+            presenter.refresh(display, image, senderIcon)
+        } catch (error: Exception) {
+            log.w { "failed to redisplay revised notification (${error::class.simpleName})" }
         }
     }
+
+    /**
+     * 改版で載った画像・送信者アイコン（[refresh]）を取得し、表示中のミラー通知へ差し込む（§4.3.1）。
+     * 本文画像は自動表示が OFF なら取得しない。取得が終わった時点のタイムラインのアイテムで組み、
+     * その間にさらに改版が届いて載せるべきものが変わっていたら何もしない（古い改版の結果で上書きしない）。
+     */
+    private suspend fun refreshWithFetchedImages(
+        context: Context,
+        presenter: AndroidNotificationPresenter,
+        itemId: String,
+        refresh: RevisionRefresh,
+    ) {
+        try {
+            val config = androidConfigRepository(context).load()
+            val image = refresh.image
+                ?.let { AndroidAttachmentReceive.notificationImage(context, config, it, AutoFetchRole.DISPLAY_IMAGE) }
+            val senderIcon = refresh.senderIcon
+                ?.let { AndroidAttachmentReceive.notificationImage(context, config, it, AutoFetchRole.SENDER_ICON) }
+            if (image == null && senderIcon == null) return
+            val current = currentNotification(itemId) ?: return
+            if (!isRevisionImagesCurrent(refresh, current)) {
+                log.d { "notification image refresh skipped (superseded) id=$itemId" }
+                return
+            }
+            val display = notificationDisplayFor(current) ?: return
+            presenter.refresh(display, image, senderIcon)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§11）。
+            log.w { "failed to refresh notification images (${error::class.simpleName})" }
+        }
+    }
+
+    /** タイムラインに載っている [itemId] の受信通知。無ければ null。 */
+    private fun currentNotification(itemId: String): ReceivedNotification? =
+        PerantaSend.timelineFeed.items.value.asSequence()
+            .filterIsInstance<ReceivedNotification>()
+            .firstOrNull { it.id == itemId }
 
     private fun eventFor(rawMessage: String): NtfyEvent = NtfyEvent(
         id = "",

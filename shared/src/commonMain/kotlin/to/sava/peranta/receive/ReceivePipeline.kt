@@ -96,10 +96,11 @@ class ReceivePipeline(
     private val now: () -> Long = ::nowEpochMillis,
     private val onItemAppended: (TimelineItem) -> Unit = {},
     /**
-     * 既存アイテムが改版で差し替わったときに呼ぶ（§4.3.1）。表示中のトーストへの画像の差し込みや、
-     * OS 通知の出し直しに使う。新規追記（[onItemAppended]）とは排他で、既読同期による再記録では呼ばない。
+     * 既存アイテムが改版で差し替わったときに、差し替え前（[previous]）と差し替え後（[updated]）を渡して呼ぶ
+     * （§4.3.1）。表示中のトーストの差し替えや、表示中の OS 通知の出し直しに使う。新規追記
+     * （[onItemAppended]）とは排他で、既読同期による再記録では呼ばない。
      */
-    private val onItemUpdated: (TimelineItem) -> Unit = {},
+    private val onItemUpdated: (previous: TimelineItem, updated: TimelineItem) -> Unit = { _, _ -> },
     /** Envelope 解釈の前に生メッセージを検査し、true なら破棄する（自己疎通テストのマーカー等）。 */
     private val interceptRawMessage: (rawMessage: String) -> Boolean = { false },
     /** 応答を求められたコマンド（§3.4）へ応答を返す口。null の端末は応答しない。 */
@@ -465,7 +466,7 @@ class ReceivePipeline(
         record(
             displayItem = displayItem,
             persistItem = persistItemFor(displayItem, payload),
-            updated = revised != null,
+            replaced = revised,
         )
         val outcome = if (revised != null) "revised" else "appended"
         log.i { "notification $outcome id=${payload.id} revision=${revisionOf(payload)}" }
@@ -572,17 +573,17 @@ class ReceivePipeline(
      * 永続失敗の握り潰しとログ化は [feed] の契約（[TimelineFeed.record]）に委ねる。
      * [onItemAppended] は新規追記のときだけ呼ぶ。同一 id の置換（[markSourceDismissed] 等による
      * 再記録）では呼ばないため、既存アイテムの再表示（トースト・ミラー通知の再発火）は起きない。
-     * [updated] を立てた置換（改版の反映、§4.3.1）だけは [onItemUpdated] で表示の更新を促す。
+     * 差し替え前の [replaced] を渡した置換（改版の反映、§4.3.1）だけは [onItemUpdated] で表示の更新を促す。
      */
     private suspend fun record(
         displayItem: TimelineItem,
         persistItem: TimelineItem = displayItem,
-        updated: Boolean = false,
+        replaced: TimelineItem? = null,
     ) {
         val appended = feed.record(displayItem, persistItem)
         when {
             appended -> onItemAppended(displayItem)
-            updated -> onItemUpdated(displayItem)
+            replaced != null -> onItemUpdated(replaced, displayItem)
         }
     }
 }

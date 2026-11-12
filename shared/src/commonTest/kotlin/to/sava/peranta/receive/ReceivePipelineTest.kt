@@ -40,6 +40,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
+/** 呼ぶたびに進む時計の 1 回あたりの進み幅。 */
+private const val ADVANCING_CLOCK_STEP_MILLIS = 1_000L
+
 class ReceivePipelineTest {
 
     private val now = 10_000L
@@ -346,7 +349,7 @@ class ReceivePipelineTest {
         val p = ReceivePipeline(
             FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName, now = { now },
             onItemAppended = { appended.add(it) },
-            onItemUpdated = { updated.add(it) },
+            onItemUpdated = { _, item -> updated.add(item) },
         )
         p.handleEvent(eventFor(notification()))
         p.handleEvent(eventFor(revisedNotification()))
@@ -358,13 +361,68 @@ class ReceivePipelineTest {
         assertEquals(1, updated.size)
     }
 
+    /** onItemUpdated には差し替え前のアイテム（改版前の payload）が渡る。 */
+    @Test
+    fun revisionPassesPreviousItemToOnItemUpdated() = runTest {
+        val previousItems = mutableListOf<TimelineItem>()
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName, now = { now },
+            onItemUpdated = { previous, _ -> previousItems.add(previous) },
+        )
+        p.handleEvent(eventFor(notification()))
+        p.handleEvent(eventFor(revisedNotification()))
+
+        val previous = previousItems.single() as ReceivedNotification
+        assertEquals(emptyList(), (previous.payload as NotificationPayload).attachments)
+    }
+
+    /**
+     * 呼ぶたびに進む時計で、初回配送と改版が別の時刻に届いても、差し替え後のアイテムは初回配送の
+     * 受信時刻を保つ（通知の時刻を出し直しで動かさない前提、§4.3.1）。
+     */
+    @Test
+    fun revisionKeepsFirstDeliveryTimestampWithAdvancingClock() = runTest {
+        var clock = now
+        val updatedItems = mutableListOf<TimelineItem>()
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName,
+            now = { clock.also { clock += ADVANCING_CLOCK_STEP_MILLIS } },
+            onItemUpdated = { _, item -> updatedItems.add(item) },
+        )
+        p.handleEvent(eventFor(notification()))
+        val firstDeliveryTimestamp = p.items.value.single().timestampEpochMillis
+        p.handleEvent(eventFor(revisedNotification()))
+
+        assertEquals(firstDeliveryTimestamp, updatedItems.single().timestampEpochMillis)
+    }
+
+    /**
+     * 呼ぶたびに進む時計で初回配送と改版が別の時刻に届いても、画像だけの改版は表示内容を変えず、
+     * 出し直しを指示しない（§4.3.1）。
+     */
+    @Test
+    fun imageOnlyRevisionDoesNotRedisplayWithAdvancingClock() = runTest {
+        var clock = now
+        val replaced = mutableListOf<Pair<TimelineItem, TimelineItem>>()
+        val p = ReceivePipeline(
+            FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName,
+            now = { clock.also { clock += ADVANCING_CLOCK_STEP_MILLIS } },
+            onItemUpdated = { previous, item -> replaced.add(previous to item) },
+        )
+        p.handleEvent(eventFor(notification()))
+        p.handleEvent(eventFor(revisedNotification()))
+
+        val (previous, updated) = replaced.single()
+        assertEquals(false, revisionRefreshFor(previous, updated)?.redisplay)
+    }
+
     /** 送信者アイコンだけの改版でも既存アイテムを差し替える（本文画像の無い通知でもアイコンは届く）。 */
     @Test
     fun revisionWithSenderIconOnlyReplacesExistingItem() = runTest {
         val updated = mutableListOf<TimelineItem>()
         val p = ReceivePipeline(
             FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName, now = { now },
-            onItemUpdated = { updated.add(it) },
+            onItemUpdated = { _, item -> updated.add(item) },
         )
         val senderIcon = revisedNotification().attachments.single().copy(blobId = "blob-icon")
         p.handleEvent(eventFor(notification()))
@@ -381,7 +439,7 @@ class ReceivePipelineTest {
         val updated = mutableListOf<TimelineItem>()
         val p = ReceivePipeline(
             FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName, now = { now },
-            onItemUpdated = { updated.add(it) },
+            onItemUpdated = { _, item -> updated.add(item) },
         )
         p.handleEvent(eventFor(sms()))
         p.handleEvent(eventFor(sms(notificationKey = smsNotificationKey, revision = 1)))
@@ -439,7 +497,7 @@ class ReceivePipelineTest {
         val updated = mutableListOf<TimelineItem>()
         val p = ReceivePipeline(
             FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName, now = { now },
-            onItemUpdated = { updated.add(it) },
+            onItemUpdated = { _, item -> updated.add(item) },
         )
         p.handleEvent(eventFor(notification()))
         p.handleEvent(eventFor(revisedNotification()))
@@ -459,7 +517,7 @@ class ReceivePipelineTest {
         val p = ReceivePipeline(
             FakeNtfyClient(), cipher, TimelineFeed(store()), deviceName, now = { now },
             onItemAppended = { appended.add(it) },
-            onItemUpdated = { updated.add(it) },
+            onItemUpdated = { _, item -> updated.add(item) },
         )
         p.handleEvent(eventFor(revisedNotification()))
 
@@ -493,7 +551,7 @@ class ReceivePipelineTest {
         val updated = mutableListOf<TimelineItem>()
         val restarted = ReceivePipeline(
             FakeNtfyClient(), cipher, TimelineFeed(store), deviceName, now = { now },
-            onItemUpdated = { updated.add(it) },
+            onItemUpdated = { _, item -> updated.add(item) },
         )
         restarted.loadHistory()
         restarted.handleEvent(eventFor(revisedNotification()))

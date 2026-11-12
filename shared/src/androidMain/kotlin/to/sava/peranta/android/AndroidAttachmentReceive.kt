@@ -191,6 +191,17 @@ object AndroidAttachmentReceive {
     }
 
     /**
+     * 取得済みの [ref] を、OS 通知に載せられる [Bitmap] にして返す（§4.3.1）。通信はしない。
+     * 表示中の通知を出し直すとき、既に載せていた画像・送信者アイコンを引き継ぐのに使う。
+     * キャッシュに無い・設定不足・デコード失敗では null。
+     */
+    fun cachedNotificationImage(context: Context, config: PerantaConfig, ref: AttachmentRef): Bitmap? {
+        if (!config.hasSharedKey) return null
+        val file = cache(context, config).cachedFile(ref) ?: return null
+        return decodeSampled(file, notificationImageTargetPixels())
+    }
+
+    /**
      * 画像添付を復号済みファイルからデコードしてサムネイルにする。失敗時は null（種別アイコンにフォールバック）。
      * まず [BitmapFactory.Options.inJustDecodeBounds] で寸法だけ読み、表示サイズに収まる [inSampleSize] を
      * 掛けて縮小デコードする。フルサイズのビットマップを [states] に抱え続けて OOM するのを避ける。
