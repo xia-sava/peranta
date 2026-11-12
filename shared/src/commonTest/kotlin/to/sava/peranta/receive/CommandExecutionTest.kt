@@ -17,6 +17,7 @@ import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.FakeTimelineFile
 import to.sava.peranta.timeline.JsonlTimelineStore
+import to.sava.peranta.send.CommandDelivery
 import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.TimelineStore
 import kotlin.test.Test
@@ -120,11 +121,12 @@ class CommandExecutionTest {
         id: String = "cmd1",
         ackTopic: String? = null,
         ackBy: String? = null,
+        sentAt: Long = now - 100,
     ): CommandPayload = CommandPayload(
         id = id,
         from = "desk",
         to = to,
-        sentAtEpochMillis = now - 100,
+        sentAtEpochMillis = sentAt,
         command = command,
         appRule = appRule,
         targetNotificationKey = targetNotificationKey,
@@ -215,6 +217,24 @@ class CommandExecutionTest {
         pipeline(executor, store).handleEvent(eventFor(command(CommandType.DISMISS, expiresAt = now - 1)))
         assertTrue(executor.calls.isEmpty())
         assertTrue(store.loadAll().isEmpty())
+    }
+
+    /** 失効時刻を持たない即時操作は、送信から即時操作の猶予を過ぎていれば実行されない。 */
+    @Test
+    fun staleImmediateCommandWithoutExpiryIsNotExecuted() = runTest {
+        val executor = FakeCommandExecutor()
+        val stale = now - CommandDelivery.IMMEDIATE.ttlMillis - 1
+        pipeline(executor).handleEvent(eventFor(command(CommandType.INVOKE_ACTION, expiresAt = null, sentAt = stale)))
+        assertTrue(executor.calls.isEmpty())
+    }
+
+    /** 失効時刻を持たない状態同期は、送信から時間が経っていても実行される。 */
+    @Test
+    fun staleStateSyncCommandWithoutExpiryIsExecuted() = runTest {
+        val executor = FakeCommandExecutor()
+        val stale = now - CommandDelivery.IMMEDIATE.ttlMillis - 1
+        pipeline(executor).handleEvent(eventFor(command(CommandType.DISMISS, expiresAt = null, sentAt = stale)))
+        assertEquals(listOf("dismiss"), executor.calls)
     }
 
     /** 自分宛でないコマンドは実行されない。 */

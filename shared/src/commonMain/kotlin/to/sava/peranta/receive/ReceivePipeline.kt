@@ -37,6 +37,8 @@ import to.sava.peranta.net.NtfyEvent
 import to.sava.peranta.platform.failureForLog
 import to.sava.peranta.platform.topicForLog
 import to.sava.peranta.send.COMMAND_ACK_TIMEOUT_MILLIS
+import to.sava.peranta.send.CommandDelivery
+import to.sava.peranta.send.deliveryOf
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.ErrorSuppressor
@@ -425,10 +427,19 @@ class ReceivePipeline(
         is NotificationPayload -> payload.expiresAtEpochMillis
         is SmsPayload -> payload.expiresAtEpochMillis
         is FilePayload -> payload.expiresAtEpochMillis
-        is CommandPayload -> payload.expiresAtEpochMillis
+        is CommandPayload -> payload.expiresAtEpochMillis ?: fallbackExpiryOf(payload)
         is CommandAckPayload -> payload.expiresAtEpochMillis
         else -> null
     }
+
+    /**
+     * 失効時刻を持たないコマンドの失効時刻（§3.4）。即時操作は遅れて実行されると誤爆するため、
+     * 送信時刻から即時操作の猶予で失効させる。状態同期は遅れて届いても結果が変わらないので失効させない。
+     */
+    private fun fallbackExpiryOf(payload: CommandPayload): Long? =
+        deliveryOf(payload.command)
+            .takeIf { it == CommandDelivery.IMMEDIATE }
+            ?.let { payload.sentAtEpochMillis + it.ttlMillis }
 
     /** [id] を記憶し、初出なら true・既知なら false を返す。上限超過分は FIFO で淘汰する。 */
     private fun rememberId(id: String): Boolean {
