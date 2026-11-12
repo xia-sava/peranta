@@ -4,6 +4,7 @@ import co.touchlab.kermit.LogWriter
 import co.touchlab.kermit.Severity
 import co.touchlab.kermit.platformLogWriter
 import java.io.File
+import java.io.IOException
 import java.time.Instant
 
 /** ローテーションの閾値（バイト）。 */
@@ -45,9 +46,14 @@ private class FileLogWriter(private val file: File) : LogWriter() {
             append('\n')
         }
         synchronized(lock) {
-            rotateIfNeeded()
-            file.parentFile?.mkdirs()
-            file.appendText(line)
+            try {
+                rotateIfNeeded()
+                file.parentFile?.mkdirs()
+                file.appendText(line)
+            } catch (_: IOException) {
+                // kermit は LogWriter の例外を捕まえないため、ログの書き込み失敗を呼び出し側へ伝えない。
+                // 失敗の記録先もこのログなので、書けなかった行は捨てる。
+            }
         }
     }
 
