@@ -458,7 +458,7 @@ fun main(args: Array<String>) {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§16）。
+                    // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
                     log.e { "receiver stopped with error (${e::class.simpleName})" }
                     errorMessage = "受信中にエラーが発生しました。設定を確認してください。"
                 } finally {

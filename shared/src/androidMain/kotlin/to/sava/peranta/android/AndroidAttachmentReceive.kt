@@ -181,7 +181,7 @@ object AndroidAttachmentReceive {
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
-                // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§16）。
+                // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§11）。
                 log.w { "notification image fetch failed blobId=${ref.blobId} (${error::class.simpleName})" }
                 return null
             }
@@ -278,7 +278,7 @@ object AndroidAttachmentReceive {
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§16）。
+            // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§11）。
             log.w { "full text fetch failed blobId=${ref.blobId} (${error::class.simpleName})" }
             null
         }

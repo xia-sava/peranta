@@ -100,7 +100,7 @@ class AttachmentTransferService : Service() {
             } catch (cancellation: CancellationException) {
                 log.i { "upload job cancelled transferId=$transferId" }
             } catch (error: Exception) {
-                // 例外そのものは流さない。ktor の例外メッセージには blob の送り先 URL（＝ホスト）が載る（§16）。
+                // 例外そのものは流さない。ktor の例外メッセージには blob の送り先 URL（＝ホスト）が載る（§11）。
                 log.w { "attachment upload failed transferId=$transferId (${error::class.simpleName})" }
                 recordError(UPLOAD_FAILED_MESSAGE)
             } finally {
@@ -116,7 +116,7 @@ class AttachmentTransferService : Service() {
             try {
                 decodeAttachmentRef(it)
             } catch (error: Exception) {
-                // 例外そのものは流さない。復号の例外は入力そのもの（blob の URL を含む）を説明文へ載せる（§16）。
+                // 例外そのものは流さない。復号の例外は入力そのもの（blob の URL を含む）を説明文へ載せる（§11）。
                 log.w { "failed to decode attachment ref for download (${error::class.simpleName})" }
                 null
             }
@@ -141,7 +141,7 @@ class AttachmentTransferService : Service() {
                 log.i { "download job cancelled blobId=${ref.blobId}" }
                 AndroidAttachmentReceive.markCancelled(ref.blobId)
             } catch (error: Exception) {
-                // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§16）。
+                // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§11）。
                 log.w { "attachment download failed blobId=${ref.blobId} (${error::class.simpleName})" }
                 AndroidAttachmentReceive.markFailed(ref.blobId, ref.sizeBytes)
                 recordError(DOWNLOAD_FAILED_MESSAGE)
