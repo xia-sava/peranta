@@ -2,89 +2,110 @@ package to.sava.peranta.android
 
 import android.content.Context
 import co.touchlab.kermit.Logger
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.messageCipher
-import to.sava.peranta.model.nowEpochMillis
+import to.sava.peranta.model.PresencePayload
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.createNtfyHttpClient
-import to.sava.peranta.platform.failureForLog
 import to.sava.peranta.platform.ioDispatcher
-import to.sava.peranta.roster.PresenceAnnounceGate
-import to.sava.peranta.roster.PresenceAnnounceScheduler
-import to.sava.peranta.roster.buildPresencePayload
-import to.sava.peranta.roster.presenceCapabilities
-import to.sava.peranta.roster.presenceFingerprint
+import to.sava.peranta.roster.PresenceAnnouncer
+import to.sava.peranta.roster.PresenceSource
 import to.sava.peranta.roster.publishPresence
 
 private val presenceLog = Logger.withTag("PerantaPresence")
 
+// 告知はプロセスの寿命のスコープで走らせる。NLS の切断の直後にサービスが破棄されても、その告知を失わない。
 private val presenceScope = CoroutineScope(SupervisorJob() + ioDispatcher)
-private val announceMutex = Mutex()
-private val announceGate = PresenceAnnounceGate()
-private val reannounceScheduler = PresenceAnnounceScheduler<Context>(presenceScope) { context ->
-    announcePresence(context)
-}
+
+private val presenceAnnouncerLock = Any()
+
+@Volatile
+private var sharedPresenceAnnouncer: PresenceAnnouncer? = null
+
+/** プロセス内で共有する presence の告知（[PresenceAnnouncer]）。どの契機の告知も同じ直列化と抑止を通す。 */
+private fun presenceAnnouncer(context: Context): PresenceAnnouncer =
+    sharedPresenceAnnouncer ?: synchronized(presenceAnnouncerLock) {
+        sharedPresenceAnnouncer ?: context.applicationContext.let { appContext ->
+            PresenceAnnouncer(
+                scope = presenceScope,
+                source = { loadPresenceSource(appContext) },
+                log = presenceLog,
+            )
+        }.also { sharedPresenceAnnouncer = it }
+    }
 
 /**
- * NLS の接続/切断と通知の転送を契機に presence の再 announce を要求する（§3.1、§3.2、§3.5）。
+ * NLS の接続/切断、通知の転送、アイテムの受信を契機に presence の再 announce を要求する（§3.5）。
  * デバウンスして最終状態を 1 回だけ announce する。fire-and-forget で、呼び出し元スレッドを
- * ブロックしない。実際に publish するかは [PresenceAnnounceGate] が最小間隔で決める。
+ * ブロックしない。同一内容の再告知は最小間隔で抑止する。
+ * 転送と受信を契機に含めるのは、稼働し続けている端末ほど control topic 上の presence が保持期間を
+ * 過ぎて消え、コマンドの宛先として引けなくなるため（§3.5）。
  */
 fun requestPresenceReannounce(context: Context) {
-    reannounceScheduler.request(context.applicationContext)
+    presenceAnnouncer(context).request()
 }
 
 /**
  * control topic へ自端末の presence を告知する（§3.5）。
- * 起動時（[PerantaReceive.prime]）、エンドポイント確定時（[PerantaUnifiedPushReceiver.onNewEndpoint]）、
- * NLS 接続/切断時と通知の転送時（[requestPresenceReannounce]）に呼ぶ。呼び出しは直列化し、
- * 同一内容の連続 announce は [PresenceAnnounceGate] で抑止する（§3.2、§3.3）。
- * 転送を契機に含めるのは、稼働し続けている端末ほど control topic 上の presence が保持期間を
- * 過ぎて消え、コマンドの宛先として引けなくなるため（§3.5）。
- * control topic・共有鍵・エンドポイント URL のいずれかが未設定なら何もしない。best-effort で、失敗しても伝播させない。
+ * 起動時（[PerantaReceive.prime]）とエンドポイント確定時（[PerantaUnifiedPushReceiver.onNewEndpoint]）に呼び、
+ * 告知を終えるまで待つ。[requestPresenceReannounce] の告知とも直列化し、同一内容の連続 announce は抑止する。
+ * 設定が足りなければ（[androidPresenceSource]）何もしない。best-effort で、失敗しても伝播させない。
  */
-suspend fun announcePresence(context: Context) = announceMutex.withLock {
-    val appContext = context.applicationContext
-    val repo = androidConfigRepository(appContext)
-    val config = repo.load()
-    val controlTopic = config.controlTopic ?: return@withLock
-    val endpoint = config.unifiedPushEndpoint ?: return@withLock
-    val deviceName = config.deviceName ?: return@withLock
-    if (config.sharedKeyBase64 == null || config.keyId == null) return@withLock
+suspend fun announcePresence(context: Context) {
+    presenceAnnouncer(context).announce()
+}
 
-    val deviceId = repo.ensureDeviceId()
-    val presence = buildPresencePayload(
-        deviceId = deviceId,
+/** 保存済みの設定と NLS の接続状態から、告知に載せる自端末の情報を組む。 */
+private fun loadPresenceSource(context: Context): PresenceSource? {
+    val repo = androidConfigRepository(context)
+    val config = repo.load()
+    return androidPresenceSource(
+        config = config,
+        deviceId = repo::ensureDeviceId,
+        canCommand = PerantaNotificationListenerService.activeInstance != null,
+        publish = { controlTopic, presence -> publishPresenceWithOwnClient(config, controlTopic, presence) },
+    )
+}
+
+/**
+ * Android の設定から、presence の告知に載せる自端末の情報を組む（§3.5）。
+ * control topic・UnifiedPush のエンドポイント URL・端末名・共有鍵・keyId のいずれかが未設定なら null を返し、
+ * そのときは [deviceId] を呼ばない（端末 ID を確定させない）。
+ * 表示能力は受信設定の充足で決まり、コマンド実行能力は通知捕捉（NLS）の実接続（[canCommand]）で決まる。
+ * 返す [PresenceSource.publish] は、設定の control topic と presence を [publish] へ渡す。
+ */
+internal fun androidPresenceSource(
+    config: PerantaConfig,
+    deviceId: () -> String,
+    canCommand: Boolean,
+    publish: suspend (controlTopic: String, presence: PresencePayload) -> Unit,
+): PresenceSource? {
+    val controlTopic = config.controlTopic ?: return null
+    val endpoint = config.unifiedPushEndpoint ?: return null
+    val deviceName = config.deviceName ?: return null
+    if (config.sharedKeyBase64 == null || config.keyId == null) return null
+    return PresenceSource(
+        deviceId = deviceId(),
         deviceName = deviceName,
         endpoint = endpoint,
-        // 表示能力は受信設定の充足、コマンド実行能力は通知捕捉（NLS）の実接続で決まる（§3.5）。
-        capabilities = presenceCapabilities(
-            canDisplay = config.isReadyForUnifiedPushReceive,
-            canCommand = PerantaNotificationListenerService.activeInstance != null,
-        ),
+        canDisplay = config.isReadyForUnifiedPushReceive,
+        canCommand = canCommand,
         sender = config.sendEnabled,
-        now = nowEpochMillis(),
+        publish = { presence -> publish(controlTopic, presence) },
     )
-    val fingerprint = presenceFingerprint(presence)
-    // 抑止されるときは通信の支度もしない。通知の転送ごとに呼ばれるため、空振りを安く済ませる。
-    if (!announceGate.shouldAnnounce(fingerprint, presence.sentAtEpochMillis)) {
-        presenceLog.d { "presence unchanged; skipping announce" }
-        return@withLock
-    }
+}
 
+/** 告知のたびに HTTP クライアントを作って publish し、終えたら閉じる。 */
+private suspend fun publishPresenceWithOwnClient(
+    config: PerantaConfig,
+    controlTopic: String,
+    presence: PresencePayload,
+) {
     val httpClient = createNtfyHttpClient()
     try {
-        publishPresence(config.messageCipher(),KtorNtfyClient(config, httpClient), controlTopic, presence)
-        announceGate.recordAnnounced(fingerprint, presence.sentAtEpochMillis)
-    } catch (cancellation: CancellationException) {
-        throw cancellation
-    } catch (error: Exception) {
-        // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
-        presenceLog.w { "presence announce failed (${failureForLog(error)})" }
+        publishPresence(config.messageCipher(), KtorNtfyClient(config, httpClient), controlTopic, presence)
     } finally {
         httpClient.close()
     }

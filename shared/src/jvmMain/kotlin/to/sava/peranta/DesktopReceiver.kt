@@ -49,9 +49,7 @@ import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.SelfTestProbe
 import to.sava.peranta.net.SelfTestStatus
 import to.sava.peranta.net.createNtfyHttpClient
-import to.sava.peranta.net.httpBaseUrl
 import to.sava.peranta.pairing.SettingsController
-import to.sava.peranta.platform.failureForLog
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
@@ -62,12 +60,8 @@ import to.sava.peranta.send.CommandAckTracker
 import to.sava.peranta.send.CommandSender
 import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.send.ntfyCommandAckHistory
-import to.sava.peranta.roster.PresenceAnnounceGate
-import to.sava.peranta.roster.PresenceAnnounceScheduler
+import to.sava.peranta.roster.PresenceAnnouncer
 import to.sava.peranta.roster.RosterStore
-import to.sava.peranta.roster.buildPresencePayload
-import to.sava.peranta.roster.presenceCapabilities
-import to.sava.peranta.roster.presenceFingerprint
 import to.sava.peranta.roster.publishPresence
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.JsonlTimelineStore
@@ -200,8 +194,15 @@ class DesktopReceiver(
     )
     private val commandSender = CommandSender(config, cipher, ntfy, sendPipeline, ackTracker)
     private val composer by lazy { DesktopComposer(config, httpClient, cipher, ntfy, sendPipeline, toastScope) }
-    private val announceGate = PresenceAnnounceGate()
-    private val presenceScheduler = PresenceAnnounceScheduler<Unit>(toastScope) { announcePresence() }
+    private val presenceAnnouncer = PresenceAnnouncer(
+        scope = toastScope,
+        source = {
+            desktopPresenceSource(config) { controlTopic, presence ->
+                publishPresence(cipher, ntfy, controlTopic, presence)
+            }
+        },
+        log = log,
+    )
     private val selfTestProbe = SelfTestProbe()
 
     private val attachmentCache = DesktopAttachmentCache(
@@ -265,7 +266,7 @@ class DesktopReceiver(
         feed.prune(now = nowEpochMillis(), maxAgeMillis = config.timelineRetentionMaxAgeMillis)
         runCatching { attachmentCache.prune() }
             .onFailure { log.w(it) { "attachment cache prune failed" } }
-        announcePresence()
+        presenceAnnouncer.announce()
         toastScope.launch { primeCachedAttachmentStates() }
         log.i { "starting desktop receiver for device=${config.deviceName}" }
         pipeline.start(config.receiveTopic!!)
@@ -287,45 +288,13 @@ class DesktopReceiver(
     }
 
     /**
-     * control topic へ自端末の presence を告知する（§3.5）。起動時と受信のたびに呼ぶ。
-     * control topic 未設定なら何もしない。失敗しても受信開始は妨げない。
-     * 同一内容の連続 announce は [PresenceAnnounceGate] が最小間隔で抑止する。
-     */
-    private suspend fun announcePresence() {
-        val controlTopic = config.controlTopic ?: return
-        val deviceId = config.deviceId ?: return
-        val receiveTopic = config.receiveTopic ?: return
-        try {
-            val presence = buildPresencePayload(
-                deviceId = deviceId,
-                deviceName = config.deviceName ?: deviceId,
-                endpoint = "${config.httpBaseUrl()}/$receiveTopic",
-                // 受信中は通知を表示できる。元通知への操作は通知捕捉（NLS）を持たない Desktop では
-                // 実行できないためコマンド能力は持たない（自表示通知の取り下げは表示能力に含む、§3.5）。
-                capabilities = presenceCapabilities(canDisplay = true, canCommand = false),
-                sender = config.sendEnabled,
-                now = nowEpochMillis(),
-            )
-            val fingerprint = presenceFingerprint(presence)
-            if (!announceGate.shouldAnnounce(fingerprint, presence.sentAtEpochMillis)) return
-            publishPresence(cipher, ntfy, controlTopic, presence)
-            announceGate.recordAnnounced(fingerprint, presence.sentAtEpochMillis)
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (error: Exception) {
-            // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
-            log.w { "presence announce failed (${failureForLog(error)})" }
-        }
-    }
-
-    /**
      * タイムラインに載った新規アイテムを、設定が通知で知らせるものに限ってトースト表示へ回す
      * （受信処理はブロックしない）。
      */
     internal fun handleAppended(item: TimelineItem) {
         // 受信は自端末が動いている証。起動しっぱなしでは告知の機会が無く、control topic の
         // 保持期間を過ぎると presence が消えてロスターから落ちる（§3.5）。
-        presenceScheduler.request(Unit)
+        presenceAnnouncer.request()
         if (!config.notifiesOnReceive(item)) return
         toastScope.launch {
             if (item !is ReceivedNotification) {
