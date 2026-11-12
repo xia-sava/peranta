@@ -198,6 +198,9 @@ object PerantaReceive {
 
     /** 受信したアイテムを、設定が通知で知らせるものに限って OS 通知として表示する（§3.2）。 */
     private fun onAppended(context: Context, presenter: AndroidNotificationPresenter, item: TimelineItem) {
+        // 受信は自端末が動いている証。受信専用の端末は転送の契機を持たず、control topic の
+        // 保持期間を過ぎると presence が消えてロスターから落ちる（§3.5）。
+        requestPresenceReannounce(context)
         if (!androidConfigRepository(context).load().notifiesOnReceive(item)) return
         present(presenter, item)
     }
