@@ -36,6 +36,7 @@ import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.ErrorSuppressor
+import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.TimelineItem
@@ -228,6 +229,7 @@ object PerantaReceive {
         when (item) {
             is ReceivedNotification -> presenter.show(item)
             is ReceivedMessage -> presenter.show(item)
+            is ReceivedFile -> presenter.show(item)
             is ErrorItem -> presenter.showError(item)
             else -> Unit
         }

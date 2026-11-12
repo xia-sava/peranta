@@ -1,13 +1,18 @@
 package to.sava.peranta.receive
 
+import to.sava.peranta.model.AttachmentKind
+import to.sava.peranta.model.AttachmentRef
+import to.sava.peranta.model.BlobEnc
 import to.sava.peranta.model.CommandPayload
 import to.sava.peranta.model.CommandType
+import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.MessagePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.NotificationVisibility
 import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.SwipeBehavior
+import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import kotlin.test.Test
@@ -298,6 +303,75 @@ class NotificationDisplayTest {
         )
         assertEquals(NotificationVisibility.PRIVATE, displayFor(received(sms))!!.visibility)
         assertEquals(NotificationVisibility.PRIVATE, displayFor(message(fromName = "phone")).visibility)
+    }
+
+    private fun attachment(fileName: String) = AttachmentRef(
+        blobId = "blob-$fileName",
+        url = "https://ntfy.example/file/blob",
+        fileName = fileName,
+        mimeType = "image/jpeg",
+        sizeBytes = 2048,
+        kind = AttachmentKind.IMAGE,
+        enc = BlobEnc(keyId = "k1", saltBase64 = "c2FsdA==", chunkSize = 1024, totalChunks = 2),
+    )
+
+    private fun file(
+        vararg fileNames: String,
+        priority: Priority = Priority.NORMAL,
+        expiresAt: Long? = null,
+        caption: String? = null,
+    ) =
+        ReceivedFile(
+            id = "f1",
+            timestampEpochMillis = 1_000L,
+            payload = FilePayload(
+                id = "f1",
+                from = "desk",
+                to = "*",
+                sentAtEpochMillis = 900L,
+                attachments = fileNames.map { attachment(it) },
+                postedAtEpochMillis = 900L,
+                priority = priority,
+                expiresAtEpochMillis = expiresAt,
+                fromName = "desk-pc",
+                caption = caption,
+            ),
+        )
+
+    /** キャプション付きの受信ファイルは、ファイル名の次の行にキャプションを続ける。 */
+    @Test
+    fun receivedFileShowsCaptionAfterFileName() {
+        assertEquals("photo.jpg\n旅行の写真", displayFor(file("photo.jpg", caption = "旅行の写真")).body)
+    }
+
+    /** 空白だけのキャプションは本文に足さない。 */
+    @Test
+    fun receivedFileIgnoresBlankCaption() {
+        assertEquals("photo.jpg", displayFor(file("photo.jpg", caption = " ")).body)
+    }
+
+    /** 受信ファイルは見出しと先頭ファイル名を載せ、送信元の端末名を発信元として添える。 */
+    @Test
+    fun receivedFileShowsFileNameAndSource() {
+        val display = displayFor(file("photo.jpg"))
+        assertEquals("f1", display.id)
+        assertEquals("ファイルを受信しました", display.title)
+        assertEquals("photo.jpg", display.body)
+        assertEquals("desk-pc", display.source)
+    }
+
+    /** 複数ファイルの受信は、先頭ファイル名に残りの件数を添える。 */
+    @Test
+    fun receivedFilesShowRemainingCount() {
+        assertEquals("a.jpg ほか 2 件", displayFor(file("a.jpg", "b.jpg", "c.jpg")).body)
+    }
+
+    /** 受信ファイルの表示は、ペイロードの優先度と失効時刻を引き継ぐ。 */
+    @Test
+    fun receivedFileCarriesPriorityAndExpiry() {
+        val display = displayFor(file("photo.jpg", priority = Priority.HIGH, expiresAt = 5_000L))
+        assertEquals(Priority.HIGH, display.priority)
+        assertEquals(5_000L, display.expiresAtEpochMillis)
     }
 
     /** 優先度は対応する通知チャネル区分へ一対一で写る。 */

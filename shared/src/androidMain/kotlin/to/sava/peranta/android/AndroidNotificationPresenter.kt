@@ -23,6 +23,7 @@ import to.sava.peranta.receive.channelKindFor
 import to.sava.peranta.receive.displayFor
 import to.sava.peranta.shared.R
 import to.sava.peranta.timeline.ErrorItem
+import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.timeline.errorTitleOf
@@ -75,6 +76,11 @@ class AndroidNotificationPresenter(
 
     /** 受信メッセージを NORMAL チャネルで表示する。 */
     fun show(item: ReceivedMessage) {
+        show(displayFor(item))
+    }
+
+    /** 受信ファイルを、届いたことだけ知らせる通知として優先度に応じたチャネルで表示する（§4.3）。 */
+    fun show(item: ReceivedFile) {
         show(displayFor(item))
     }
 

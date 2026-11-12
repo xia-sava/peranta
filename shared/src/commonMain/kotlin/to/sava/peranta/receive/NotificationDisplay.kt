@@ -8,6 +8,7 @@ import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.SwipeBehavior
 import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.model.swipeBehaviorOrDefault
+import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.ui.firstUrl
@@ -17,6 +18,12 @@ private const val TITLE_FALLBACK = "Peranta"
 
 /** 本文が空のときの代替表示。 */
 private const val BODY_FALLBACK = "（本文なし）"
+
+/** ファイル受信を知らせる表示のタイトル。 */
+private const val FILE_RECEIVED_TITLE = "ファイルを受信しました"
+
+/** ファイル名が空のときの代替表示。 */
+private const val FILE_NAME_FALLBACK = "ファイル"
 
 /** 発信元表示の区切り。 */
 private const val SOURCE_SEPARATOR = " ・ "
@@ -52,7 +59,7 @@ data class NotificationDisplay(
     val swipeBehavior: SwipeBehavior = SwipeBehavior.LOCAL_ONLY,
     /**
      * ロック画面で見せてよい範囲（§3.2）。元通知が運んでこなかった（旧バージョン由来の）ときと、
-     * 元通知を持たない受信メッセージは [NotificationVisibility.PRIVATE] とする。
+     * 元通知を持たない受信メッセージ・受信ファイルは [NotificationVisibility.PRIVATE] とする。
      */
     val visibility: NotificationVisibility = NotificationVisibility.PRIVATE,
 )
@@ -114,6 +121,25 @@ fun displayFor(item: ReceivedMessage): NotificationDisplay = NotificationDisplay
     priority = Priority.NORMAL,
     expiresAtEpochMillis = null,
 )
+
+/**
+ * 受信ファイルを「届いた」ことだけ知らせる表示内容へ変換する（§4.3）。
+ * 本文は先頭ファイル名（複数なら「ほか N 件」）で、キャプションがあれば次の行に続ける。
+ * 送信元の端末名を発信元として添える。
+ */
+fun displayFor(item: ReceivedFile): NotificationDisplay {
+    val attachments = item.payload.attachments
+    val firstName = attachments.firstOrNull()?.fileName?.ifBlank { null } ?: FILE_NAME_FALLBACK
+    val files = if (attachments.size > 1) "$firstName ほか ${attachments.size - 1} 件" else firstName
+    return NotificationDisplay(
+        id = item.payload.id,
+        title = FILE_RECEIVED_TITLE,
+        body = listOfNotNull(files, item.payload.caption?.ifBlank { null }).joinToString("\n"),
+        priority = item.payload.priority,
+        expiresAtEpochMillis = item.payload.expiresAtEpochMillis,
+        source = sourceLabelFor(item.payload),
+    )
+}
 
 /** 通知チャネルの区分。優先度から一意に定まり、OS の重要度へ対応させる（§4）。 */
 enum class NotificationChannelKind {
