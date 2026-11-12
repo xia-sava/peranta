@@ -6,7 +6,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.coroutines.coroutineContext
 import kotlin.test.Test
@@ -32,7 +31,6 @@ class PresenceAnnounceSchedulerTest {
         val scheduler = PresenceAnnounceScheduler<Int>(scope, debounceMillis = 100) { value ->
             announced.add(value)
         }
-        runCurrent() // 内部の collectLatest を購読させてから request する。
 
         scheduler.request(1)
         advanceTimeBy(50)
@@ -45,6 +43,22 @@ class PresenceAnnounceSchedulerTest {
         job.cancel()
     }
 
+    /** 生成した直後の request も、取りこぼさず announce される。 */
+    @Test
+    fun requestRightAfterConstructionIsAnnounced() = runTest {
+        val announced = mutableListOf<Int>()
+        val (scope, job) = childScope()
+        val scheduler = PresenceAnnounceScheduler<Int>(scope, debounceMillis = 100) { value ->
+            announced.add(value)
+        }
+
+        scheduler.request(1)
+        advanceUntilIdle()
+
+        assertEquals(listOf(1), announced)
+        job.cancel()
+    }
+
     /** デバウンス時間を空けた request はそれぞれ announce される。 */
     @Test
     fun requestsSpacedBeyondDebounceEachAnnounceSeparately() = runTest {
@@ -53,7 +67,6 @@ class PresenceAnnounceSchedulerTest {
         val scheduler = PresenceAnnounceScheduler<Int>(scope, debounceMillis = 100) { value ->
             announced.add(value)
         }
-        runCurrent() // 内部の collectLatest を購読させてから request する。
 
         scheduler.request(1)
         advanceUntilIdle()
@@ -75,7 +88,6 @@ class PresenceAnnounceSchedulerTest {
             delay(200)
             completed.add(value)
         }
-        runCurrent() // 内部の collectLatest を購読させてから request する。
 
         scheduler.request(1)
         advanceTimeBy(150) // デバウンス経過、announce(1) が delay(200) の途中まで進む。
