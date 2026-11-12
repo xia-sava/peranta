@@ -390,13 +390,17 @@ class DesktopReceiver(
      * [itemId] のタイムライン上の現在のペイロード。トーストは表示したまま改版で差し替わることが
      * あるため（§3.1 の SMS の対応づけ等）、ボタン押下は表示時ではなく押された時点の内容で扱う。
      */
-    private fun currentPayload(itemId: String): Payload? =
+    private fun currentPayload(itemId: String): Payload? = currentNotification(itemId)?.payload
+
+    private fun currentNotification(itemId: String): ReceivedNotification? =
         pipeline.items.value.asSequence()
             .filterIsInstance<ReceivedNotification>()
             .firstOrNull { it.id == itemId }
-            ?.payload
 
     private suspend fun showNotificationToast(item: ReceivedNotification) {
+        // 表示は受信とは別のコルーチンで走るため、元通知の消去が先に処理されていることがある。
+        // 消えた通知のトーストは、取り下げる相手がもういないので出さない。
+        if ((currentNotification(item.id) ?: item).sourceDismissed) return
         val content = toastContentFor(item)?.withCachedImages(item) ?: return
         when (val result = toaster.show(content)) {
             ToastResult.ButtonDismiss -> requestDismiss(currentPayload(item.id) ?: item.payload)

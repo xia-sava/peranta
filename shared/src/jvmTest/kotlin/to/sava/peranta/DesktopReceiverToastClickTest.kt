@@ -211,6 +211,30 @@ class DesktopReceiverToastClickTest {
         }
     }
 
+    /** 元通知が既に消えている受信通知は、トーストを出さない（§3.3）。 */
+    @Test
+    fun sourceDismissedNotificationShowsNoToast() {
+        val toaster = FixedResultToaster(ToastResult.Clicked)
+        val receiver = receiver(toaster, ConcurrentLinkedQueue())
+        try {
+            receiver.handleAppended(
+                ReceivedNotification(
+                    id = replyNotification.id,
+                    timestampEpochMillis = 1000L,
+                    payload = replyNotification,
+                    sourceDismissed = true,
+                ),
+            )
+            receiver.handleAppended(
+                ErrorItem(id = "err-1", timestampEpochMillis = 1000L, message = "boom", kind = ErrorKind.OTHER),
+            )
+            awaitShownThenSettle(toaster)
+            assertEquals(listOf("err-1"), toaster.shownIds.toList())
+        } finally {
+            runBlocking { receiver.close() }
+        }
+    }
+
     /** 発出元で完結するアクションと、この端末で入力するアクションを 1 件ずつ持つ通知。 */
     private val replyNotification = NotificationPayload(
         id = "notif-1",
