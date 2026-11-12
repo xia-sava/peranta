@@ -60,6 +60,7 @@ import to.sava.peranta.android.acceptedSharedStreams
 import to.sava.peranta.android.androidConfigRepository
 import to.sava.peranta.android.eraseCachedAppData
 import to.sava.peranta.android.eraseSendRetryQueue
+import to.sava.peranta.android.eraseTimelineFiles
 import to.sava.peranta.android.normalizeScrollItemId
 import to.sava.peranta.android.sharedStreamDisplayName
 import to.sava.peranta.config.PerantaConfig
@@ -71,7 +72,6 @@ import to.sava.peranta.pairing.SettingsController
 import to.sava.peranta.pairing.pairingQrMatrix
 import to.sava.peranta.send.MESSAGE_SEND_FAILED_MESSAGE
 import to.sava.peranta.send.sharedStreamItems
-import to.sava.peranta.timeline.defaultTimelineFile
 import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.AppFilterScreen
 import to.sava.peranta.ui.AttachmentUi
@@ -834,7 +834,7 @@ class MainActivity : ComponentActivity() {
             PerantaReceive.reset()
             eraseSendRetryQueue(this@MainActivity)
             androidConfigRepository().clear()
-            defaultTimelineFile().overwrite(emptyList())
+            eraseTimelineFiles(filesDir)
             eraseCachedAppData(cacheDir)
             finishAffinity()
             exitProcess(0)

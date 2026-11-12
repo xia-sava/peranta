@@ -34,7 +34,8 @@ Android と Windows Desktop の間で通知・SMS・メッセージ・ファイ�
 ## モジュール
 
 - `shared/` — ロジックの本体。`commonMain` に大半を置き、プラットフォーム固有だけ expect/actual
-  で分ける（`androidMain` / `jvmMain`）。UI も Compose Multiplatform で共有する
+  で分ける（`androidMain` / `jvmMain`）。Android と Desktop で同じ JVM 実装を使うものは
+  `jvmShared`（両者の中間ソースセット）に置く。UI も Compose Multiplatform で共有する
 - `androidApp/` — Android のエントリポイント（送信・受信を兼ねる）
 - `desktopApp/` — Windows のエントリポイント
 - `server/` — 中継 ntfy の設定と Docker Compose 一式

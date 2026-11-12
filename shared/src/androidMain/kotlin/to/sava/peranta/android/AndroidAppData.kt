@@ -5,6 +5,7 @@ import androidx.work.WorkManager
 import androidx.work.await
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
+import to.sava.peranta.timeline.deleteTimelineFiles
 import java.io.File
 
 /** 送信するファイルを転送のあいだ置くキャッシュ領域のディレクトリ名。 */
@@ -21,6 +22,20 @@ fun eraseCachedAppData(cacheDir: File) {
     listOf(ATTACHMENTS_CACHE_DIR, OUTGOING_CACHE_DIR)
         .map { File(cacheDir, it) }
         .filterNot { it.deleteRecursively() }
+        .forEach { Logger.withTag("Reset").w { "failed to erase ${it.name}" } }
+}
+
+/**
+ * 「すべての情報の消去」（§11）で [filesDir] のタイムライン履歴を消す。履歴の本体と、書き直しの途中で
+ * 止められて残った一時ファイルが対象で、一時ファイルを経ずに直接消す。
+ * 一時ファイルには乱数名のものに加え、一時ファイルを固定名 `timeline.jsonl.tmp` で作っていた版が
+ * 残したものも含む。履歴の内容がそのまま入っているため消す。
+ *
+ * 消せなかったものはログへ残して続け、例外は投げない。後続の消去を止めないため。
+ * [filesDir] 内のそれ以外のファイルには触れない。
+ */
+fun eraseTimelineFiles(filesDir: File) {
+    deleteTimelineFiles(filesDir)
         .forEach { Logger.withTag("Reset").w { "failed to erase ${it.name}" } }
 }
 

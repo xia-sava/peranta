@@ -78,6 +78,7 @@ object PerantaSend {
 
     /**
      * 起動時にタイムラインを剪定してから feed へ読み込む。失敗しても起動を妨げない。
+     * 剪定に失敗しても、ログに残して読み込みへ進む。
      * 受信設定が未完了の送信専用端末では [PerantaReceive.prime] が走らないため、
      * ここで読み込んでおくことで履歴・送信済みアイテムをタイムラインに表示できるようにする。
      */
@@ -86,7 +87,13 @@ object PerantaSend {
             try {
                 val now = nowEpochMillis()
                 val maxAgeMillis = androidConfigRepository().load().timelineRetentionMaxAgeMillis
-                timelineFeed.prune(now = now, maxAgeMillis = maxAgeMillis)
+                try {
+                    timelineFeed.prune(now = now, maxAgeMillis = maxAgeMillis)
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (error: Exception) {
+                    log.w(error) { "timeline prune failed" }
+                }
                 timelineFeed.load(now)
             } catch (cancellation: CancellationException) {
                 throw cancellation

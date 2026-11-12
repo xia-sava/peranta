@@ -8,8 +8,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * 「すべての情報の消去」（§11）で Android のキャッシュ領域から何が消え、何が残るかを表明する。
- * 実際の `cacheDir` は触らず、一時ディレクトリを [eraseCachedAppData] へ渡して確かめる。
+ * 「すべての情報の消去」（§11）で Android のキャッシュ領域と `filesDir` から何が消え、何が残るかを表明する。
+ * 実際の `cacheDir` と `filesDir` は触らず、一時ディレクトリを [eraseCachedAppData]・[eraseTimelineFiles] へ渡して確かめる。
  */
 class AndroidAppDataTest {
 
@@ -34,6 +34,32 @@ class AndroidAppDataTest {
         eraseCachedAppData(cacheDir)
 
         erased.forEach { assertFalse(it.exists(), "残っている: ${it.relativeTo(cacheDir)}") }
+    }
+
+    /**
+     * `filesDir` のタイムライン履歴の本体と、書き直し中の一時ファイル（乱数名と固定名 `timeline.jsonl.tmp`）は
+     * 消え、それ以外のファイルは残る。
+     */
+    @Test
+    fun erasesTimelineAndItsTempFilesAndKeepsTheRest() {
+        val filesDir = File(cacheDir, "files")
+        val erased = listOf(file("files/timeline.jsonl"), file("files/timeline8123.tmp"), file("files/timeline.jsonl.tmp"))
+        val kept = listOf(
+            file("files/other.tmp"),
+            file("files/memo.txt"),
+            file("files/sub/timeline9.tmp"),
+        )
+
+        eraseTimelineFiles(filesDir)
+
+        erased.forEach { assertFalse(it.exists(), "残っている: ${it.relativeTo(filesDir)}") }
+        kept.forEach { assertTrue(it.exists(), "消えている: ${it.relativeTo(filesDir)}") }
+    }
+
+    /** タイムラインのファイルが無い（ディレクトリも無い）ときも、例外を投げずに終わる。 */
+    @Test
+    fun eraseTimelineFilesOnMissingDirectoryDoesNotThrow() {
+        eraseTimelineFiles(File(cacheDir, "no-such-dir"))
     }
 
     /** 更新の配布物と、Peranta が作ったのでないものには触れない（消しすぎない）。 */

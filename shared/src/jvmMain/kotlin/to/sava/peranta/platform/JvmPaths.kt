@@ -1,14 +1,9 @@
 package to.sava.peranta.platform
 
 import co.touchlab.kermit.Logger
+import to.sava.peranta.timeline.timelineFileIn
+import to.sava.peranta.timeline.timelineTempFiles
 import java.io.File
-
-/** タイムライン JSONL のファイル名。 */
-private const val TIMELINE_FILE_NAME = "timeline.jsonl"
-
-/** タイムラインを書き直すときの一時ファイルの名前（[java.nio.file.Files.createTempFile] へ渡す前置きと後置き）。 */
-internal const val TIMELINE_TEMP_PREFIX = "timeline"
-internal const val TIMELINE_TEMP_SUFFIX = ".tmp"
 
 private const val LOG_DIR_NAME = "logs"
 private const val ATTACHMENTS_DIR_NAME = "attachments"
@@ -76,7 +71,7 @@ object JvmPaths {
 
     /** タイムライン JSONL ファイルのパス。 */
     val timelineFile: File
-        get() = File(appDir, TIMELINE_FILE_NAME)
+        get() = timelineFileIn(appDir)
 }
 
 /** この環境でのアプリデータの置き場。`%LOCALAPPDATA%` が無ければホームディレクトリ配下に置く。 */
@@ -140,15 +135,11 @@ fun eraseAppData(appDirs: List<File> = JvmPaths.dataDirs) {
     val log = Logger.withTag("Reset")
     appDirs.flatMap { appDir ->
         buildList {
-            add(File(appDir, TIMELINE_FILE_NAME))
-            addAll(appDir.listFiles { file -> file.isFile && isTimelineTempFile(file.name) }.orEmpty())
+            add(timelineFileIn(appDir))
+            addAll(timelineTempFiles(appDir))
             addAll(listOf(ATTACHMENTS_DIR_NAME, CLIPBOARD_DIR_NAME, LOG_DIR_NAME).map { File(appDir, it) })
         }
     }
         .filterNot { it.deleteRecursively() }
         .forEach { log.w { "failed to erase ${it.name}" } }
 }
-
-/** [name] がタイムラインの書き直しに使う一時ファイルの名前か。 */
-internal fun isTimelineTempFile(name: String): Boolean =
-    name.startsWith(TIMELINE_TEMP_PREFIX) && name.endsWith(TIMELINE_TEMP_SUFFIX)

@@ -12,7 +12,10 @@ interface TimelineFile {
     /** 1 行を追記する。 */
     fun appendLine(line: String)
 
-    /** 全内容を [lines] で置き換える。 */
+    /**
+     * 全内容を [lines] で置き換える。
+     * 失敗したときは例外を投げ、元の内容は変わらずに残る。
+     */
     fun overwrite(lines: List<String>)
 }
 

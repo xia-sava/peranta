@@ -303,9 +303,20 @@ class DesktopReceiver internal constructor(
 
     /** 起動時剪定と presence 告知を行い、受信 topic の購読を開始する。キャンセルまで戻らない。 */
     suspend fun run() {
-        feed.prune(now = nowEpochMillis(), maxAgeMillis = config.timelineRetentionMaxAgeMillis)
-        runCatching { attachmentCache.prune() }
-            .onFailure { log.w(it) { "attachment cache prune failed" } }
+        try {
+            feed.prune(now = nowEpochMillis(), maxAgeMillis = config.timelineRetentionMaxAgeMillis)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            log.w(error) { "timeline prune failed" }
+        }
+        try {
+            attachmentCache.prune()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            log.w(error) { "attachment cache prune failed" }
+        }
         presenceAnnouncer.announce()
         toastScope.launch { primeCachedAttachmentStates() }
         log.i { "starting desktop receiver for device=${config.deviceName}" }
