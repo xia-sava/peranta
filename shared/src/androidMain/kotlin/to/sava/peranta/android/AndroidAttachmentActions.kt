@@ -4,12 +4,14 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import to.sava.peranta.blob.AttachmentOpenDecision
 import to.sava.peranta.blob.attachmentOpenDecision
+import to.sava.peranta.blob.resolveAttachmentMimeType
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.ui.ATTACHMENT_NO_VIEWER_MESSAGE
@@ -70,14 +72,18 @@ class AndroidAttachmentActions(
             return
         }
         val uri = uriFor(file)
+        // 種別を語らない MIME（ワイルドカードを含むもの等）は OS へそのまま渡さず、拡張子から補う（§4.3.2）。
+        val viewerMimeType = resolveAttachmentMimeType(ref.mimeType, ref.fileName) { extension ->
+            MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+        }
         val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, ref.mimeType)
+            setDataAndType(uri, viewerMimeType)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         try {
             context.startActivity(intent)
         } catch (notFound: ActivityNotFoundException) {
-            log.i(notFound) { "no viewer for mimeType=${ref.mimeType}" }
+            log.i(notFound) { "no viewer for mimeType=$viewerMimeType" }
             reportError(ATTACHMENT_NO_VIEWER_MESSAGE)
         }
     }

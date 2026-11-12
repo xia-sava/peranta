@@ -2,8 +2,8 @@ package to.sava.peranta.send
 
 import io.ktor.utils.io.ByteReadChannel
 import to.sava.peranta.blob.AttachmentUploadRequest
-import to.sava.peranta.blob.attachmentExtensionOf
 import to.sava.peranta.blob.attachmentKindFor
+import to.sava.peranta.blob.resolveAttachmentMimeType
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BROADCAST_TARGET
 import to.sava.peranta.model.Envelope
@@ -22,19 +22,12 @@ const val FILE_SEND_FAILED_MESSAGE: String = "ファイルの送信に失敗し�
 /** 送信の設定が揃っていないときにタイムラインへ出す文言。 */
 const val FILE_SEND_NOT_CONFIGURED_MESSAGE: String = "送信の設定が未完了のためファイルを送れません"
 
-/** 種別が判らないファイルの MIME（§4.3）。 */
-const val DEFAULT_ATTACHMENT_MIME_TYPE: String = "application/octet-stream"
-
-/** MIME の type か subtype に入るワイルドカード。これを含む MIME は具体的な種別を語らない。 */
-private const val MIME_WILDCARD: String = "*"
-
 /**
  * 送るファイル 1 件のアップロード要求を組む（§4.3）。ファイル名・種別・長さと、平文本体のチャンネルを返す
  * [openSource] は各プラットフォームが用意する。
- * [mimeType] は送信元の端末が知らせる種別で、判らなければ null。それが中身の種別を語らないときは、
- * ファイル名の拡張子（小文字・ドットなし）を [mimeTypeForExtension] で引いて補い、それでも判らなければ
- * [DEFAULT_ATTACHMENT_MIME_TYPE] にする。載せる MIME は前後の空白とパラメータを落として小文字にそろえ、
- * `kind` はその MIME とファイル名から [attachmentKindFor] で決める。
+ * [mimeType] は送信元の端末が知らせる種別で、判らなければ null。載せる MIME は [resolveAttachmentMimeType] で
+ * 決め（種別を語らなければ拡張子を [mimeTypeForExtension] で引いて補う）、`kind` はその MIME とファイル名から
+ * [attachmentKindFor] で決める。
  */
 fun buildFileUploadRequest(
     fileName: String,
@@ -43,11 +36,7 @@ fun buildFileUploadRequest(
     mimeTypeForExtension: (extension: String) -> String?,
     openSource: suspend () -> ByteReadChannel,
 ): AttachmentUploadRequest {
-    val resolvedMimeType = specificMimeTypeOrNull(mimeType)
-        ?: attachmentExtensionOf(fileName)
-            .takeIf { it.isNotEmpty() }
-            ?.let { extension -> specificMimeTypeOrNull(mimeTypeForExtension(extension)) }
-        ?: DEFAULT_ATTACHMENT_MIME_TYPE
+    val resolvedMimeType = resolveAttachmentMimeType(mimeType, fileName, mimeTypeForExtension)
     return AttachmentUploadRequest(
         fileName = fileName,
         mimeType = resolvedMimeType,
@@ -56,25 +45,6 @@ fun buildFileUploadRequest(
         openSource = openSource,
     )
 }
-
-/**
- * [mimeType] からパラメータ（`; charset=...`）と前後の空白を落として小文字にそろえ、それが中身の種別を語るなら
- * その形で返す。語らなければ null を返す。
- * 空のもの、`type/subtype` の形でないもの、途中に空白や制御文字を含むもの、type か subtype が [MIME_WILDCARD] のもの、
- * [DEFAULT_ATTACHMENT_MIME_TYPE] は語らないとみなす。
- */
-private fun specificMimeTypeOrNull(mimeType: String?): String? =
-    mimeType
-        ?.substringBefore(';')
-        ?.trim()
-        ?.lowercase()
-        ?.takeIf { essence ->
-            val parts = essence.split('/')
-            parts.size == 2 &&
-                parts.none { it.isEmpty() || it == MIME_WILDCARD } &&
-                essence.none { it.isWhitespace() || it.isISOControl() } &&
-                essence != DEFAULT_ATTACHMENT_MIME_TYPE
-        }
 
 /**
  * UnifiedPush が配送元に保証する最小メッセージサイズ（bytes、§4.3）。

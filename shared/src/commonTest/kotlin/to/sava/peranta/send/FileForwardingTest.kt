@@ -1,6 +1,7 @@
 package to.sava.peranta.send
 
 import io.ktor.utils.io.ByteReadChannel
+import to.sava.peranta.blob.DEFAULT_ATTACHMENT_MIME_TYPE
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.BROADCAST_TARGET
