@@ -10,7 +10,6 @@ import to.sava.peranta.model.Envelope
 import to.sava.peranta.model.FilePayload
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
-import to.sava.peranta.model.Priority
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.encodeEnvelope
 import to.sava.peranta.model.newPayloadId
@@ -22,9 +21,6 @@ import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.SentNotification
 import to.sava.peranta.timeline.TimelineStore
-
-/** high 優先（OTP 等）の配送で使う短キャッシュ秒数（§8）。 */
-const val HIGH_PRIORITY_CACHE_SECONDS: Int = 60
 
 /** 封緘や送信で回復不能な失敗が起きたときにタイムラインへ出す文言。 */
 const val SEND_FAILED_MESSAGE: String = "通知の送信に失敗しました"
@@ -66,18 +62,14 @@ class SendPipeline(
     /** [payload] を封緘した Envelope を返す（WorkManager 入力に使い回せる）。 */
     suspend fun seal(payload: Payload): Envelope = cipher.seal(payload)
 
-    /** [payload] の優先度に応じた publish キャッシュ秒数。high なら短キャッシュ、他は既定（null）。 */
-    fun cacheSecondsFor(payload: Payload): Int? =
-        if (priorityOf(payload) == Priority.HIGH) HIGH_PRIORITY_CACHE_SECONDS else null
-
     /**
-     * 封緘済み本文 [body] を [topics] 全てへ publish する。
+     * 封緘済み本文 [body] を [topics] 全てへ publish する。サーバの保持は `cache-duration`（§9）に従う。
      * いずれかの publish が失敗すると例外を送出する（再送は呼び出し側の責務）。
      */
-    suspend fun publishEnvelope(body: String, topics: List<String>, cacheSeconds: Int?) {
+    suspend fun publishEnvelope(body: String, topics: List<String>) {
         topics.forEach { topic ->
-            ntfy.publish(topic, body, cacheSeconds)
-            log.d { "published to ${topicForLog(topic)} (cache=${cacheSeconds ?: "default"})" }
+            ntfy.publish(topic, body)
+            log.d { "published to ${topicForLog(topic)}" }
         }
     }
 
@@ -97,7 +89,7 @@ class SendPipeline(
         topics: List<String>,
         persistSensitive: Boolean,
         publishTimeoutMillis: Long? = null,
-        enqueueRetry: suspend (body: String, topics: List<String>, cacheSeconds: Int?, meta: RetryDisplayMeta?) -> Unit,
+        enqueueRetry: suspend (body: String, topics: List<String>, meta: RetryDisplayMeta?) -> Unit,
     ): Boolean {
         return try {
             dispatchOrThrow(payload, topics, persistSensitive, publishTimeoutMillis, enqueueRetry)
@@ -117,11 +109,10 @@ class SendPipeline(
         topics: List<String>,
         persistSensitive: Boolean,
         publishTimeoutMillis: Long?,
-        enqueueRetry: suspend (body: String, topics: List<String>, cacheSeconds: Int?, meta: RetryDisplayMeta?) -> Unit,
+        enqueueRetry: suspend (body: String, topics: List<String>, meta: RetryDisplayMeta?) -> Unit,
     ): Boolean {
         val body = encodeEnvelope(seal(payload))
-        val cacheSeconds = cacheSecondsFor(payload)
-        return when (publishImmediate(payload, body, topics, cacheSeconds, publishTimeoutMillis)) {
+        return when (publishImmediate(payload, body, topics, publishTimeoutMillis)) {
             PublishOutcome.DELIVERED -> {
                 recordSent(payload, persistSensitive)
                 true
@@ -129,7 +120,7 @@ class SendPipeline(
 
             PublishOutcome.RETRY -> {
                 val meta = retryDisplayMetaOf(payloadForPersistence(payload, persistSensitive))
-                enqueueRetry(body, topics, cacheSeconds, meta)
+                enqueueRetry(body, topics, meta)
                 false
             }
 
@@ -144,7 +135,6 @@ class SendPipeline(
         payload: Payload,
         body: String,
         topics: List<String>,
-        cacheSeconds: Int?,
         publishTimeoutMillis: Long?,
     ): PublishOutcome {
         if (topics.isEmpty()) {
@@ -153,11 +143,11 @@ class SendPipeline(
         }
         return try {
             val completed = if (publishTimeoutMillis == null) {
-                publishEnvelope(body, topics, cacheSeconds)
+                publishEnvelope(body, topics)
                 true
             } else {
                 withTimeoutOrNull(publishTimeoutMillis) {
-                    publishEnvelope(body, topics, cacheSeconds)
+                    publishEnvelope(body, topics)
                 } != null
             }
             if (completed) {
@@ -216,17 +206,9 @@ class SendPipeline(
      */
     suspend fun send(payload: Payload, topics: List<String>, persistSensitive: Boolean) {
         val body = encodeEnvelope(seal(payload))
-        publishEnvelope(body, topics, cacheSecondsFor(payload))
+        publishEnvelope(body, topics)
         recordSent(payload, persistSensitive)
     }
-}
-
-/** payload 種別の優先度を取り出す。優先度を持たない種別は NORMAL とみなす。 */
-fun priorityOf(payload: Payload): Priority = when (payload) {
-    is NotificationPayload -> payload.priority
-    is SmsPayload -> payload.priority
-    is FilePayload -> payload.priority
-    else -> Priority.NORMAL
 }
 
 /** payload の失効時刻を取り出す。持たない種別は null。 */

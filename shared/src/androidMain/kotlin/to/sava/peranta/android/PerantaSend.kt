@@ -129,8 +129,8 @@ object PerantaSend {
                 topics = resolveSendTopics(config, cipher, ntfy),
                 persistSensitive = config.persistSensitiveHistory,
                 publishTimeoutMillis = publishTimeoutMillis,
-            ) { body, topics, cacheSeconds, meta ->
-                SendRetryWorker.enqueue(context, body, topics, cacheSeconds, meta)
+            ) { body, topics, meta ->
+                SendRetryWorker.enqueue(context, body, topics, meta)
             }
         } catch (cancellation: CancellationException) {
             throw cancellation

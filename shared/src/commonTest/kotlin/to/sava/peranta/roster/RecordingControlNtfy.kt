@@ -12,7 +12,7 @@ import to.sava.peranta.net.NtfyEvent
 
 /**
  * ロスター系テスト用の [NtfyClient]。fetchHistory は与えた履歴（または例外）を返し、
- * publish は宛先・本文・キャッシュ秒数を記録する。
+ * publish は宛先・本文・キャッシュ指定を記録する。
  * [historyDelayMillis] を指定すると、タイムアウト検証用に応答前に遅延する。
  */
 class RecordingControlNtfy(
@@ -24,12 +24,12 @@ class RecordingControlNtfy(
     override val connectionState: StateFlow<NtfyConnectionState> =
         MutableStateFlow(NtfyConnectionState.SUBSCRIBED).asStateFlow()
 
-    data class Published(val topic: String, val body: String, val cacheSeconds: Int?)
+    data class Published(val topic: String, val body: String, val cache: Boolean)
 
     val published = mutableListOf<Published>()
 
-    override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
-        published.add(Published(topic, body, cacheSeconds))
+    override suspend fun publish(topic: String, body: String, cache: Boolean) {
+        published.add(Published(topic, body, cache))
     }
 
     override fun subscribe(topic: String): Flow<NtfyEvent> = emptyFlow()

@@ -16,7 +16,7 @@ typealias CommandAckHistory = suspend (topic: String, sinceEpochMillis: Long) ->
 
 /**
  * ntfy のメッセージ履歴から応答を読み直す [CommandAckHistory]。自端末の購読が切れていて届かなかった
- * 応答も、サーバの保持（60 秒）のうちなら HTTP で拾える。復号できない・応答でないメッセージは読み飛ばし、
+ * 応答も、サーバの保持（`cache-duration`、§9）のうちなら HTTP で拾える。復号できない・応答でないメッセージは読み飛ばし、
  * 拾った応答には受信時と同じ関門（[normalizeReceivedPayload]）を当てる。
  * 例外は種別名だけを残す（ktor の例外メッセージには接続先 URL（＝topic）が載る、§16）。
  */

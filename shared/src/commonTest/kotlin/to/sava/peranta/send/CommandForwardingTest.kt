@@ -50,15 +50,10 @@ class CommandForwardingTest {
         }
     }
 
-    /**
-     * 状態同期は受信端末が半日単位で離れていても届く必要があるため、即時操作より長く保ち、
-     * サーバのキャッシュ保持は指定せず設定へ委ねる。
-     */
+    /** 状態同期は受信端末が半日単位で離れていても届く必要があるため、即時操作より長く失効しない。 */
     @Test
-    fun stateSyncOutlivesImmediateAndLeavesCacheToServer() {
+    fun stateSyncOutlivesImmediate() {
         assertEquals(true, CommandDelivery.STATE_SYNC.ttlMillis > CommandDelivery.IMMEDIATE.ttlMillis)
-        assertNull(CommandDelivery.STATE_SYNC.cacheSeconds)
-        assertEquals(HIGH_PRIORITY_CACHE_SECONDS, CommandDelivery.IMMEDIATE.cacheSeconds)
     }
 
     /** expiresOf は command の失効時刻を取り出す。 */

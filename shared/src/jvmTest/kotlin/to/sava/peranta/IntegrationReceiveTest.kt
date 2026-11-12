@@ -78,7 +78,7 @@ class IntegrationReceiveTest {
                     postedAtEpochMillis = nowEpochMillis(),
                     priority = Priority.HIGH,
                 )
-                ntfy.publish(topic, encodeEnvelope(cipher.seal(payload)), cacheSeconds = 30)
+                ntfy.publish(topic, encodeEnvelope(cipher.seal(payload)))
 
                 withTimeout(15_000) {
                     while (pipeline.items.value.isEmpty()) delay(100)

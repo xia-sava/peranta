@@ -53,7 +53,7 @@ class SendDispatchTest {
         val pipeline = SendPipeline(cipher(), ntfy, store, now = { 5000 })
         val enqueued = mutableListOf<String>()
 
-        val delivered = pipeline.dispatch(payload(), listOf("a", "b"), persistSensitive = true) { body, _, _, _ ->
+        val delivered = pipeline.dispatch(payload(), listOf("a", "b"), persistSensitive = true) { body, _, _ ->
             enqueued.add(body)
         }
 
@@ -74,7 +74,7 @@ class SendDispatchTest {
         val pipeline = SendPipeline(cipher(), ntfy, store)
         var enqueueCalled = false
 
-        val delivered = pipeline.dispatch(payload(), emptyList(), persistSensitive = true) { _, _, _, _ ->
+        val delivered = pipeline.dispatch(payload(), emptyList(), persistSensitive = true) { _, _, _ ->
             enqueueCalled = true
         }
 
@@ -90,10 +90,10 @@ class SendDispatchTest {
         val ntfy = ControlledNtfyClient { throw NtfyPublishException(503, "unavailable") }
         val store = RecordingStore()
         val pipeline = SendPipeline(cipher(), ntfy, store)
-        val enqueued = mutableListOf<Triple<String, List<String>, Int?>>()
+        val enqueued = mutableListOf<Pair<String, List<String>>>()
 
-        val delivered = pipeline.dispatch(payload(), listOf("a"), persistSensitive = true) { body, topics, cache, _ ->
-            enqueued.add(Triple(body, topics, cache))
+        val delivered = pipeline.dispatch(payload(), listOf("a"), persistSensitive = true) { body, topics, _ ->
+            enqueued.add(Pair(body, topics))
         }
 
         assertFalse(delivered)
@@ -111,7 +111,7 @@ class SendDispatchTest {
         var captured: RetryDisplayMeta? = null
         val sent = payload()
 
-        pipeline.dispatch(sent, listOf("a"), persistSensitive = true) { _, _, _, meta ->
+        pipeline.dispatch(sent, listOf("a"), persistSensitive = true) { _, _, meta ->
             captured = meta
         }
 
@@ -129,7 +129,7 @@ class SendDispatchTest {
         val pipeline = SendPipeline(cipher(), ntfy, store)
         var enqueueCalled = false
 
-        val delivered = pipeline.dispatch(payload(), listOf("a"), persistSensitive = true) { _, _, _, _ ->
+        val delivered = pipeline.dispatch(payload(), listOf("a"), persistSensitive = true) { _, _, _ ->
             enqueueCalled = true
         }
 
@@ -146,7 +146,7 @@ class SendDispatchTest {
         val pipeline = SendPipeline(cipher(), ntfy, store)
         var enqueueCalled = false
 
-        val delivered = pipeline.dispatch(payload(), listOf("a"), persistSensitive = true) { _, _, _, _ ->
+        val delivered = pipeline.dispatch(payload(), listOf("a"), persistSensitive = true) { _, _, _ ->
             enqueueCalled = true
         }
 
@@ -168,7 +168,7 @@ class SendDispatchTest {
             listOf("a"),
             persistSensitive = true,
             publishTimeoutMillis = 8_000,
-        ) { _, _, _, _ ->
+        ) { _, _, _ ->
             enqueueCalled = true
         }
 
@@ -183,7 +183,7 @@ class SendDispatchTest {
         val store = RecordingStore()
         val pipeline = SendPipeline(cipher(), ntfy, store)
 
-        val delivered = pipeline.dispatch(payload(), listOf("a"), persistSensitive = true) { _, _, _, _ ->
+        val delivered = pipeline.dispatch(payload(), listOf("a"), persistSensitive = true) { _, _, _ ->
             throw RuntimeException("enqueue failed")
         }
 
@@ -198,7 +198,7 @@ class SendDispatchTest {
         val store = FailingStore()
         val pipeline = SendPipeline(cipher(), ntfy, store)
 
-        val delivered = pipeline.dispatch(payload(), listOf("a"), persistSensitive = true) { _, _, _, _ -> }
+        val delivered = pipeline.dispatch(payload(), listOf("a"), persistSensitive = true) { _, _, _ -> }
 
         assertFalse(delivered)
     }
@@ -211,7 +211,7 @@ class SendDispatchTest {
 
         val published = mutableListOf<String>()
 
-        override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
+        override suspend fun publish(topic: String, body: String, cache: Boolean) {
             onPublish(topic)
             published.add(topic)
         }

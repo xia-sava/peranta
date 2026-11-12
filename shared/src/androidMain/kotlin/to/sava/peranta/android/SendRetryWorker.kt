@@ -54,7 +54,6 @@ class SendRetryWorker(
             return Result.failure()
         }
         val storedTopics = inputData.getNullableStringArray(KEY_TOPICS).orEmpty().filterNotNull()
-        val cacheSeconds = inputData.getInt(KEY_CACHE_SECONDS, NO_CACHE).takeIf { it != NO_CACHE }
 
         if (runAttemptCount >= MAX_RETRY_ATTEMPTS) {
             log.w { "retry attempts exhausted ($runAttemptCount); giving up" }
@@ -71,7 +70,7 @@ class SendRetryWorker(
                 log.w { "delivery topics unresolved (attempt ${runAttemptCount + 1}/$MAX_RETRY_ATTEMPTS); retrying" }
                 Result.retry()
             } else {
-                topics.forEach { topic -> ntfy.publish(topic, body, cacheSeconds) }
+                topics.forEach { topic -> ntfy.publish(topic, body) }
                 log.i { "retry publish succeeded (${topics.size} topics)" }
                 recordSentFromMeta(config.deviceName)
                 Result.success()
@@ -148,9 +147,7 @@ class SendRetryWorker(
     companion object {
         private const val KEY_BODY = "body"
         private const val KEY_TOPICS = "topics"
-        private const val KEY_CACHE_SECONDS = "cacheSeconds"
         private const val KEY_META = "displayMeta"
-        private const val NO_CACHE = -1
 
         /** これ以上の runAttemptCount に達したら poison とみなして諦める。 */
         private const val MAX_RETRY_ATTEMPTS = 5
@@ -168,13 +165,11 @@ class SendRetryWorker(
             context: Context,
             body: String,
             topics: List<String>,
-            cacheSeconds: Int?,
             meta: RetryDisplayMeta?,
         ) {
             val builder = Data.Builder()
                 .putString(KEY_BODY, body)
                 .putStringArray(KEY_TOPICS, topics.toTypedArray())
-                .putInt(KEY_CACHE_SECONDS, cacheSeconds ?: NO_CACHE)
             meta?.let { builder.putString(KEY_META, encodeRetryDisplayMeta(it)) }
             val request = OneTimeWorkRequestBuilder<SendRetryWorker>()
                 .setInputData(builder.build())

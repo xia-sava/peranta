@@ -59,7 +59,7 @@ fun ackRequestFor(roster: RosterFetchResult, selfDeviceId: String, ackBy: String
 
 /**
  * 読み直しを遡らせる幅。読み直しは publish 時刻以降をサーバの時計で引くため、端末とサーバの時計のずれを
- * 吸収する。応答のサーバ保持（60 秒）を超えて遡っても拾えるものは増えない。
+ * 吸収する。
  */
 private const val ACK_HISTORY_LOOKBACK_MILLIS: Long = 60_000L
 

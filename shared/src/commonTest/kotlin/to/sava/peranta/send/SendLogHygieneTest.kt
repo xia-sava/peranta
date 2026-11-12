@@ -149,7 +149,7 @@ class SendLogHygieneTest {
         override val connectionState: StateFlow<NtfyConnectionState> =
             MutableStateFlow(NtfyConnectionState.DISCONNECTED).asStateFlow()
 
-        override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
+        override suspend fun publish(topic: String, body: String, cache: Boolean) {
             throw NtfyPublishException(status, "publish rejected")
         }
 
@@ -164,7 +164,7 @@ class SendLogHygieneTest {
         override val connectionState: StateFlow<NtfyConnectionState> =
             MutableStateFlow(NtfyConnectionState.DISCONNECTED).asStateFlow()
 
-        override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
+        override suspend fun publish(topic: String, body: String, cache: Boolean) {
             throw failure
         }
 
@@ -181,7 +181,7 @@ class SendLogHygieneTest {
     }
 
     private suspend fun dispatch(payload: Payload, ntfy: NtfyClient, topics: List<String> = listOf(TOPIC_MARKER)) {
-        pipeline(ntfy).dispatch(payload, topics, persistSensitive = false) { _, _, _, _ -> }
+        pipeline(ntfy).dispatch(payload, topics, persistSensitive = false) { _, _, _ -> }
     }
 
     /** ログが出ていること、かつどの行にも目印が無いことを確かめる。 */
@@ -260,7 +260,7 @@ class SendLogHygieneTest {
     @Test
     fun failedEnqueueRetryWithUrlInExceptionKeepsTopicOutOfLog() = runTest {
         pipeline(RejectingNtfyClient(HTTP_SERVICE_UNAVAILABLE))
-            .dispatch(notification(), listOf(TOPIC_MARKER), persistSensitive = false) { _, _, _, _ ->
+            .dispatch(notification(), listOf(TOPIC_MARKER), persistSensitive = false) { _, _, _ ->
                 throw IllegalStateException("enqueue failed for $LEAKING_URL")
             }
         assertLoggedWithoutMarkers()
@@ -270,7 +270,7 @@ class SendLogHygieneTest {
     @Test
     fun failedRecordingKeepsBodyOutOfLog() = runTest {
         pipeline(store = FailingTimelineStore())
-            .dispatch(notification(), listOf(TOPIC_MARKER), persistSensitive = false) { _, _, _, _ -> }
+            .dispatch(notification(), listOf(TOPIC_MARKER), persistSensitive = false) { _, _, _ -> }
         assertLoggedWithoutMarkers()
     }
 }

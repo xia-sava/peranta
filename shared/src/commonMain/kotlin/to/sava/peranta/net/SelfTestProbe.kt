@@ -19,9 +19,6 @@ const val SELF_TEST_MARKER_PREFIX: String = "peranta-selftest:"
 /** マーカー到達を待つ時間。ntfy の即時配信は通常 1〜2 秒で届く。 */
 val SELF_TEST_TIMEOUT: Duration = 5.seconds
 
-/** マーカーのキャッシュ保持秒数（サーバに残す時間の上限）。 */
-const val SELF_TEST_CACHE_SECONDS: Int = 60
-
 /** 1 回のテストの結末。 */
 sealed interface SelfTestResult {
     data object Delivered : SelfTestResult
@@ -40,7 +37,8 @@ sealed interface SelfTestStatus {
 /**
  * 自己疎通テストのプローブ中核。自分のエンドポイント topic へ平文マーカーを publish し、
  * UnifiedPush の onMessage で横取りされたマーカーの到達を待って結果を分類する。
- * 復号・タイムライン追記・OS 通知は一切経由しない。
+ * 復号・タイムライン追記・OS 通知は一切経由しない。マーカーは後から読まれる必要が無いため、
+ * サーバに残さない（`cache = false`）。
  */
 class SelfTestProbe(
     private val timeout: Duration = SELF_TEST_TIMEOUT,
@@ -73,7 +71,7 @@ class SelfTestProbe(
 
         try {
             val result = try {
-                ntfy.publish(topic, SELF_TEST_MARKER_PREFIX + nonce, cacheSeconds = SELF_TEST_CACHE_SECONDS)
+                ntfy.publish(topic, SELF_TEST_MARKER_PREFIX + nonce, cache = false)
                 if (withTimeoutOrNull(timeout) { arrival.await() } != null) {
                     SelfTestResult.Delivered
                 } else {

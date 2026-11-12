@@ -118,17 +118,17 @@ class CommandSenderTest {
     }
 
     /**
-     * キャッシュ保持は配送特性に従う。状態同期の dismiss は指定せずサーバの設定へ委ね、
-     * 即時操作の reply は短い保持で送る（§3.4）。
+     * 状態同期の dismiss も即時操作の reply も、サーバに保持させる（cache = true）。
+     * 遅れて届いたものは受信側が失効時刻で無視する（§3.4）。
      */
     @Test
-    fun publishesWithCacheRetentionOfDelivery() = runTest {
+    fun publishesCommandsWithCache() = runTest {
         val ntfy = RecordingControlNtfy(history = listOf(event(presence("phone", "https://h/phone-topic"))))
         val commandSender = sender(ntfy)
         commandSender.dismiss("0|k")
         commandSender.reply(targetDeviceId = "phone", targetNotificationKey = "0|k", actionIndex = 0, text = "OK")
-        assertNull(ntfy.published.first().cacheSeconds)
-        assertEquals(HIGH_PRIORITY_CACHE_SECONDS, ntfy.published.last().cacheSeconds)
+        assertTrue(ntfy.published.first().cache)
+        assertTrue(ntfy.published.last().cache)
     }
 
     /** invokeAction は元通知の送信元 deviceId のエンドポイントへ一点指定する。 */
@@ -325,7 +325,7 @@ class CommandSenderTest {
         private val delegate: RecordingControlNtfy,
         private val failure: Throwable,
     ) : NtfyClient by delegate {
-        override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
+        override suspend fun publish(topic: String, body: String, cache: Boolean) {
             throw failure
         }
     }

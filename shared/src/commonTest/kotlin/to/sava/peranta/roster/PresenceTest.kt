@@ -8,7 +8,6 @@ import to.sava.peranta.model.PresencePayload
 import to.sava.peranta.model.decodeEnvelope
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PresenceTest {
@@ -51,9 +50,9 @@ class PresenceTest {
         assertEquals(listOf("commandAck"), presenceCapabilities(canDisplay = false, canCommand = false))
     }
 
-    /** publishPresence は control topic へ暗号文を送り、キャッシュ短縮ヘッダは付けない。 */
+    /** publishPresence は control topic へ暗号文を送り、サーバに保持させる（cache = true）。 */
     @Test
-    fun publishesEncryptedPresenceWithoutCacheHeader() = runTest {
+    fun publishesEncryptedPresenceWithCache() = runTest {
         val ntfy = RecordingControlNtfy()
         val presence = buildPresencePayload(
             deviceId = "dev-123",
@@ -67,7 +66,7 @@ class PresenceTest {
 
         val published = ntfy.published.single()
         assertEquals("peranta-control-xyz", published.topic)
-        assertNull(published.cacheSeconds)
+        assertTrue(published.cache)
         assertTrue(published.body.isNotBlank())
 
         val opened = cipher.open(decodeEnvelope(published.body)) as PresencePayload

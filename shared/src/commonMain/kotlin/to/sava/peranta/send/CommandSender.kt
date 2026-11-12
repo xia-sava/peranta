@@ -180,7 +180,7 @@ class CommandSender(
         return try {
             val body = encodeEnvelope(pipeline.seal(payload))
             ackRequest?.let { tracker?.register(payload.id, command, it) }
-            pipeline.publishEnvelope(body, topics, cacheSeconds = deliveryOf(command).cacheSeconds)
+            pipeline.publishEnvelope(body, topics)
             tracker?.arm(payload.id)
             log.i { "command sent command=$command to=$to topics=${topics.size} ack=${ackRequest != null}" }
             true

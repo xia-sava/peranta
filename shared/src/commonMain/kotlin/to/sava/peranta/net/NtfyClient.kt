@@ -26,9 +26,10 @@ interface NtfyClient {
 
     /**
      * [topic] へ [body] を POST する。
-     * [cacheSeconds] を指定するとキャッシュ保持時間を `Cache: <n>s` ヘッダで縛る（null なら省略）。
+     * [cache] が true のときは `Cache` ヘッダを付けず、サーバの `cache-duration`（§9）に従って保持させる。
+     * false のときは `Cache: no` を付け、サーバに残さない。
      */
-    suspend fun publish(topic: String, body: String, cacheSeconds: Int? = null)
+    suspend fun publish(topic: String, body: String, cache: Boolean = true)
 
     /**
      * [topic] を WebSocket 購読し、本文イベントのみを流す。

@@ -13,8 +13,8 @@ auth-file: "/var/lib/ntfy/user.db"
 auth-default-access: "deny-all"
 
 # メッセージキャッシュ
-# 配送 topic の保持は publish 時の Cache ヘッダで個別に短縮する。
-# control topic（ロスター）はこのグローバル保持期間に依存する。
+# メッセージの保持はこのグローバル保持期間に従う。
+# control topic（ロスター）はこの保持でロスターを永続化する。
 cache-file: "/var/cache/ntfy/cache.db"
 cache-duration: "24h"
 

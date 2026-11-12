@@ -33,7 +33,7 @@ class SendVerifyToolTest {
         val keyId = System.getenv("PERANTA_VERIFY_KEYID") ?: "k1"
         val cipher = MessageCipher(Base64.decode(keyB64), keyId)
 
-        // 事前捕捉した封筒ファイル（1 行 1 封筒 JSON）を復号する（短キャッシュ回避）。
+        // 事前捕捉した封筒ファイル（1 行 1 封筒 JSON）を復号する。
         System.getenv("PERANTA_VERIFY_ENVELOPE_FILE")?.let { path ->
             runBlocking {
                 val payloads = buildList {

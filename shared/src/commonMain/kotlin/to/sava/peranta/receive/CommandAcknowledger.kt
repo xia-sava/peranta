@@ -16,12 +16,12 @@ fun interface CommandAcknowledger {
 
 /**
  * 応答を封緘して ntfy へ publish する [CommandAcknowledger]。
- * 応答は遅れて届いても送信端末はもう待っていないため、即時操作（[CommandDelivery.IMMEDIATE]）と同じく
- * サーバの保持を短くする。
+ * サーバの保持は `cache-duration`（§9）に従い、遅れて届いた応答は受信側が失効時刻
+ * （[CommandDelivery.IMMEDIATE] と同じ猶予）で無視する。
  */
 fun publishingCommandAcknowledger(cipher: MessageCipher, ntfy: NtfyClient): CommandAcknowledger =
     CommandAcknowledger { topic, ack ->
-        ntfy.publish(topic, encodeEnvelope(cipher.seal(ack)), CommandDelivery.IMMEDIATE.cacheSeconds)
+        ntfy.publish(topic, encodeEnvelope(cipher.seal(ack)))
     }
 
 /** [command] への応答を組む。宛先はコマンドの送信端末で、失効は即時操作と揃える。 */

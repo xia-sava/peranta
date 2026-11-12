@@ -76,7 +76,7 @@ class RosterFanoutTest {
             payload = notification(),
             topics = topics,
             persistSensitive = true,
-        ) { _, _, _, _ -> }
+        ) { _, _, _ -> }
 
         assertEquals(listOf("desktop-topic", "tablet-topic"), ntfy.published.map { it.topic })
     }
@@ -92,7 +92,7 @@ class RosterFanoutTest {
             payload = notification(),
             topics = topics,
             persistSensitive = true,
-        ) { _, _, _, _ -> }
+        ) { _, _, _ -> }
 
         assertEquals(listOf("static-a", "static-b"), ntfy.published.map { it.topic })
     }
@@ -113,7 +113,7 @@ class RosterFanoutTest {
             payload = notification(),
             topics = topics,
             persistSensitive = true,
-        ) { _, _, _, _ -> enqueueCalled = true }
+        ) { _, _, _ -> enqueueCalled = true }
 
         assertFalse(delivered)
         assertTrue(enqueueCalled)
@@ -136,7 +136,7 @@ class RosterFanoutTest {
             payload = notification(),
             topics = topics,
             persistSensitive = true,
-        ) { _, _, _, _ -> }
+        ) { _, _, _ -> }
 
         assertFalse(delivered)
         assertTrue(ntfy.published.isEmpty())

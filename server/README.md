@@ -134,7 +134,7 @@ docker compose exec ntfy ntfy token add peranta
 **容量は放っておいてよい**。ntfy に単調増加するものは無く、定常状態で頭打ちになる。
 
 - メッセージ（`cache.db`）: 保持は既定 24 時間。1 件あたり最大 16 KB なので合計しても数 MB
-  程度。優先度の高い通知は publish 時に 60 秒へ短縮している
+  程度。メッセージの種別（優先度など）によらず、保持は `cache-duration` に従う
 - 添付（暗号化 blob）: 保持 24 時間（ntfy は添付をメッセージより長く残さないため、メッセージの
   保持と揃えている）、合計上限 2 GB（`server.yml` の
   `attachment-total-size-limit`）。ここが実質的な天井になる。

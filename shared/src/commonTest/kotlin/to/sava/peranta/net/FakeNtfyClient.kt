@@ -16,12 +16,12 @@ class FakeNtfyClient(
     override val connectionState: StateFlow<NtfyConnectionState> =
         MutableStateFlow(NtfyConnectionState.SUBSCRIBED).asStateFlow()
 
-    data class Published(val topic: String, val body: String, val cacheSeconds: Int?)
+    data class Published(val topic: String, val body: String, val cache: Boolean)
 
     val published = mutableListOf<Published>()
 
-    override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
-        published.add(Published(topic, body, cacheSeconds))
+    override suspend fun publish(topic: String, body: String, cache: Boolean) {
+        published.add(Published(topic, body, cache))
     }
 
     override fun subscribe(topic: String): Flow<NtfyEvent> = events

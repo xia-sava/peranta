@@ -46,10 +46,10 @@ class KtorNtfyClient(
     private val _connectionState = MutableStateFlow(NtfyConnectionState.DISCONNECTED)
     override val connectionState: StateFlow<NtfyConnectionState> = _connectionState.asStateFlow()
 
-    override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
+    override suspend fun publish(topic: String, body: String, cache: Boolean) {
         val response: HttpResponse = httpClient.post(httpUrl(topic)) {
             config.accessToken?.let { header(HttpHeaders.Authorization, "Bearer $it") }
-            cacheSeconds?.let { header("Cache", "${it}s") }
+            if (!cache) header("Cache", "no")
             setBody(body)
         }
         if (!response.status.isSuccess()) {

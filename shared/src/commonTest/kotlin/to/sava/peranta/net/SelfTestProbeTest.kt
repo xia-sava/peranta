@@ -21,12 +21,12 @@ private class SelfTestFakeNtfy : NtfyClient {
     override val connectionState =
         MutableStateFlow(NtfyConnectionState.SUBSCRIBED).asStateFlow()
 
-    data class Published(val topic: String, val body: String, val cacheSeconds: Int?)
+    data class Published(val topic: String, val body: String, val cache: Boolean)
 
     val published = mutableListOf<Published>()
 
-    override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
-        published.add(Published(topic, body, cacheSeconds))
+    override suspend fun publish(topic: String, body: String, cache: Boolean) {
+        published.add(Published(topic, body, cache))
     }
 
     override fun subscribe(topic: String): Flow<NtfyEvent> = emptyFlow()
@@ -37,7 +37,7 @@ private class RejectingNtfy(private val status: Int) : NtfyClient {
     override val connectionState =
         MutableStateFlow(NtfyConnectionState.DISCONNECTED).asStateFlow()
 
-    override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
+    override suspend fun publish(topic: String, body: String, cache: Boolean) {
         throw NtfyPublishException(status, "rejected")
     }
 
@@ -49,7 +49,7 @@ private class FailingNtfy(private val failureMessage: String = "boom") : NtfyCli
     override val connectionState =
         MutableStateFlow(NtfyConnectionState.DISCONNECTED).asStateFlow()
 
-    override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
+    override suspend fun publish(topic: String, body: String, cache: Boolean) {
         throw IllegalStateException(failureMessage)
     }
 
@@ -59,9 +59,9 @@ private class FailingNtfy(private val failureMessage: String = "boom") : NtfyCli
 @OptIn(ExperimentalCoroutinesApi::class)
 class SelfTestProbeTest {
 
-    /** publish される topic・マーカー本文（固定 nonce）・cacheSeconds が仕様どおりであること。 */
+    /** publish される topic・マーカー本文（固定 nonce）が仕様どおりで、サーバに残さない（cache = false）こと。 */
     @Test
-    fun publishesMarkerWithFixedNonceAndCache() = runTest {
+    fun publishesMarkerWithFixedNonceWithoutCache() = runTest {
         val fake = SelfTestFakeNtfy()
         val probe = SelfTestProbe(nonceGen = { "NONCE" })
         val job = async { probe.run(fake, "my-topic") }
@@ -70,7 +70,7 @@ class SelfTestProbeTest {
         val published = fake.published.single()
         assertEquals("my-topic", published.topic)
         assertEquals("peranta-selftest:NONCE", published.body)
-        assertEquals(60, published.cacheSeconds)
+        assertFalse(published.cache)
 
         probe.consumeMarker(published.body)
         job.await()

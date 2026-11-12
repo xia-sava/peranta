@@ -146,7 +146,7 @@ class MessageForwardingTest {
         override val connectionState: StateFlow<NtfyConnectionState> =
             MutableStateFlow(NtfyConnectionState.DISCONNECTED).asStateFlow()
 
-        override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
+        override suspend fun publish(topic: String, body: String, cache: Boolean) {
             throw IllegalStateException(failureMessage)
         }
 

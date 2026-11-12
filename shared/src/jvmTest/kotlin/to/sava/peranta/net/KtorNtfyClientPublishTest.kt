@@ -28,7 +28,7 @@ class KtorNtfyClientPublishTest {
         return KtorNtfyClient(config, HttpClient(engine))
     }
 
-    /** publish は http スキーム・host:port の権威部で URL を組み、認証とキャッシュのヘッダと本文を送る。 */
+    /** publish は http スキーム・host:port の権威部で URL を組み、認証ヘッダと本文を送る。 */
     @Test
     fun publishBuildsHttpUrlWithHeadersAndBody() = runTest {
         val captured = mutableListOf<HttpRequestData>()
@@ -36,14 +36,39 @@ class KtorNtfyClientPublishTest {
             PerantaConfig(host = "localhost", useTls = false, port = 8090, accessToken = "tok"),
             captured = captured,
         )
-        client.publish("my-topic", "hello", cacheSeconds = 30)
+        client.publish("my-topic", "hello")
 
         val request = captured.single()
         assertEquals(HttpMethod.Post, request.method)
         assertEquals("http://localhost:8090/my-topic", request.url.toString())
         assertEquals("Bearer tok", request.headers["Authorization"])
-        assertEquals("30s", request.headers["Cache"])
         assertEquals("hello", (request.body as TextContent).text)
+    }
+
+    /** 既定の publish（cache = true）は Cache ヘッダを付けず、サーバの保持に従わせる。 */
+    @Test
+    fun publishOmitsCacheHeaderByDefault() = runTest {
+        val captured = mutableListOf<HttpRequestData>()
+        val client = clientFor(
+            PerantaConfig(host = "h", useTls = false, port = 80, accessToken = "tok"),
+            captured = captured,
+        )
+        client.publish("t", "b")
+
+        assertNull(captured.single().headers["Cache"])
+    }
+
+    /** cache = false の publish は `Cache: no` を付け、サーバに残さない。 */
+    @Test
+    fun publishSendsCacheNoWhenCacheDisabled() = runTest {
+        val captured = mutableListOf<HttpRequestData>()
+        val client = clientFor(
+            PerantaConfig(host = "h", useTls = false, port = 80, accessToken = "tok"),
+            captured = captured,
+        )
+        client.publish("t", "b", cache = false)
+
+        assertEquals("no", captured.single().headers["Cache"])
     }
 
     /** TLS 有効・port 未指定なら https スキームで既定ポートの権威部（host のみ）になる。 */
@@ -60,19 +85,17 @@ class KtorNtfyClientPublishTest {
         assertEquals("https://peranta.example/t", request.url.toString())
     }
 
-    /** accessToken 未設定なら Authorization ヘッダを付けず、cacheSeconds 未指定なら Cache ヘッダも付けない。 */
+    /** accessToken 未設定なら Authorization ヘッダを付けない。 */
     @Test
-    fun publishOmitsAuthAndCacheHeadersWhenAbsent() = runTest {
+    fun publishOmitsAuthHeaderWhenTokenAbsent() = runTest {
         val captured = mutableListOf<HttpRequestData>()
         val client = clientFor(
             PerantaConfig(host = "h", useTls = false, port = 80, accessToken = null),
             captured = captured,
         )
-        client.publish("t", "b", cacheSeconds = null)
+        client.publish("t", "b")
 
-        val request = captured.single()
-        assertNull(request.headers["Authorization"])
-        assertNull(request.headers["Cache"])
+        assertNull(captured.single().headers["Authorization"])
     }
 
     /** publish が 2xx 以外で返ると NtfyPublishException になり、status に応答コードを保持する。 */

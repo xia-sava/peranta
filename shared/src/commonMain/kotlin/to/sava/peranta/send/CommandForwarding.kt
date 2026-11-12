@@ -6,18 +6,19 @@ import to.sava.peranta.model.CommandType
 import to.sava.peranta.model.newPayloadId
 
 /**
- * command の配送特性（§3.4）。失効までの猶予とサーバのキャッシュ保持を、遅れて届いたときに
- * 何が起きるかで分ける。
+ * command の配送特性（§3.4）。失効までの猶予を、遅れて届いたときに何が起きるかで分ける。
+ * サーバの保持はどちらも `cache-duration`（§9）に従い、遅れて届いたものは受信側が
+ * 失効時刻で無視する。
  *
  * - [IMMEDIATE]: 遅れて実行されると誤爆する操作（アクション発火・返信）。OTP 本文の猶予
- *   （[OTP_TTL_MILLIS]）より短く切り、返信本文がサーバに残る時間も同じだけに抑える。
+ *   （[OTP_TTL_MILLIS]）より短く切る。
  * - [STATE_SYNC]: 冪等な取り下げと、恒久的な設定変更（既読同期・denylist の更新）。受信端末が
- *   半日単位で離れていても届く必要があり、遅れて届いても結果は変わらない。保持はサーバの
- *   `cache-duration`（§9）へ委ね、失効はその既定値に合わせる。
+ *   半日単位で離れていても届く必要があり、遅れて届いても結果は変わらない。失効は
+ *   `cache-duration` の既定値に合わせる。
  */
-enum class CommandDelivery(val ttlMillis: Long, val cacheSeconds: Int?) {
-    IMMEDIATE(ttlMillis = 2 * 60 * 1000L, cacheSeconds = HIGH_PRIORITY_CACHE_SECONDS),
-    STATE_SYNC(ttlMillis = 24 * 60 * 60 * 1000L, cacheSeconds = null),
+enum class CommandDelivery(val ttlMillis: Long) {
+    IMMEDIATE(ttlMillis = 2 * 60 * 1000L),
+    STATE_SYNC(ttlMillis = 24 * 60 * 60 * 1000L),
 }
 
 /** [command] の配送特性（§3.4）。 */

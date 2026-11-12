@@ -71,17 +71,17 @@ class SendPipelineTest {
         assertEquals(p.id, reflected.id)
     }
 
-    /** high 優先は短キャッシュ（60s）で publish し、通常はキャッシュ指定なし。 */
+    /** high 優先も通常と同じく、サーバに保持させる（cache = true）。 */
     @Test
-    fun highPriorityUsesShortCache() = runTest {
+    fun highPriorityIsPublishedWithCache() = runTest {
         val ntfy = FakeNtfyClient()
         val pipeline = SendPipeline(cipher(), ntfy, FakeTimelineStore())
 
         pipeline.send(payload(Priority.HIGH), listOf("topic"), persistSensitive = true)
         pipeline.send(payload(Priority.NORMAL), listOf("topic"), persistSensitive = true)
 
-        assertEquals(HIGH_PRIORITY_CACHE_SECONDS, ntfy.published[0].cacheSeconds)
-        assertEquals(null, ntfy.published[1].cacheSeconds)
+        assertTrue(ntfy.published[0].cache)
+        assertTrue(ntfy.published[1].cache)
     }
 
     /** publish が失敗すると例外を送出し、送信済みは記録しない。 */
@@ -112,7 +112,7 @@ class SendPipelineTest {
         override val connectionState: StateFlow<NtfyConnectionState> =
             MutableStateFlow(NtfyConnectionState.DISCONNECTED).asStateFlow()
 
-        override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
+        override suspend fun publish(topic: String, body: String, cache: Boolean) {
             throw IllegalStateException("publish failed")
         }
 

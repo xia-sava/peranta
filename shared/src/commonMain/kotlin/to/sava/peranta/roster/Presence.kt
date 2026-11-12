@@ -62,8 +62,7 @@ fun buildPresencePayload(
 
 /**
  * presence を暗号化して control topic へ告知する（§3.5）。
- * control topic はロスター永続のため長めのキャッシュに委ねるので、
- * キャッシュ短縮ヘッダは付けない（サーバ既定の保持時間を使う）。
+ * control topic はロスター永続のため、サーバの保持は `cache-duration`（§9）に従う。
  */
 suspend fun publishPresence(
     cipher: MessageCipher,
@@ -73,6 +72,6 @@ suspend fun publishPresence(
     log: Logger = Logger.withTag("Presence"),
 ) {
     val body = encodeEnvelope(cipher.seal(presence))
-    ntfy.publish(controlTopic, body, cacheSeconds = null)
+    ntfy.publish(controlTopic, body)
     log.d { "presence announced to ${topicForLog(controlTopic)} for device=${presence.from}" }
 }
