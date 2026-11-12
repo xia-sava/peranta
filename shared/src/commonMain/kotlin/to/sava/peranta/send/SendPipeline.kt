@@ -104,7 +104,8 @@ class SendPipeline(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            log.w(error) { "dispatch failed for id=${payload.id}" }
+            // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
+            log.w { "dispatch failed for id=${payload.id} (${error::class.simpleName})" }
             runCatching { recordError(SEND_FAILED_MESSAGE) }
                 .onFailure { log.w(it) { "failed to record send error item" } }
             false
@@ -168,11 +169,12 @@ class SendPipeline(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
+            // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
             if (isRetriablePublishError(error)) {
-                log.w(error) { "immediate publish failed for id=${payload.id}; enqueuing retry" }
+                log.w { "immediate publish failed for id=${payload.id}; enqueuing retry (${error::class.simpleName})" }
                 PublishOutcome.RETRY
             } else {
-                log.w(error) { "immediate publish rejected for id=${payload.id}; giving up" }
+                log.w { "immediate publish rejected for id=${payload.id}; giving up (${error::class.simpleName})" }
                 PublishOutcome.REJECTED
             }
         }

@@ -58,7 +58,8 @@ suspend fun sendMessage(
     } catch (cancellation: CancellationException) {
         throw cancellation
     } catch (error: Exception) {
-        log.w(error) { "message send failed id=${payload.id}" }
+        // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
+        log.w { "message send failed id=${payload.id} (${error::class.simpleName})" }
         runCatching { pipeline.recordError(MESSAGE_SEND_FAILED_MESSAGE) }
         false
     }

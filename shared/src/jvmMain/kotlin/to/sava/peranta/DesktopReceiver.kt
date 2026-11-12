@@ -304,7 +304,8 @@ class DesktopReceiver(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            log.w(error) { "presence announce failed" }
+            // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
+            log.w { "presence announce failed (${error::class.simpleName})" }
         }
     }
 
@@ -548,7 +549,8 @@ class DesktopReceiver(
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
-                log.w(error) { "failed to send mute command for $packageName" }
+                // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
+                log.w { "failed to send mute command for $packageName (${error::class.simpleName})" }
             }
         },
         sendAppRuleCommand = { packageName, senderDeviceId, settings ->
@@ -557,7 +559,8 @@ class DesktopReceiver(
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
-                log.w(error) { "failed to send app rule command for $packageName" }
+                // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
+                log.w { "failed to send app rule command for $packageName (${error::class.simpleName})" }
             }
         },
     )

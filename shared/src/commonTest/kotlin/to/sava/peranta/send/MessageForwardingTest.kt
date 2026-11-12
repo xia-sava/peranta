@@ -15,6 +15,8 @@ import to.sava.peranta.net.FakeNtfyClient
 import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyConnectionState
 import to.sava.peranta.net.NtfyEvent
+import to.sava.peranta.platform.RecordingLogWriter
+import to.sava.peranta.platform.recordingLogger
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.SentNotification
 import to.sava.peranta.timeline.TimelineFeed
@@ -120,12 +122,32 @@ class MessageForwardingTest {
         assertEquals(MESSAGE_SEND_FAILED_MESSAGE, (store.appended.single() as ErrorItem).message)
     }
 
-    private class FailingNtfyClient : NtfyClient {
+    /** publish の例外メッセージに接続先 URL（完全な topic）があっても、完全な topic も本文もログに出ない。 */
+    @Test
+    fun sendMessageKeepsTopicInExceptionOutOfLog() = runTest {
+        val leakedTopic = "topic-never-logged"
+        val c = cipher()
+        val ntfy = FailingNtfyClient("Request timeout has expired [url=https://h/$leakedTopic]")
+        val pipeline = SendPipeline(c, ntfy, FakeTimelineStore())
+        val writer = RecordingLogWriter()
+
+        val delivered = sendMessage(
+            config(deliveryTopics = listOf(leakedTopic)), c, ntfy, pipeline, "text-never-logged",
+            log = recordingLogger(writer, "MessageSend"),
+        )
+
+        assertFalse(delivered)
+        assertTrue(writer.recorded.isNotEmpty(), "no log line was recorded")
+        val leaked = writer.recorded.filter { it.contains(leakedTopic) || it.contains("text-never-logged") }
+        assertTrue(leaked.isEmpty(), "secret appeared in log: $leaked")
+    }
+
+    private class FailingNtfyClient(private val failureMessage: String = "publish failed") : NtfyClient {
         override val connectionState: StateFlow<NtfyConnectionState> =
             MutableStateFlow(NtfyConnectionState.DISCONNECTED).asStateFlow()
 
         override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
-            throw IllegalStateException("publish failed")
+            throw IllegalStateException(failureMessage)
         }
 
         override fun subscribe(topic: String): Flow<NtfyEvent> = emptyFlow()

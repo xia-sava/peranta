@@ -84,7 +84,8 @@ class SelfTestProbe(
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
-                log.w(error) { "self-test publish failed" }
+                // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
+                log.w { "self-test publish failed (${error::class.simpleName})" }
                 SelfTestResult.PublishFailed
             }
             _status.value = SelfTestStatus.Done(result, now())

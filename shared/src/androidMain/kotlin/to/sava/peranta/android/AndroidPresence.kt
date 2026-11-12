@@ -81,7 +81,8 @@ suspend fun announcePresence(context: Context) = announceMutex.withLock {
     } catch (cancellation: CancellationException) {
         throw cancellation
     } catch (error: Exception) {
-        presenceLog.w(error) { "presence announce failed" }
+        // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
+        presenceLog.w { "presence announce failed (${error::class.simpleName})" }
     } finally {
         httpClient.close()
     }

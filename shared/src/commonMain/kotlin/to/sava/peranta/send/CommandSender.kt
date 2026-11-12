@@ -189,7 +189,8 @@ class CommandSender(
             throw cancellation
         } catch (error: Exception) {
             tracker?.cancel(payload.id)
-            log.w(error) { "failed to send command=$command to=$to" }
+            // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
+            log.w { "failed to send command=$command to=$to (${error::class.simpleName})" }
             false
         }
     }

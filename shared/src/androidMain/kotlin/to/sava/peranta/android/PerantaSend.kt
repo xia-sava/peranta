@@ -135,7 +135,8 @@ object PerantaSend {
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            log.w(error) { "send dispatch setup failed for id=${payload.id}" }
+            // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
+            log.w { "send dispatch setup failed for id=${payload.id} (${error::class.simpleName})" }
             false
         }
     }
@@ -183,7 +184,8 @@ object PerantaSend {
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            log.w(error) { "full text attach failed; sending truncated preview only id=${payload.id}" }
+            // 例外そのものは流さない。ktor の例外メッセージには blob の送り先 URL（＝ホスト）が載る（§11）。
+            log.w { "full text attach failed; sending truncated preview only id=${payload.id} (${error::class.simpleName})" }
             payload
         }
 
@@ -229,7 +231,8 @@ object PerantaSend {
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            log.w(error) { "notification image attach failed id=${payload.id}" }
+            // 例外そのものは流さない。ktor の例外メッセージには blob の送り先 URL（＝ホスト）が載る（§11）。
+            log.w { "notification image attach failed id=${payload.id} (${error::class.simpleName})" }
             null
         }
     }
@@ -294,7 +297,8 @@ object PerantaSend {
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            log.w(error) { "message send setup failed" }
+            // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
+            log.w { "message send setup failed (${error::class.simpleName})" }
             false
         }
     }
@@ -317,7 +321,8 @@ object PerantaSend {
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            log.w(error) { "failed to broadcast dismiss" }
+            // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
+            log.w { "failed to broadcast dismiss (${error::class.simpleName})" }
             false
         }
     }

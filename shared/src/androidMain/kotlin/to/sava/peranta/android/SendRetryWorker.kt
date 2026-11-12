@@ -79,16 +79,18 @@ class SendRetryWorker(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: NtfyPublishException) {
+            // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
             if (isRetriablePublishError(error)) {
-                log.w(error) { "retry publish failed (attempt ${runAttemptCount + 1}); backing off" }
+                log.w { "retry publish failed (attempt ${runAttemptCount + 1}); backing off (${error::class.simpleName})" }
                 Result.retry()
             } else {
-                log.w(error) { "retry publish rejected (${error.status}); giving up" }
+                log.w { "retry publish rejected (${error.status}); giving up" }
                 recordError(SEND_REJECTED_MESSAGE)
                 Result.failure()
             }
         } catch (error: Exception) {
-            log.w(error) { "retry publish failed (attempt ${runAttemptCount + 1}); backing off" }
+            // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
+            log.w { "retry publish failed (attempt ${runAttemptCount + 1}); backing off (${error::class.simpleName})" }
             Result.retry()
         } finally {
             httpClient.close()
@@ -123,7 +125,10 @@ class SendRetryWorker(
             PerantaSend.timelineFeed.append(
                 meta.toSentNotification(from = deviceName.orEmpty(), timestamp = nowEpochMillis()),
             )
-        }.onFailure { log.w(it) { "failed to record retried sent notification" } }
+        }.onFailure {
+            // 例外そのものは流さない。復号・デコードの例外は入力や表示メタ（通知タイトルを含む）を説明文へ載せうる（§11）。
+            log.w { "failed to record retried sent notification (${it::class.simpleName})" }
+        }
     }
 
     /** [message] をタイムラインへ ErrorItem として残す。 */
@@ -137,7 +142,7 @@ class SendRetryWorker(
                     kind = ErrorKind.OTHER,
                 ),
             )
-        }.onFailure { log.w(it) { "failed to record error item" } }
+        }.onFailure { log.w { "failed to record error item (${it::class.simpleName})" } }
     }
 
     companion object {

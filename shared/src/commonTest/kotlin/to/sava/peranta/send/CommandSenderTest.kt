@@ -15,7 +15,10 @@ import to.sava.peranta.model.Payload
 import to.sava.peranta.model.PresencePayload
 import to.sava.peranta.model.decodeEnvelope
 import to.sava.peranta.model.encodeEnvelope
+import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyEvent
+import to.sava.peranta.platform.RecordingLogWriter
+import to.sava.peranta.platform.recordingLogger
 import to.sava.peranta.roster.CAPABILITY_COMMAND
 import to.sava.peranta.roster.CAPABILITY_COMMAND_ACK
 import to.sava.peranta.roster.CAPABILITY_DISPLAY
@@ -315,5 +318,41 @@ class CommandSenderTest {
         val ok = sender(ntfy, config(controlTopic = null)).muteApp("phone", "com.spam")
         assertFalse(ok)
         assertTrue(ntfy.published.isEmpty())
+    }
+
+    /** publish だけが [failure] で失敗する [NtfyClient]。ロスターの履歴取得は [delegate] に任せる。 */
+    private class FailingPublishNtfy(
+        private val delegate: RecordingControlNtfy,
+        private val failure: Throwable,
+    ) : NtfyClient by delegate {
+        override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
+            throw failure
+        }
+    }
+
+    /** 送信の例外メッセージに接続先 URL（完全な topic）があっても、完全な topic はログに出ない。 */
+    @Test
+    fun failedSendKeepsTopicInExceptionOutOfLog() = runTest {
+        val leakedTopic = "phone-topic-never-logged"
+        val ntfy = FailingPublishNtfy(
+            delegate = RecordingControlNtfy(
+                history = listOf(
+                    event(presence(self, "https://h/self-topic")),
+                    event(presence("phone", "https://h/$leakedTopic")),
+                ),
+            ),
+            failure = IllegalStateException("Request timeout has expired [url=https://h/$leakedTopic]"),
+        )
+        val writer = RecordingLogWriter()
+        val sender = CommandSender(
+            config(), cipher, ntfy, SendPipeline(cipher, ntfy, FakeTimelineStore()),
+            log = recordingLogger(writer, "CommandSend"),
+        )
+
+        val ok = sender.muteApp("phone", "com.spam")
+
+        assertFalse(ok)
+        assertTrue(writer.recorded.isNotEmpty(), "no log line was recorded")
+        assertTrue(writer.recorded.none { it.contains(leakedTopic) }, "topic appeared in log: ${writer.recorded}")
     }
 }

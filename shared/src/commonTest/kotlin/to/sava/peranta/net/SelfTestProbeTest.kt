@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import to.sava.peranta.platform.RecordingLogWriter
+import to.sava.peranta.platform.recordingLogger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -43,12 +45,12 @@ private class RejectingNtfy(private val status: Int) : NtfyClient {
 }
 
 /** publish が一般例外で失敗するフェイク。 */
-private class FailingNtfy : NtfyClient {
+private class FailingNtfy(private val failureMessage: String = "boom") : NtfyClient {
     override val connectionState =
         MutableStateFlow(NtfyConnectionState.DISCONNECTED).asStateFlow()
 
     override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
-        throw IllegalStateException("boom")
+        throw IllegalStateException(failureMessage)
     }
 
     override fun subscribe(topic: String): Flow<NtfyEvent> = emptyFlow()
@@ -118,6 +120,19 @@ class SelfTestProbeTest {
     fun generalExceptionMapsToPublishFailed() = runTest {
         val probe = SelfTestProbe()
         assertEquals(SelfTestResult.PublishFailed, probe.run(FailingNtfy(), "t"))
+    }
+
+    /** publish の例外メッセージに接続先 URL（完全な topic）があっても、完全な topic はログに出ないこと。 */
+    @Test
+    fun publishFailureKeepsTopicInExceptionOutOfLog() = runTest {
+        val leakedTopic = "topic-never-logged"
+        val writer = RecordingLogWriter()
+        val probe = SelfTestProbe(log = recordingLogger(writer, "SelfTest"))
+
+        probe.run(FailingNtfy("Request timeout has expired [url=https://h/$leakedTopic]"), leakedTopic)
+
+        assertTrue(writer.recorded.isNotEmpty(), "no log line was recorded")
+        assertTrue(writer.recorded.none { it.contains(leakedTopic) }, "topic appeared in log: ${writer.recorded}")
     }
 
     /** マーカーが到達しないまま timeout 経過で Timeout になること。 */

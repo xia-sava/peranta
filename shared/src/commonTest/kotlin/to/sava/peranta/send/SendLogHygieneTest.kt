@@ -51,6 +51,9 @@ private const val HOST_MARKER = "blob-host-never-logged.example.com"
 /** 配送先の topic。推測されないことが前提の値なので、完全な形はログに現れてはならない。 */
 private const val TOPIC_MARKER = "peranta-dev-desk-topicnevrlogged"
 
+/** 例外メッセージに載りうる接続先 URL。完全な topic を含むので、ログに現れてはならない。 */
+private const val LEAKING_URL = "https://ntfy.example.com/$TOPIC_MARKER"
+
 /** リトライで回復し得ない HTTP ステータス。 */
 private const val HTTP_BAD_REQUEST = 400
 
@@ -153,6 +156,21 @@ class SendLogHygieneTest {
         override fun subscribe(topic: String): Flow<NtfyEvent> = emptyFlow()
     }
 
+    /**
+     * publish が [failure] で失敗するクライアント。ktor の例外と同じく、例外メッセージに接続先 URL
+     * （完全な topic）を含める用途で使う。
+     */
+    private class ThrowingNtfyClient(private val failure: Throwable) : NtfyClient {
+        override val connectionState: StateFlow<NtfyConnectionState> =
+            MutableStateFlow(NtfyConnectionState.DISCONNECTED).asStateFlow()
+
+        override suspend fun publish(topic: String, body: String, cacheSeconds: Int?) {
+            throw failure
+        }
+
+        override fun subscribe(topic: String): Flow<NtfyEvent> = emptyFlow()
+    }
+
     /** append が必ず失敗する [TimelineStore]。記録経路の失敗ログを起こす。 */
     private class FailingTimelineStore : TimelineStore {
         override suspend fun append(item: TimelineItem): Unit = throw IllegalStateException("store unavailable")
@@ -219,6 +237,32 @@ class SendLogHygieneTest {
     @Test
     fun rejectedDispatchKeepsBodyOutOfLog() = runTest {
         dispatch(sms(), RejectingNtfyClient(HTTP_BAD_REQUEST))
+        assertLoggedWithoutMarkers()
+    }
+
+    /** 再送へ回す失敗の例外メッセージに接続先 URL があっても、完全な topic はログに出ない。 */
+    @Test
+    fun retriedDispatchWithUrlInExceptionKeepsTopicOutOfLog() = runTest {
+        val failure = IllegalStateException("Request timeout has expired [url=$LEAKING_URL, request_timeout=8000 ms]")
+        dispatch(notification(), ThrowingNtfyClient(failure))
+        assertLoggedWithoutMarkers()
+    }
+
+    /** 拒否された失敗の例外メッセージに接続先 URL があっても、完全な topic はログに出ない。 */
+    @Test
+    fun rejectedDispatchWithUrlInExceptionKeepsTopicOutOfLog() = runTest {
+        val failure = NtfyPublishException(HTTP_BAD_REQUEST, "POST $LEAKING_URL failed")
+        dispatch(sms(), ThrowingNtfyClient(failure))
+        assertLoggedWithoutMarkers()
+    }
+
+    /** 再送の登録が接続先 URL 入りの例外で失敗しても、完全な topic はログに出ない。 */
+    @Test
+    fun failedEnqueueRetryWithUrlInExceptionKeepsTopicOutOfLog() = runTest {
+        pipeline(RejectingNtfyClient(HTTP_SERVICE_UNAVAILABLE))
+            .dispatch(notification(), listOf(TOPIC_MARKER), persistSensitive = false) { _, _, _, _ ->
+                throw IllegalStateException("enqueue failed for $LEAKING_URL")
+            }
         assertLoggedWithoutMarkers()
     }
 
