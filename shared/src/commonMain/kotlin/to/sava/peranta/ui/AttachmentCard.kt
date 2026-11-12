@@ -196,6 +196,15 @@ private const val ATTACHMENT_SAVE_LABEL: String = "ファイルに保存"
 /** 開く導線を出さない添付に添える案内。保存という代替の導線を示す。 */
 internal const val REFUSED_OPEN_MESSAGE: String = "この種類のファイルは開けません。保存してから開いてください。"
 
+/** 添付を開く（共有する）先のアプリが見つからないときにタイムラインへ記録する文言。 */
+internal const val ATTACHMENT_NO_VIEWER_MESSAGE: String = "このファイルを開けるアプリが見つかりません"
+
+/** 添付の保存に失敗したときにタイムラインへ記録する文言。 */
+internal const val ATTACHMENT_SAVE_FAILED_MESSAGE: String = "ファイルの保存に失敗しました"
+
+/** 添付のダウンロードに失敗したときにタイムラインへ記録する文言。 */
+internal const val ATTACHMENT_DOWNLOAD_FAILED_MESSAGE: String = "ファイルのダウンロードに失敗しました。もう一度お試しください"
+
 /** 開く前の確認ダイアログの見出し。 */
 private const val CONFIRM_OPEN_TITLE: String = "他の端末から届いたファイルです"
 

@@ -37,7 +37,7 @@ class PayloadAttachmentsTest {
         ),
     )
 
-    private fun receivedNotification(vararg attachments: AttachmentRef) = ReceivedNotification(
+    private fun receivedNotification(vararg attachments: AttachmentRef, senderIcon: AttachmentRef? = null) = ReceivedNotification(
         id = "n1",
         timestampEpochMillis = 1_000L,
         payload = NotificationPayload(
@@ -52,6 +52,7 @@ class PayloadAttachmentsTest {
             notificationKey = "0|com.example.news|1|null|10",
             postedAtEpochMillis = 900L,
             attachments = attachments.toList(),
+            senderIcon = senderIcon,
         ),
     )
 
@@ -74,6 +75,15 @@ class PayloadAttachmentsTest {
     fun doesNotFindFullTextAttachment() {
         val items: List<TimelineItem> = listOf(receivedNotification(attachment("blob-t", AttachmentKind.TEXT)))
         assertNull(findAttachmentRef(items, "blob-t"))
+    }
+
+    /** 送信者アイコンは添付カードに出さないため、添付の操作の対象として引かない。 */
+    @Test
+    fun doesNotFindSenderIcon() {
+        val items: List<TimelineItem> =
+            listOf(receivedNotification(attachment("blob-n"), senderIcon = attachment("blob-icon")))
+
+        assertNull(findAttachmentRef(items, "blob-icon"))
     }
 
     /** どのアイテムにも無い blobId は null になる。 */

@@ -1,5 +1,8 @@
 package to.sava.peranta.blob
 
+import to.sava.peranta.model.AttachmentKind
+import to.sava.peranta.model.AttachmentRef
+
 /**
  * サムネイル・通知画像のデコードを試みる添付の符号化サイズ上限（§4.3）。
  * これを超える添付は画像でもデコードせず、種別アイコンにフォールバックする。
@@ -24,3 +27,10 @@ const val MAX_DECODED_IMAGE_PIXELS: Long = 64L * 1024 * 1024
  */
 fun exceedsDecodedPixelLimit(width: Int, height: Int): Boolean =
     width <= 0 || height <= 0 || width.toLong() * height.toLong() > MAX_DECODED_IMAGE_PIXELS
+
+/**
+ * 復号済みの添付をサムネイルにデコードしてよいか（§4.3）。画像（[AttachmentRef.kind] が
+ * [AttachmentKind.IMAGE]）で、復号済みファイルの大きさ [fileSizeBytes] が [MAX_THUMBNAIL_DECODE_BYTES] 以内のもの。
+ */
+fun shouldDecodeThumbnail(ref: AttachmentRef, fileSizeBytes: Long): Boolean =
+    ref.kind == AttachmentKind.IMAGE && fileSizeBytes <= MAX_THUMBNAIL_DECODE_BYTES

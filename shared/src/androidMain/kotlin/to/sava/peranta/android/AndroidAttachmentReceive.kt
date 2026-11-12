@@ -8,38 +8,30 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import to.sava.peranta.blob.AttachmentCache
 import to.sava.peranta.blob.AutoFetchRole
 import to.sava.peranta.blob.BlobTransport
+import to.sava.peranta.blob.FullTextCache
 import to.sava.peranta.blob.KtorBlobTransport
-import to.sava.peranta.blob.MAX_THUMBNAIL_DECODE_BYTES
-import to.sava.peranta.blob.TransferProgress
-import to.sava.peranta.blob.TransferState
-import to.sava.peranta.blob.attachmentKindForMimeType
 import to.sava.peranta.blob.exceedsDecodedPixelLimit
-import to.sava.peranta.blob.exceedsFullTextAutoFetchLimit
+import to.sava.peranta.blob.primeCachedAttachments
 import to.sava.peranta.blob.shouldAutoFetch
+import to.sava.peranta.blob.shouldDecodeThumbnail
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.requireKeyId
 import to.sava.peranta.config.sharedKeyBytes
-import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.ui.AttachmentDownloadState
+import to.sava.peranta.ui.AttachmentDownloadStates
 import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.FullTextUi
-import to.sava.peranta.ui.displayAttachments
-import to.sava.peranta.ui.referencedAttachments
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
 
 /** 復号済み添付キャッシュのディレクトリ名（res/xml/file_paths.xml の cache-path と一致させる）。 */
@@ -71,7 +63,7 @@ internal fun decodeSampleSize(width: Int, height: Int, reqWidth: Int, reqHeight:
 /**
  * Android 受信側の添付ダウンロード状態を保持し、タイムライン UI（[AttachmentUi]）へ橋渡しするシングルトン（§4.3）。
  * ダウンロード本体は [AttachmentTransferService]（フォアグラウンドサービス）が実行し、進捗・完了・失敗を
- * ここの [states] へ書き込む。UI はこの StateFlow を購読して未取得/進行中/完了/失敗を出し分ける。
+ * ここの [downloadStates] へ書き込む。UI は [states] を購読して未取得/進行中/完了/失敗を出し分ける。
  * プロセス内で 1 つに保つことで、サービス（書き手）と Compose UI（読み手）が同じ状態を共有する。
  */
 object AndroidAttachmentReceive {
@@ -79,13 +71,16 @@ object AndroidAttachmentReceive {
     private val log = Logger.withTag("AndroidAttachmentReceive")
     private val httpClient by lazy { createNtfyHttpClient() }
 
-    private val _states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+    /**
+     * blobId ごとのダウンロード状態。書き手は [AttachmentTransferService]（進捗・完了・失敗・キャンセル）、
+     * 取得済みの反映（[primeCached]）、通知の画像の取得（[notificationImage]）。
+     */
+    internal val downloadStates = AttachmentDownloadStates()
 
-    /** blobId 毎のダウンロード状態。UI がこれを購読する。 */
-    val states: StateFlow<Map<String, AttachmentDownloadState>> = _states.asStateFlow()
+    /** [downloadStates] を UI へ公開する口。UI がこれを購読する。 */
+    val states: StateFlow<Map<String, AttachmentDownloadState>> = downloadStates.states
 
-    /** 復号済みの全文添付本文を blobId 毎に保持し、再表示（スクロール復帰）での再取得を避ける（§4.3）。 */
-    private val fullTextCache = ConcurrentHashMap<String, String>()
+    private val fullTextCache = FullTextCache(log)
 
     /** [context] のキャッシュ領域を基点にした添付キャッシュを組む。 */
     fun cache(context: Context, config: PerantaConfig): AttachmentCache =
@@ -102,56 +97,19 @@ object AndroidAttachmentReceive {
     private fun transport(context: Context, config: PerantaConfig): BlobTransport =
         KtorBlobTransport(config, httpClient)
 
-    /** ダウンロード開始を UI へ即時反映する（サービス起動と並行してボタンを進行中表示へ切り替える）。 */
-    fun markRunning(blobId: String, totalBytes: Long) {
-        _states.update { it + (blobId to AttachmentDownloadState(progress = TransferProgress.running(totalBytes))) }
-    }
-
-    /** 転送済みバイト数を UI の進捗バーへ反映する。 */
-    fun markProgress(blobId: String, transferredBytes: Long, totalBytes: Long) {
-        _states.update {
-            it + (blobId to AttachmentDownloadState(
-                progress = TransferProgress(transferredBytes, totalBytes, TransferState.RUNNING),
-            ))
-        }
-    }
-
     /** ダウンロード完了を反映し、画像なら復号済みファイルからサムネイルを付ける。 */
     fun markCached(ref: AttachmentRef, file: File) {
-        val thumbnail = decodeThumbnail(ref, file)
-        _states.update {
-            it + (ref.blobId to AttachmentDownloadState(
-                progress = TransferProgress(ref.sizeBytes, ref.sizeBytes, TransferState.COMPLETED),
-                cached = true,
-                thumbnail = thumbnail,
-            ))
-        }
-    }
-
-    /** ダウンロード失敗を反映する（カードは再試行ボタンを出す）。 */
-    fun markFailed(blobId: String, totalBytes: Long) {
-        _states.update {
-            it + (blobId to AttachmentDownloadState(progress = TransferProgress(0, totalBytes, TransferState.FAILED)))
-        }
-    }
-
-    /** ユーザーによるキャンセルを反映する（カードは未取得へ戻る）。 */
-    fun markCancelled(blobId: String) {
-        _states.update { it + (blobId to AttachmentDownloadState(progress = TransferProgress(0, 0, TransferState.CANCELLED))) }
+        downloadStates.markCached(ref, decodeThumbnail(ref, file))
     }
 
     /**
      * タイムラインに現れた受信ファイルのうち、既にキャッシュ済みの添付を「取得済み」状態へ反映する（§4.3）。
-     * 履歴読み込み・新規受信の双方でカードを開く/保存/共有できる状態にする。
+     * 履歴読み込み・新規受信の双方でカードを開く/保存/共有できる状態にする（[primeCachedAttachments]）。
      */
     fun primeCached(context: Context, config: PerantaConfig, items: List<TimelineItem>) {
         if (!config.hasSharedKey) return
         val cache = cache(context, config)
-        items.flatMap { item -> item.referencedAttachments() }.forEach { ref ->
-            if (_states.value[ref.blobId] == null) {
-                cache.cachedFile(ref)?.let { markCached(ref, it) }
-            }
-        }
+        primeCachedAttachments(downloadStates, items, cache::cachedFile, ::decodeThumbnail)
     }
 
     /**
@@ -208,8 +166,7 @@ object AndroidAttachmentReceive {
      * 掛けて縮小デコードする。フルサイズのビットマップを [states] に抱え続けて OOM するのを避ける。
      */
     private fun decodeThumbnail(ref: AttachmentRef, file: File): ImageBitmap? {
-        if (attachmentKindForMimeType(ref.mimeType) != AttachmentKind.IMAGE) return null
-        if (file.length() > MAX_THUMBNAIL_DECODE_BYTES) return null
+        if (!shouldDecodeThumbnail(ref, file.length())) return null
         return try {
             decodeSampled(file, thumbnailTargetPixels())?.asImageBitmap()
         } catch (error: Exception) {
@@ -278,22 +235,7 @@ object AndroidAttachmentReceive {
     }
 
     private suspend fun fetchFullText(context: Context, config: PerantaConfig, ref: AttachmentRef): String? {
-        fullTextCache[ref.blobId]?.let { return it }
         if (!config.hasSharedKey) return null
-        if (exceedsFullTextAutoFetchLimit(ref.sizeBytes)) {
-            log.w { "full text attachment exceeds auto fetch limit; skipping blobId=${ref.blobId} sizeBytes=${ref.sizeBytes}" }
-            return null
-        }
-        return try {
-            withContext(ioDispatcher) {
-                cache(context, config).download(ref).readText(Charsets.UTF_8)
-            }.also { fullTextCache[ref.blobId] = it }
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (error: Exception) {
-            // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§11）。
-            log.w { "full text fetch failed blobId=${ref.blobId} (${error::class.simpleName})" }
-            null
-        }
+        return fullTextCache.fetch(ref) { cache(context, config).download(it) }
     }
 }

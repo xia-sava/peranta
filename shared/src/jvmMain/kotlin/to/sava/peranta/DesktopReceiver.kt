@@ -10,24 +10,20 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import to.sava.peranta.blob.AttachmentCache
 import to.sava.peranta.blob.AttachmentOpenDecision
 import to.sava.peranta.blob.AutoFetchRole
+import to.sava.peranta.blob.FullTextCache
 import to.sava.peranta.blob.KtorBlobTransport
-import to.sava.peranta.blob.MAX_THUMBNAIL_DECODE_BYTES
-import to.sava.peranta.blob.TransferProgress
-import to.sava.peranta.blob.TransferState
 import to.sava.peranta.blob.attachmentOpenDecision
 import to.sava.peranta.blob.decodeImageWithinPixelLimit
-import to.sava.peranta.blob.exceedsFullTextAutoFetchLimit
+import to.sava.peranta.blob.primeCachedAttachments
 import to.sava.peranta.blob.shouldAutoFetch
+import to.sava.peranta.blob.shouldDecodeThumbnail
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.isDevMode
@@ -37,7 +33,6 @@ import to.sava.peranta.config.requireKeyId
 import to.sava.peranta.config.sharedKeyBytes
 import to.sava.peranta.config.timelineRetentionMaxAgeMillis
 import to.sava.peranta.config.withDevOverrides
-import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
@@ -76,11 +71,11 @@ import to.sava.peranta.toast.Toaster
 import to.sava.peranta.toast.isActionStillOffered
 import to.sava.peranta.toast.toastContentFor
 import to.sava.peranta.ui.AppFilterController
-import to.sava.peranta.ui.AttachmentDownloadState
+import to.sava.peranta.ui.AttachmentDownloadStates
 import to.sava.peranta.ui.AttachmentUi
 import to.sava.peranta.ui.FullTextUi
+import to.sava.peranta.ui.findAttachmentRef
 import to.sava.peranta.ui.notificationImage
-import to.sava.peranta.ui.referencedAttachments
 import to.sava.peranta.ui.senderIcon
 import to.sava.peranta.ui.MessageComposerUi
 import to.sava.peranta.ui.TimelineActions
@@ -212,14 +207,12 @@ class DesktopReceiver(
         keyId = config.requireKeyId(),
         baseDir = JvmPaths.attachmentsDir,
     )
-    private val attachmentStates = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+    private val attachmentStates = AttachmentDownloadStates()
 
     // Compose UI スレッドと IO ディスパッチャの双方から並行アクセスされるためスレッドセーフにする。
     private val downloadJobs = ConcurrentHashMap<String, Job>()
-    private val knownRefs = ConcurrentHashMap<String, AttachmentRef>()
 
-    // 復号済みの全文添付本文を blobId 毎に保持し、再表示（スクロール復帰）での再取得を避ける（§4.3）。
-    private val fullTextCache = ConcurrentHashMap<String, String>()
+    private val fullTextCache = FullTextCache(log)
 
     // 受信専用端末では dismiss のみ意味を持つ executor を注入する。他 command 種別は no-op（§3.4）。
     private val dismissExecutor = LocalDismissCommandExecutor(
@@ -276,16 +269,12 @@ class DesktopReceiver(
 
     /**
      * タイムラインに現れた受信ファイルのうち、既にキャッシュ済みの添付を「取得済み」状態に反映する（§4.3）。
-     * 履歴読み込み・新規受信の双方でカードを開く/保存できる状態にするため、items を購読して随時プライムする。
+     * 履歴読み込み・新規受信の双方でカードを開く/保存できる状態にするため、items を購読して随時プライムする
+     * （[primeCachedAttachments]）。
      */
     private suspend fun primeCachedAttachmentStates() {
         pipeline.items.collect { items ->
-            items.flatMap { item -> item.referencedAttachments() }.forEach { ref ->
-                knownRefs[ref.blobId] = ref
-                if (attachmentStates.value[ref.blobId] == null) {
-                    attachmentCache.cachedFile(ref)?.let { markCached(ref) }
-                }
-            }
+            primeCachedAttachments(attachmentStates, items, attachmentCache::cachedFile, ::decodeThumbnail)
         }
     }
 
@@ -352,7 +341,7 @@ class DesktopReceiver(
      */
     private suspend fun fetchThumbnail(ref: AttachmentRef?, role: AutoFetchRole): ImageBitmap? {
         if (ref == null) return null
-        val state = attachmentStates.value[ref.blobId]
+        val state = attachmentStates.stateOf(ref.blobId)
         state?.thumbnail?.let { return it }
         val running = downloadJobs[ref.blobId]?.takeIf { it.isActive }
         val job = running ?: run {
@@ -368,13 +357,13 @@ class DesktopReceiver(
             startDownload(ref)
         }
         withTimeoutOrNull(TOAST_IMAGE_WAIT_MILLIS) { job.join() }
-        return attachmentStates.value[ref.blobId]?.thumbnail
+        return attachmentStates.stateOf(ref.blobId)?.thumbnail
     }
 
     /** 取得済みのサムネイルだけを添える。初回表示を待たせないため、ここではダウンロードを起こさない。 */
     private fun ReceivedNotificationToast.withCachedImages(item: ReceivedNotification): ReceivedNotificationToast {
-        val image = item.payload.notificationImage()?.let { attachmentStates.value[it.blobId]?.thumbnail }
-        val senderIcon = item.payload.senderIcon()?.let { attachmentStates.value[it.blobId]?.thumbnail }
+        val image = item.payload.notificationImage()?.let { attachmentStates.stateOf(it.blobId)?.thumbnail }
+        val senderIcon = item.payload.senderIcon()?.let { attachmentStates.stateOf(it.blobId)?.thumbnail }
         return copy(image = image, senderIcon = senderIcon)
     }
 
@@ -521,7 +510,7 @@ class DesktopReceiver(
      * [to.sava.peranta.config.PerantaConfig.autoDisplayImages] をそのまま渡す。
      */
     fun attachmentUi(): AttachmentUi = AttachmentUi(
-        states = attachmentStates.asStateFlow(),
+        states = attachmentStates.states,
         onDownload = { ref -> startDownload(ref) },
         onCancel = { blobId -> cancelDownload(blobId) },
         onOpen = { blobId -> openAttachment(blobId) },
@@ -531,63 +520,32 @@ class DesktopReceiver(
 
     /**
      * タイムラインの全文添付（kind=TEXT）の自動取得口を作る（§4.3）。
-     * カードのような手動導線は持たず、表示時にキャッシュ経由で復号し全文文字列を返す。取得失敗は null。
+     * カードのような手動導線は持たず、表示時にキャッシュ経由で復号し全文文字列を返す（[FullTextCache.fetch]）。
+     * 取得失敗は null を返し、呼び出し側（[to.sava.peranta.ui.ExpandableText]）は切り詰めプレビューのまま据え置く。
      */
-    fun fullTextUi(): FullTextUi = FullTextUi(fetchFullText = ::fetchFullText)
-
-    /**
-     * 全文添付の本文を取得する。既に復号済みならメモから、無ければキャッシュへダウンロード・復号して読む（§4.3）。
-     * ブロッキング I/O を含むため IO ディスパッチャで動かす。取得失敗（オフライン・期限切れ等）は握って null を返し、
-     * 呼び出し側（[to.sava.peranta.ui.ExpandableText]）は切り詰めプレビューのまま据え置く。
-     */
-    private suspend fun fetchFullText(ref: AttachmentRef): String? {
-        fullTextCache[ref.blobId]?.let { return it }
-        if (exceedsFullTextAutoFetchLimit(ref.sizeBytes)) {
-            log.w { "full text attachment exceeds auto fetch limit; skipping blobId=${ref.blobId} sizeBytes=${ref.sizeBytes}" }
-            return null
-        }
-        return try {
-            withContext(ioDispatcher) {
-                attachmentCache.download(ref).readText(Charsets.UTF_8)
-            }.also { fullTextCache[ref.blobId] = it }
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (error: Exception) {
-            // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§11）。
-            log.w { "full text fetch failed blobId=${ref.blobId} (${error::class.simpleName})" }
-            null
-        }
-    }
+    fun fullTextUi(): FullTextUi =
+        FullTextUi(fetchFullText = { ref -> fullTextCache.fetch(ref) { attachmentCache.download(it) } })
 
     /**
      * [ref] の添付をダウンロードする。既に進行中ならそのジョブを返し、二重起動しない。
      * 戻り値は完了を待てるジョブで、トーストへの画像差し込み（§4.3.1）が取得完了を待つのに使う。
      */
     private fun startDownload(ref: AttachmentRef): Job {
-        knownRefs[ref.blobId] = ref
         downloadJobs[ref.blobId]?.takeIf { it.isActive }?.let { return it }
-        attachmentStates.update { it + (ref.blobId to AttachmentDownloadState(progress = TransferProgress.running(ref.sizeBytes))) }
+        attachmentStates.markRunning(ref.blobId, ref.sizeBytes)
         val job = toastScope.launch {
             try {
-                attachmentCache.download(ref) { transferred ->
-                    attachmentStates.update {
-                        it + (ref.blobId to AttachmentDownloadState(
-                            progress = TransferProgress(transferred, ref.sizeBytes, TransferState.RUNNING),
-                        ))
-                    }
+                val file = attachmentCache.download(ref) { transferred ->
+                    attachmentStates.markProgress(ref.blobId, transferred, ref.sizeBytes)
                 }
-                markCached(ref)
+                attachmentStates.markCached(ref, decodeThumbnail(ref, file))
                 log.i { "attachment downloaded blobId=${ref.blobId}" }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
                 // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§11）。
                 log.w { "attachment download failed blobId=${ref.blobId} (${error::class.simpleName})" }
-                attachmentStates.update {
-                    it + (ref.blobId to AttachmentDownloadState(
-                        progress = TransferProgress(0, ref.sizeBytes, TransferState.FAILED),
-                    ))
-                }
+                attachmentStates.markFailed(ref.blobId, ref.sizeBytes)
             } finally {
                 downloadJobs.remove(ref.blobId)
             }
@@ -599,33 +557,15 @@ class DesktopReceiver(
     /** 進行中のダウンロードをキャンセルし、未取得状態へ戻す。 */
     private fun cancelDownload(blobId: String) {
         downloadJobs.remove(blobId)?.cancel()
-        attachmentStates.update {
-            it + (blobId to AttachmentDownloadState(
-                progress = TransferProgress(0, 0, TransferState.CANCELLED),
-            ))
-        }
-    }
-
-    /** ダウンロード済みの添付を「取得済み」状態にし、画像ならサムネイルを付ける。 */
-    private fun markCached(ref: AttachmentRef) {
-        val file = attachmentCache.cachedFile(ref) ?: return
-        val thumbnail = decodeThumbnail(ref, file)
-        attachmentStates.update {
-            it + (ref.blobId to AttachmentDownloadState(
-                progress = TransferProgress(ref.sizeBytes, ref.sizeBytes, TransferState.COMPLETED),
-                cached = true,
-                thumbnail = thumbnail,
-            ))
-        }
+        attachmentStates.markCancelled(blobId)
     }
 
     /**
      * 画像添付を復号済みファイルからデコードしてサムネイルにする。失敗時は null（種別アイコンにフォールバック）。
-     * 符号化サイズと展開後の画素数の双方に上限を掛ける（[decodeImageWithinPixelLimit]）。
+     * 符号化サイズと展開後の画素数の双方に上限を掛ける（[shouldDecodeThumbnail]・[decodeImageWithinPixelLimit]）。
      */
     private fun decodeThumbnail(ref: AttachmentRef, file: File): ImageBitmap? {
-        if (ref.kind != AttachmentKind.IMAGE) return null
-        if (file.length() > MAX_THUMBNAIL_DECODE_BYTES) return null
+        if (!shouldDecodeThumbnail(ref, file.length())) return null
         return try {
             decodeImageWithinPixelLimit(file.readBytes())?.toComposeImageBitmap()
         } catch (error: Exception) {
@@ -639,12 +579,12 @@ class DesktopReceiver(
      * 添付カードは [attachmentOpenDecision] で導線を出し分けているが、OS へ渡す直前でも当て直す。
      */
     private fun openAttachment(blobId: String) {
-        val ref = knownRefs[blobId] ?: return
+        val ref = attachmentRefFor(blobId) ?: return
         if (attachmentOpenDecision(ref.mimeType, ref.fileName) == AttachmentOpenDecision.REFUSE) {
             log.w { "attachment open refused blobId=$blobId" }
             return
         }
-        val file = cachedFileFor(blobId) ?: return
+        val file = cachedFileFor(ref) ?: return
         if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
             log.w { "Desktop open not supported" }
             return
@@ -660,7 +600,7 @@ class DesktopReceiver(
 
     /** 復号済みファイルを保存ダイアログ経由で任意の場所へコピーする（§4.3）。 */
     private fun saveAttachment(blobId: String) {
-        val source = cachedFileFor(blobId) ?: return
+        val source = attachmentRefFor(blobId)?.let { cachedFileFor(it) } ?: return
         toastScope.launch {
             val dialog = FileDialog(null as Frame?, "保存", FileDialog.SAVE).apply {
                 file = source.name
@@ -679,8 +619,19 @@ class DesktopReceiver(
         }
     }
 
-    private fun cachedFileFor(blobId: String): File? =
-        knownRefs[blobId]?.let { attachmentCache.cachedFile(it) }
+    /** タイムラインから [blobId] の添付参照を引く（[findAttachmentRef]）。無ければログに残して null（履歴消失）。 */
+    private fun attachmentRefFor(blobId: String): AttachmentRef? =
+        findAttachmentRef(currentItems(), blobId) ?: run {
+            log.w { "no attachment ref for blobId=$blobId" }
+            null
+        }
+
+    /** [ref] の復号済みファイルを引く。無ければログに残して null（未取得・剪定済み）。 */
+    private fun cachedFileFor(ref: AttachmentRef): File? =
+        attachmentCache.cachedFile(ref) ?: run {
+            log.w { "no cached file for blobId=${ref.blobId}" }
+            null
+        }
 
     /**
      * 保持するリソース（トーストコルーチンと HTTP クライアント）を閉じる。

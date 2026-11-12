@@ -12,14 +12,10 @@ import to.sava.peranta.blob.AttachmentOpenDecision
 import to.sava.peranta.blob.attachmentOpenDecision
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.platform.ioDispatcher
+import to.sava.peranta.ui.ATTACHMENT_NO_VIEWER_MESSAGE
+import to.sava.peranta.ui.ATTACHMENT_SAVE_FAILED_MESSAGE
 import to.sava.peranta.ui.REFUSED_OPEN_MESSAGE
 import java.io.File
-
-/** 開くハンドラが無いときにタイムラインへ出す文言。 */
-private const val NO_VIEWER_MESSAGE: String = "このファイルを開けるアプリが見つかりません"
-
-/** 保存に失敗したときにタイムラインへ出す文言。 */
-private const val SAVE_FAILED_MESSAGE: String = "ファイルの保存に失敗しました"
 
 /** SAF 保存結果に対する処理の分岐。 */
 internal enum class SaveDocumentOutcome {
@@ -82,7 +78,7 @@ class AndroidAttachmentActions(
             context.startActivity(intent)
         } catch (notFound: ActivityNotFoundException) {
             log.i(notFound) { "no viewer for mimeType=${ref.mimeType}" }
-            reportError(NO_VIEWER_MESSAGE)
+            reportError(ATTACHMENT_NO_VIEWER_MESSAGE)
         }
     }
 
@@ -100,7 +96,7 @@ class AndroidAttachmentActions(
             context.startActivity(chooser)
         } catch (notFound: ActivityNotFoundException) {
             log.i(notFound) { "no share target for mimeType=${ref.mimeType}" }
-            reportError(NO_VIEWER_MESSAGE)
+            reportError(ATTACHMENT_NO_VIEWER_MESSAGE)
         }
     }
 
@@ -131,7 +127,7 @@ class AndroidAttachmentActions(
             SaveDocumentOutcome.CANCELLED -> Unit
             SaveDocumentOutcome.MISSING_TARGET -> {
                 log.w { "save destination returned but save target was lost blobId=$blobId" }
-                reportError(SAVE_FAILED_MESSAGE)
+                reportError(ATTACHMENT_SAVE_FAILED_MESSAGE)
             }
             SaveDocumentOutcome.PROCEED -> writeToDocument(requireNotNull(uri), resolved!!.second, requireNotNull(blobId))
         }
@@ -153,7 +149,7 @@ class AndroidAttachmentActions(
             throw cancellation
         } catch (error: Exception) {
             log.w(error) { "failed to save attachment blobId=$blobId" }
-            reportError(SAVE_FAILED_MESSAGE)
+            reportError(ATTACHMENT_SAVE_FAILED_MESSAGE)
         }
     }
 

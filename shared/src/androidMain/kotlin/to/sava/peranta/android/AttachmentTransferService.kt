@@ -41,6 +41,7 @@ import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.send.buildFilePayloads
 import to.sava.peranta.shared.R
 import to.sava.peranta.timeline.ErrorKind
+import to.sava.peranta.ui.ATTACHMENT_DOWNLOAD_FAILED_MESSAGE
 import java.io.File
 import java.io.FilterInputStream
 import java.util.concurrent.atomic.AtomicInteger
@@ -139,12 +140,12 @@ class AttachmentTransferService : Service() {
                 processDownload(ref, notificationId)
             } catch (cancellation: CancellationException) {
                 log.i { "download job cancelled blobId=${ref.blobId}" }
-                AndroidAttachmentReceive.markCancelled(ref.blobId)
+                AndroidAttachmentReceive.downloadStates.markCancelled(ref.blobId)
             } catch (error: Exception) {
                 // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§11）。
                 log.w { "attachment download failed blobId=${ref.blobId} (${error::class.simpleName})" }
-                AndroidAttachmentReceive.markFailed(ref.blobId, ref.sizeBytes)
-                recordError(DOWNLOAD_FAILED_MESSAGE)
+                AndroidAttachmentReceive.downloadStates.markFailed(ref.blobId, ref.sizeBytes)
+                recordError(ATTACHMENT_DOWNLOAD_FAILED_MESSAGE)
             } finally {
                 finishTransfer(ref.blobId)
             }
@@ -156,11 +157,11 @@ class AttachmentTransferService : Service() {
         val repo = androidConfigRepository(applicationContext)
         val config = repo.load()
         if (!config.hasSharedKey) {
-            AndroidAttachmentReceive.markFailed(ref.blobId, ref.sizeBytes)
+            AndroidAttachmentReceive.downloadStates.markFailed(ref.blobId, ref.sizeBytes)
             recordError(NOT_CONFIGURED_DOWNLOAD_MESSAGE)
             return@coroutineScope
         }
-        AndroidAttachmentReceive.markRunning(ref.blobId, ref.sizeBytes)
+        AndroidAttachmentReceive.downloadStates.markRunning(ref.blobId, ref.sizeBytes)
         val cache = AndroidAttachmentReceive.cache(applicationContext, config)
         val transferred = AtomicLong(0)
         // 進捗通知はアップロードと同じくポーリングで間引く（コールバック毎に notify すると数千回叩いてしまう）。
@@ -175,7 +176,7 @@ class AttachmentTransferService : Service() {
         val file = try {
             cache.download(ref) { current ->
                 transferred.set(current)
-                AndroidAttachmentReceive.markProgress(ref.blobId, current, ref.sizeBytes)
+                AndroidAttachmentReceive.downloadStates.markProgress(ref.blobId, current, ref.sizeBytes)
             }
         } finally {
             pollJob.cancel()
@@ -439,7 +440,6 @@ class AttachmentTransferService : Service() {
 
         private const val UPLOAD_FAILED_MESSAGE = "画像のアップロードに失敗しました。もう一度お試しください"
         private const val NOT_CONFIGURED_MESSAGE = "送信の設定が未完了のため画像を送れません"
-        private const val DOWNLOAD_FAILED_MESSAGE = "ファイルのダウンロードに失敗しました。もう一度お試しください"
         private const val NOT_CONFIGURED_DOWNLOAD_MESSAGE = "設定が未完了のためファイルを受け取れません"
 
         /**
@@ -476,7 +476,7 @@ class AttachmentTransferService : Service() {
          * UI のボタンを即座に進行中表示へ切り替えるため、状態を先に進行中へ更新してから起動する。
          */
         fun enqueueDownload(context: Context, ref: AttachmentRef) {
-            AndroidAttachmentReceive.markRunning(ref.blobId, ref.sizeBytes)
+            AndroidAttachmentReceive.downloadStates.markRunning(ref.blobId, ref.sizeBytes)
             val intent = Intent(context, AttachmentTransferService::class.java).apply {
                 action = ACTION_DOWNLOAD
                 putExtra(EXTRA_ATTACHMENT_REF, encodeAttachmentRef(ref))
