@@ -5,21 +5,24 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import co.touchlab.kermit.Logger
 import com.russhwolf.settings.PreferencesSettings
 import com.russhwolf.settings.Settings
+import io.ktor.client.HttpClient
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import to.sava.peranta.blob.AttachmentCache
-import to.sava.peranta.blob.AttachmentOpenDecision
 import to.sava.peranta.blob.AutoFetchRole
+import to.sava.peranta.blob.BlobTransport
 import to.sava.peranta.blob.FullTextCache
 import to.sava.peranta.blob.KtorBlobTransport
-import to.sava.peranta.blob.attachmentOpenDecision
 import to.sava.peranta.blob.decodeImageWithinPixelLimit
 import to.sava.peranta.blob.primeCachedAttachments
 import to.sava.peranta.blob.shouldAutoFetch
@@ -70,6 +73,7 @@ import to.sava.peranta.toast.ToastResult
 import to.sava.peranta.toast.Toaster
 import to.sava.peranta.toast.isActionStillOffered
 import to.sava.peranta.toast.toastContentFor
+import to.sava.peranta.ui.ATTACHMENT_DOWNLOAD_FAILED_MESSAGE
 import to.sava.peranta.ui.AppFilterController
 import to.sava.peranta.ui.AttachmentDownloadStates
 import to.sava.peranta.ui.AttachmentUi
@@ -82,13 +86,8 @@ import to.sava.peranta.ui.TimelineActions
 import to.sava.peranta.ui.shell.RosterUi
 import to.sava.peranta.window.WindowGeometryStore
 import java.awt.Desktop
-import java.awt.FileDialog
-import java.awt.Frame
 import java.io.File
 import java.net.URI
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
-import java.util.concurrent.ConcurrentHashMap
 import java.util.prefs.Preferences
 
 /**
@@ -165,21 +164,53 @@ interface DesktopSelfTest {
  * Desktop 受信の中核を組み立てる。設定が揃っている（[PerantaConfig.isReadyForReceive]）
  * 前提で生成すること。受信通知はトーストにも表示する（[toaster]）。
  * [repository] はアプリフィルタ画面（§10.4-1）のローカルミラー永続化と共有する設定リポジトリ。
+ * [feed] はタイムライン、[newBlobTransport] は添付の blob を取得する転送の組み立て、[attachmentsDir] は
+ * 復号済み添付の置き場、[dispatcher] はトースト・添付の取得などの処理を動かすディスパッチャ。
+ * [openFile] と [chooseSaveDestination] は添付を開く・保存するときの OS への受け渡し（[DesktopAttachmentActions]）。
+ * 公開の生成口は、アプリデータの領域（[JvmPaths]）・ntfy・IO ディスパッチャ・OS の既定アプリと保存ダイアログを使う。
  */
-class DesktopReceiver(
+class DesktopReceiver internal constructor(
     val config: PerantaConfig,
     private val repository: ConfigRepository,
     private val toaster: Toaster,
-    private val onToastClicked: (itemId: String) -> Unit = {},
-    private val onToastReplyRequested: (itemId: String, actionIndex: Int) -> Unit = { _, _ -> },
-    private val log: Logger = Logger.withTag("DesktopReceiver"),
+    private val onToastClicked: (itemId: String) -> Unit,
+    private val onToastReplyRequested: (itemId: String, actionIndex: Int) -> Unit,
+    private val log: Logger,
+    private val feed: TimelineFeed,
+    newBlobTransport: (HttpClient) -> BlobTransport,
+    attachmentsDir: File,
+    dispatcher: CoroutineDispatcher,
+    openFile: (file: File) -> Unit,
+    chooseSaveDestination: (suggestedName: String) -> File?,
 ) : DesktopSelfTest {
+
+    constructor(
+        config: PerantaConfig,
+        repository: ConfigRepository,
+        toaster: Toaster,
+        onToastClicked: (itemId: String) -> Unit = {},
+        onToastReplyRequested: (itemId: String, actionIndex: Int) -> Unit = { _, _ -> },
+        log: Logger = Logger.withTag("DesktopReceiver"),
+    ) : this(
+        config = config,
+        repository = repository,
+        toaster = toaster,
+        onToastClicked = onToastClicked,
+        onToastReplyRequested = onToastReplyRequested,
+        log = log,
+        feed = TimelineFeed(JsonlTimelineStore(defaultTimelineFile())),
+        newBlobTransport = { httpClient -> KtorBlobTransport(config, httpClient) },
+        attachmentsDir = JvmPaths.attachmentsDir,
+        dispatcher = ioDispatcher,
+        openFile = ::openWithDesktop,
+        chooseSaveDestination = ::chooseSaveDestinationWithDialog,
+    )
+
     private val httpClient = createNtfyHttpClient()
-    private val feed = TimelineFeed(JsonlTimelineStore(defaultTimelineFile()))
     private val cipher = config.messageCipher()
     private val ntfy = KtorNtfyClient(config, httpClient, Logger.withTag("NtfyClient"))
     private val toastJob = SupervisorJob()
-    private val toastScope = CoroutineScope(toastJob + ioDispatcher)
+    private val toastScope = CoroutineScope(toastJob + dispatcher)
     private val sendPipeline = SendPipeline(cipher, ntfy, feed)
 
     // 送ったコマンドへの応答が無い・失敗したこと（§3.4）は受信エラーと同じ経路でタイムラインとトーストへ出す。
@@ -202,15 +233,29 @@ class DesktopReceiver(
     private val selfTestProbe = SelfTestProbe()
 
     private val attachmentCache = AttachmentCache(
-        transport = KtorBlobTransport(config, httpClient),
+        transport = newBlobTransport(httpClient),
         sharedKey = config.sharedKeyBytes(),
         keyId = config.requireKeyId(),
-        baseDir = JvmPaths.attachmentsDir,
+        baseDir = attachmentsDir,
     )
     private val attachmentStates = AttachmentDownloadStates()
 
-    // Compose UI スレッドと IO ディスパッチャの双方から並行アクセスされるためスレッドセーフにする。
-    private val downloadJobs = ConcurrentHashMap<String, Job>()
+    /**
+     * blobId ごとの進行中の取得（[DownloadRun]）。Compose UI スレッドと取得のコルーチンの双方から触るため、
+     * 起動・利用者が求めた印・取り外しと、それに伴う状態の書き込みは [downloadLock] の中で行う。
+     */
+    private val downloadRuns = HashMap<String, DownloadRun>()
+    private val downloadLock = Any()
+
+    private val attachmentActions = DesktopAttachmentActions(
+        scope = toastScope,
+        refFor = { blobId -> findAttachmentRef(currentItems(), blobId) },
+        cachedFileFor = attachmentCache::cachedFile,
+        openFile = openFile,
+        chooseSaveDestination = chooseSaveDestination,
+        reportError = ::recordAttachmentError,
+        log = log,
+    )
 
     private val fullTextCache = FullTextCache(log)
 
@@ -343,7 +388,7 @@ class DesktopReceiver(
         if (ref == null) return null
         val state = attachmentStates.stateOf(ref.blobId)
         state?.thumbnail?.let { return it }
-        val running = downloadJobs[ref.blobId]?.takeIf { it.isActive }
+        val running = activeDownload(ref.blobId)
         val job = running ?: run {
             val autoFetch = shouldAutoFetch(
                 ref = ref,
@@ -489,7 +534,7 @@ class DesktopReceiver(
     fun appFilterController(): AppFilterController = operations.appFilterController(repository)
 
     /**
-     * composer からの送信操作束を組む（§5.2・§13 M9d）。送信設定が揃っていなければ null（composer 非表示）。
+     * composer からの送信操作束を組む（§10.1）。送信設定が揃っていなければ null（composer 非表示）。
      * ファイル添付束は blob topic が設定されているときのみ付く。ステージ済みファイルは [composer] とともに
      * 保持され、受信機の再生成（設定変更）で消える。
      */
@@ -508,14 +553,18 @@ class DesktopReceiver(
      * タイムラインの添付カード用の操作束を作る（§4.3）。ダウンロード・キャンセル・開く・保存を配線し、
      * 進捗は [attachmentStates] を通じて画面へ公開する。画像の自動表示可否は設定の
      * [to.sava.peranta.config.PerantaConfig.autoDisplayImages] をそのまま渡す。
+     * ボタンからの取得（[requestDownload]）と自動取得（画像の自動表示・送信者アイコン）は別の口で受け、
+     * ダウンロードの失敗をタイムラインへ記録するのはボタンからの取得だけにする。開く・保存の失敗は
+     * [DesktopAttachmentActions] が記録する。
      */
     fun attachmentUi(): AttachmentUi = AttachmentUi(
         states = attachmentStates.states,
-        onDownload = { ref -> startDownload(ref) },
+        onDownload = { ref -> requestDownload(ref) },
         onCancel = { blobId -> cancelDownload(blobId) },
-        onOpen = { blobId -> openAttachment(blobId) },
-        onSave = { blobId -> saveAttachment(blobId) },
+        onOpen = attachmentActions::open,
+        onSave = attachmentActions::save,
         autoDisplayImages = config.autoDisplayImages,
+        onAutoFetch = { ref -> startDownload(ref) },
     )
 
     /**
@@ -526,38 +575,130 @@ class DesktopReceiver(
     fun fullTextUi(): FullTextUi =
         FullTextUi(fetchFullText = { ref -> fullTextCache.fetch(ref) { attachmentCache.download(it) } })
 
+    /** 取得 1 回の記録。[userRequested] は利用者がボタンで求めた取得か。読み書きは [downloadLock] の中で行う。 */
+    private class DownloadRun(var userRequested: Boolean) {
+        lateinit var job: Job
+    }
+
+    /**
+     * 利用者がカードのボタン（表示・ダウンロード・再試行）で求めた取得を始める（§4.3）。失敗はタイムラインへ記録する。
+     * 同じ blob の取得が既に進行中なら新たに始めずその取得を使い、その取得の失敗を記録の対象にする。
+     */
+    private fun requestDownload(ref: AttachmentRef) {
+        startDownload(ref, userRequested = true)
+    }
+
     /**
      * [ref] の添付をダウンロードする。既に進行中ならそのジョブを返し、二重起動しない。
      * 戻り値は完了を待てるジョブで、トーストへの画像差し込み（§4.3.1）が取得完了を待つのに使う。
+     * 取得 1 回ごとに [DownloadRun] を登録し、[userRequested] が真なら利用者がボタンで求めた取得の印を付ける。
      */
-    private fun startDownload(ref: AttachmentRef): Job {
-        downloadJobs[ref.blobId]?.takeIf { it.isActive }?.let { return it }
-        attachmentStates.markRunning(ref.blobId, ref.sizeBytes)
-        val job = toastScope.launch {
-            try {
-                val file = attachmentCache.download(ref) { transferred ->
-                    attachmentStates.markProgress(ref.blobId, transferred, ref.sizeBytes)
-                }
-                attachmentStates.markCached(ref, decodeThumbnail(ref, file))
-                log.i { "attachment downloaded blobId=${ref.blobId}" }
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (error: Exception) {
-                // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§11）。
-                log.w { "attachment download failed blobId=${ref.blobId} (${error::class.simpleName})" }
-                attachmentStates.markFailed(ref.blobId, ref.sizeBytes)
-            } finally {
-                downloadJobs.remove(ref.blobId)
+    private fun startDownload(ref: AttachmentRef, userRequested: Boolean = false): Job {
+        synchronized(downloadLock) {
+            downloadRuns[ref.blobId]?.takeIf { it.job.isActive }?.let { current ->
+                if (userRequested) current.userRequested = true
+                return current.job
             }
+            attachmentStates.markRunning(ref.blobId, ref.sizeBytes)
+            val run = DownloadRun(userRequested)
+            val job = toastScope.launch(start = CoroutineStart.LAZY) { download(ref, run) }
+            run.job = job
+            downloadRuns[ref.blobId] = run
+            // 本体が走る前にキャンセルされた取得も、終わった時点で登録を外す。
+            job.invokeOnCompletion { releaseDownload(ref.blobId, run) }
+            job.start()
+            return job
         }
-        downloadJobs[ref.blobId] = job
-        return job
     }
 
-    /** 進行中のダウンロードをキャンセルし、未取得状態へ戻す。 */
+    /**
+     * [run] として [ref] を取得し、結果を状態へ反映する。状態は、[run] とは別の取得が登録されていないときだけ書く。
+     * キャンセルは記録せず、キャンセル済みの状態で終える。自分のジョブがキャンセルされていないのに
+     * [CancellationException] が届いたときは、失敗として扱う。
+     */
+    private suspend fun download(ref: AttachmentRef, run: DownloadRun) {
+        try {
+            val file = attachmentCache.download(ref) { transferred ->
+                markUnlessSuperseded(ref.blobId, run) { markProgress(ref.blobId, transferred, ref.sizeBytes) }
+            }
+            val thumbnail = decodeThumbnail(ref, file)
+            markUnlessSuperseded(ref.blobId, run) { markCached(ref, thumbnail) }
+            log.i { "attachment downloaded blobId=${ref.blobId}" }
+        } catch (cancellation: CancellationException) {
+            if (currentCoroutineContext().isActive) {
+                failDownload(ref, run, cancellation)
+            } else {
+                endCancelledDownload(ref.blobId, run)
+                throw cancellation
+            }
+        } catch (error: Exception) {
+            if (currentCoroutineContext().isActive) {
+                failDownload(ref, run, error)
+            } else {
+                endCancelledDownload(ref.blobId, run)
+            }
+        }
+    }
+
+    /**
+     * 取得の失敗を反映する。自分の登録を外してから、利用者がボタンで求めた取得なら記録し、失敗の表示にする。
+     * 再試行ボタンが出た時点で、失敗した取得の登録は残っていない。
+     */
+    private suspend fun failDownload(ref: AttachmentRef, run: DownloadRun, error: Exception) {
+        // 例外そのものは流さない。ktor の例外メッセージには blob の取得先 URL（＝ホスト）が載る（§11）。
+        log.w { "attachment download failed blobId=${ref.blobId} (${error::class.simpleName})" }
+        if (releaseDownload(ref.blobId, run)) recordAttachmentError(ATTACHMENT_DOWNLOAD_FAILED_MESSAGE)
+        markUnlessSuperseded(ref.blobId, run) { markFailed(ref.blobId, ref.sizeBytes) }
+    }
+
+    /**
+     * キャンセルで止まった取得を、キャンセル済みの表示で終える。キャンセルの直後に一時ファイルへの書き出しが
+     * 進捗を書くことがあるため、止まった時点で改めてキャンセル済みにする。
+     */
+    private fun endCancelledDownload(blobId: String, run: DownloadRun) {
+        markUnlessSuperseded(blobId, run) { markCancelled(blobId) }
+    }
+
+    /** [blobId] に [run] とは別の取得が登録されていなければ、[write] で状態を書く。確認と書き込みは同じロックの中で行う。 */
+    private inline fun markUnlessSuperseded(blobId: String, run: DownloadRun, write: AttachmentDownloadStates.() -> Unit) {
+        synchronized(downloadLock) {
+            val current = downloadRuns[blobId]
+            if (current == null || current === run) attachmentStates.write()
+        }
+    }
+
+    /** [blobId] に [run] が登録されていれば外す。戻り値は、[run] が利用者のボタンで求められた取得か。 */
+    private fun releaseDownload(blobId: String, run: DownloadRun): Boolean = synchronized(downloadLock) {
+        if (downloadRuns[blobId] === run) downloadRuns.remove(blobId)
+        run.userRequested
+    }
+
+    /** [blobId] の進行中の取得のジョブ。無ければ null。 */
+    private fun activeDownload(blobId: String): Job? = synchronized(downloadLock) {
+        downloadRuns[blobId]?.job?.takeIf { it.isActive }
+    }
+
+    /** 進行中のダウンロードをキャンセルし、未取得の表示へ戻す。キャンセルは記録しない。 */
     private fun cancelDownload(blobId: String) {
-        downloadJobs.remove(blobId)?.cancel()
-        attachmentStates.markCancelled(blobId)
+        val run = synchronized(downloadLock) {
+            attachmentStates.markCancelled(blobId)
+            downloadRuns.remove(blobId)
+        }
+        run?.job?.cancel()
+    }
+
+    /**
+     * 添付の操作の失敗をタイムラインへ記録する（§4.3・§10.1）。トーストは出さない。
+     * 抑止の窓は、この feed へエラーを追記するほかの経路と共有する（[TimelineFeed.appendError]）。
+     */
+    private suspend fun recordAttachmentError(message: String) {
+        try {
+            feed.appendError(ErrorKind.OTHER, message, nowEpochMillis())
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            log.w { "failed to record attachment error (${error::class.simpleName})" }
+        }
     }
 
     /**
@@ -573,65 +714,6 @@ class DesktopReceiver(
             null
         }
     }
-
-    /**
-     * 復号済みファイルを OS 既定アプリで開く（§4.3）。
-     * 添付カードは [attachmentOpenDecision] で導線を出し分けているが、OS へ渡す直前でも当て直す。
-     */
-    private fun openAttachment(blobId: String) {
-        val ref = attachmentRefFor(blobId) ?: return
-        if (attachmentOpenDecision(ref.mimeType, ref.fileName) == AttachmentOpenDecision.REFUSE) {
-            log.w { "attachment open refused blobId=$blobId" }
-            return
-        }
-        val file = cachedFileFor(ref) ?: return
-        if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
-            log.w { "Desktop open not supported" }
-            return
-        }
-        toastScope.launch {
-            try {
-                Desktop.getDesktop().open(file)
-            } catch (error: Exception) {
-                log.w(error) { "failed to open attachment blobId=$blobId" }
-            }
-        }
-    }
-
-    /** 復号済みファイルを保存ダイアログ経由で任意の場所へコピーする（§4.3）。 */
-    private fun saveAttachment(blobId: String) {
-        val source = attachmentRefFor(blobId)?.let { cachedFileFor(it) } ?: return
-        toastScope.launch {
-            val dialog = FileDialog(null as Frame?, "保存", FileDialog.SAVE).apply {
-                file = source.name
-                isVisible = true
-            }
-            val directory = dialog.directory ?: return@launch
-            val chosen = dialog.file ?: return@launch
-            try {
-                withContext(ioDispatcher) {
-                    Files.copy(source.toPath(), File(directory, chosen).toPath(), StandardCopyOption.REPLACE_EXISTING)
-                }
-                log.i { "attachment saved blobId=$blobId" }
-            } catch (error: Exception) {
-                log.w(error) { "failed to save attachment blobId=$blobId" }
-            }
-        }
-    }
-
-    /** タイムラインから [blobId] の添付参照を引く（[findAttachmentRef]）。無ければログに残して null（履歴消失）。 */
-    private fun attachmentRefFor(blobId: String): AttachmentRef? =
-        findAttachmentRef(currentItems(), blobId) ?: run {
-            log.w { "no attachment ref for blobId=$blobId" }
-            null
-        }
-
-    /** [ref] の復号済みファイルを引く。無ければログに残して null（未取得・剪定済み）。 */
-    private fun cachedFileFor(ref: AttachmentRef): File? =
-        attachmentCache.cachedFile(ref) ?: run {
-            log.w { "no cached file for blobId=${ref.blobId}" }
-            null
-        }
 
     /**
      * 保持するリソース（トーストコルーチンと HTTP クライアント）を閉じる。

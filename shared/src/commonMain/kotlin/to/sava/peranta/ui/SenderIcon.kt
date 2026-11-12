@@ -53,7 +53,7 @@ internal fun SenderIcon(ref: AttachmentRef, ui: AttachmentUi) {
             alreadyFetched = state.cached,
             transferStarted = state.progress != null,
         )
-        if (autoFetch) ui.onDownload(ref)
+        if (autoFetch) ui.onAutoFetch(ref)
     }
 
     val thumbnail = state.thumbnail

@@ -318,6 +318,67 @@ class AttachmentCardTest {
         assertEquals(blobId, requested)
     }
 
+    /** 画像の自動表示は自動取得の口（onAutoFetch）を呼び、ボタンの口（onDownload）は呼ばない。 */
+    @Test
+    fun autoDisplayCallsAutoFetchInsteadOfDownload() = runComposeUiTest {
+        val states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+        val downloads = mutableListOf<String>()
+        val autoFetches = mutableListOf<String>()
+        val ui = AttachmentUi(
+            states,
+            onDownload = { downloads.add(it.blobId) },
+            autoDisplayImages = true,
+            onAutoFetch = { autoFetches.add(it.blobId) },
+        )
+        setContent { TimelineScreen(items(), attachments = ui) }
+        waitForIdle()
+
+        assertEquals(listOf(blobId), autoFetches)
+        assertEquals(emptyList(), downloads)
+    }
+
+    /** ダウンロードボタンはボタンの口（onDownload）を呼び、自動取得の口（onAutoFetch）は呼ばない。 */
+    @Test
+    fun downloadButtonCallsDownloadInsteadOfAutoFetch() = runComposeUiTest {
+        val states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+        val downloads = mutableListOf<String>()
+        val autoFetches = mutableListOf<String>()
+        val ui = AttachmentUi(
+            states,
+            onDownload = { downloads.add(it.blobId) },
+            autoDisplayImages = false,
+            onAutoFetch = { autoFetches.add(it.blobId) },
+        )
+        setContent { TimelineScreen(items(), attachments = ui) }
+
+        onNodeWithTag("$TAG_ATTACHMENT_DOWNLOAD_PREFIX$blobId").performClick()
+
+        assertEquals(listOf(blobId), downloads)
+        assertEquals(emptyList(), autoFetches)
+    }
+
+    /** 再試行ボタンはボタンの口（onDownload）を呼び、自動取得の口（onAutoFetch）は呼ばない。 */
+    @Test
+    fun retryButtonCallsDownloadInsteadOfAutoFetch() = runComposeUiTest {
+        val states = MutableStateFlow(
+            mapOf(blobId to AttachmentDownloadState(progress = TransferProgress(0, 2048, TransferState.FAILED))),
+        )
+        val downloads = mutableListOf<String>()
+        val autoFetches = mutableListOf<String>()
+        val ui = AttachmentUi(
+            states,
+            onDownload = { downloads.add(it.blobId) },
+            autoDisplayImages = true,
+            onAutoFetch = { autoFetches.add(it.blobId) },
+        )
+        setContent { TimelineScreen(items(), attachments = ui) }
+
+        onNodeWithTag("$TAG_ATTACHMENT_RETRY_PREFIX$blobId").performClick()
+
+        assertEquals(listOf(blobId), downloads)
+        assertEquals(emptyList(), autoFetches)
+    }
+
     /** 表示するだけの種別（画像・PDF 等）は確認なしで開ける。確認が読み飛ばされる状態を作らない（§4.3.2）。 */
     @Test
     fun viewableAttachmentOpensWithoutConfirmation() = runComposeUiTest {

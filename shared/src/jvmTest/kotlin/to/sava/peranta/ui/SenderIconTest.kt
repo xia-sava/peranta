@@ -104,6 +104,24 @@ class SenderIconTest {
         assertEquals(blobId, requested)
     }
 
+    /** 送信者アイコンの取得は自動取得の口（onAutoFetch）を呼び、ボタンの口（onDownload）は呼ばない。 */
+    @Test
+    fun iconFetchCallsAutoFetchInsteadOfDownload() = runComposeUiTest {
+        val states = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
+        var downloaded: String? = null
+        var autoFetched: String? = null
+        val ui = AttachmentUi(
+            states,
+            onDownload = { downloaded = it.blobId },
+            onAutoFetch = { autoFetched = it.blobId },
+        )
+        setContent { TimelineScreen(items(), attachments = ui) }
+        waitForIdle()
+
+        assertEquals(blobId, autoFetched)
+        assertNull(downloaded)
+    }
+
     /** 期限切れの blob は取得しに行かない（必ず失敗するため）。 */
     @Test
     fun expiredIconIsNotFetched() = runComposeUiTest {

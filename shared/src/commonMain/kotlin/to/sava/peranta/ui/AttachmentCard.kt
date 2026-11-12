@@ -89,6 +89,8 @@ data class AttachmentDownloadState(
  * 各操作は fire-and-forget で、プラットフォーム配線が実際のダウンロード・保存を行う。
  * 既定は no-op / 空状態で、添付操作を持たない画面ではダウンロード導線を出さない。
  * [autoDisplayImages] が true のとき、画像添付はカードが画面に出た時点で自動ダウンロードする（§4.3）。
+ * [onDownload] は利用者がボタン（表示・ダウンロード・再試行）を押して始める取得、[onAutoFetch] は利用者の操作なしに
+ * 始める取得（画像の自動表示・送信者アイコン）。既定では [onAutoFetch] も [onDownload] を呼ぶ。
  */
 class AttachmentUi(
     val states: StateFlow<Map<String, AttachmentDownloadState>>,
@@ -100,6 +102,7 @@ class AttachmentUi(
     val canShare: Boolean = false,
     val now: () -> Long = ::nowEpochMillis,
     val autoDisplayImages: Boolean = false,
+    val onAutoFetch: (AttachmentRef) -> Unit = onDownload,
 )
 
 /** バイト数を人間向けの短い表現にする（KB/MB 単位、1 桁小数）。 */
@@ -146,7 +149,7 @@ internal fun AttachmentCard(ref: AttachmentRef, ui: AttachmentUi) {
             alreadyFetched = state.cached,
             transferStarted = state.progress != null,
         )
-        if (autoFetch) ui.onDownload(ref)
+        if (autoFetch) ui.onAutoFetch(ref)
     }
 
     Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
