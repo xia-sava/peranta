@@ -7,8 +7,10 @@ import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.crypto.generateKey
 import to.sava.peranta.filter.RuleAction
 import to.sava.peranta.model.NotificationPayload
-import to.sava.peranta.toast.NoOpToaster
+import java.io.File
+import java.nio.file.Files
 import kotlin.io.encoding.Base64
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -19,6 +21,13 @@ import kotlin.test.assertEquals
  * （[to.sava.peranta.send.CommandSender.muteApp] は宛先 topic が解決できない場合 publish を行わない）。
  */
 class DesktopReceiverTimelineMuteTest {
+
+    private val attachmentsDir: File = Files.createTempDirectory("peranta-timeline-mute-test").toFile()
+
+    @AfterTest
+    fun cleanup() {
+        attachmentsDir.deleteRecursively()
+    }
 
     private fun testConfig(): PerantaConfig {
         val keyBytes = generateKey()
@@ -47,7 +56,7 @@ class DesktopReceiverTimelineMuteTest {
     @Test
     fun muteFromTimelineUpdatesLocalMirror() {
         val repository = ConfigRepository(MapSettings())
-        val receiver = DesktopReceiver(testConfig(), repository, toaster = NoOpToaster)
+        val receiver = testDesktopReceiver(attachmentsDir = attachmentsDir, config = testConfig(), repository = repository)
         try {
             receiver.timelineActions().muteApp(testPayload("com.spam", from = "phone-1"))
 

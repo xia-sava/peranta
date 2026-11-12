@@ -1,10 +1,8 @@
 package to.sava.peranta
 
-import com.russhwolf.settings.MapSettings
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.crypto.generateKey
 import to.sava.peranta.model.AttachmentKind
@@ -22,8 +20,11 @@ import to.sava.peranta.timeline.ReceivedNotification
 import to.sava.peranta.toast.ReceivedNotificationToast
 import to.sava.peranta.toast.ToastResult
 import to.sava.peranta.toast.Toaster
+import java.io.File
+import java.nio.file.Files
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.io.encoding.Base64
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -34,6 +35,13 @@ import kotlin.test.assertTrue
  * あわせて、改版による表示中のトーストの差し替え（§4.3.1）への配線も確かめる。
  */
 class DesktopReceiverToastClickTest {
+
+    private val attachmentsDir: File = Files.createTempDirectory("peranta-toast-click-test").toFile()
+
+    @AfterTest
+    fun cleanup() {
+        attachmentsDir.deleteRecursively()
+    }
 
     /** [result] を即答するフェイク。表示内容は [shown] に、差し替えたトーストの id は [updatedIds] に記録する。 */
     private class FixedResultToaster(private val result: ToastResult) : Toaster {
@@ -59,9 +67,9 @@ class DesktopReceiverToastClickTest {
         controlTopic = null,
     )
 
-    private fun receiver(toaster: Toaster, clicked: ConcurrentLinkedQueue<String>) = DesktopReceiver(
+    private fun receiver(toaster: Toaster, clicked: ConcurrentLinkedQueue<String>) = testDesktopReceiver(
+        attachmentsDir = attachmentsDir,
         config = testConfig(),
-        repository = ConfigRepository(MapSettings()),
         toaster = toaster,
         onToastClicked = { clicked.add(it) },
     )
@@ -169,9 +177,9 @@ class DesktopReceiverToastClickTest {
     fun toastReplyActionRequestsTimelineReply() {
         val replies = ConcurrentLinkedQueue<Pair<String, Int>>()
         val toaster = FixedResultToaster(ToastResult.ButtonAction(index = 1))
-        val receiver = DesktopReceiver(
+        val receiver = testDesktopReceiver(
+            attachmentsDir = attachmentsDir,
             config = testConfig(),
-            repository = ConfigRepository(MapSettings()),
             toaster = toaster,
             onToastReplyRequested = { itemId, index -> replies.add(itemId to index) },
         )
@@ -198,9 +206,9 @@ class DesktopReceiverToastClickTest {
     @Test
     fun notifyOnReceiveOffShowsOnlyErrorToasts() {
         val toaster = FixedResultToaster(ToastResult.Clicked)
-        val receiver = DesktopReceiver(
+        val receiver = testDesktopReceiver(
+            attachmentsDir = attachmentsDir,
             config = testConfig().copy(notifyOnReceive = false),
-            repository = ConfigRepository(MapSettings()),
             toaster = toaster,
         )
         try {
