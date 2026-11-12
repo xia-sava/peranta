@@ -6,6 +6,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.Deferred
 import java.security.KeyPairGenerator
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
@@ -34,8 +35,16 @@ class TestSigningKey {
         }
 }
 
-/** マニフェストと、その隣に置く署名を返す MockEngine。[signature] が null なら署名は 404 にする。 */
-fun signedManifestEngine(manifestJson: String, signature: String?): MockEngine = MockEngine { request ->
+/**
+ * マニフェストと、その隣に置く署名を返す MockEngine。[signature] が null なら署名は 404 にする。
+ * [gate] を渡すと、それが完了するまで応答を返さない。
+ */
+fun signedManifestEngine(
+    manifestJson: String,
+    signature: String?,
+    gate: Deferred<Unit>? = null,
+): MockEngine = MockEngine { request ->
+    gate?.await()
     if (request.url.toString().endsWith(".sig")) {
         signature
             ?.let { body -> respond(content = body, status = HttpStatusCode.OK) }

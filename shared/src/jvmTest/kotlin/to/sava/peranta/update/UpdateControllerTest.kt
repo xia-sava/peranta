@@ -2,6 +2,7 @@ package to.sava.peranta.update
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,11 +52,14 @@ class UpdateControllerTest {
     @Test
     fun checkNowIgnoresConcurrentInvocation() = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val engine = manifestEngine()
+        // 1 回目の確認が応答待ちで止まっている間に 2 回目を呼ぶ。
+        val responseGate = CompletableDeferred<Unit>()
+        val engine = signedManifestEngine(manifestJson, key.sign(manifestJson), responseGate)
         try {
             val controller = controller(scope, engine)
             controller.checkNow()
             controller.checkNow()
+            responseGate.complete(Unit)
 
             val status = withTimeout(5_000) { controller.status.filterNotNull().first() }
             withTimeout(5_000) { controller.checking.first { !it } }
