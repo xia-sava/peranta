@@ -6,6 +6,10 @@ import to.sava.peranta.net.SelfTestStatus
 import to.sava.peranta.ui.HealthCheckItem
 import to.sava.peranta.ui.HealthCheckState
 import to.sava.peranta.ui.HealthChecker
+import to.sava.peranta.ui.SELF_TEST_RUNNING_DETAIL
+import to.sava.peranta.ui.selfTestActionLabel
+import to.sava.peranta.ui.selfTestPassed
+import to.sava.peranta.ui.selfTestResultFact
 
 /** 動作チェックにおけるサーバ経由の受信テスト項目の id（§10.5）。 */
 const val RECEIVE_SELF_TEST_ID: String = "receive-self-test"
@@ -69,33 +73,31 @@ class DesktopHealthChecker(
             label = "サーバ経由の受信テスト",
             state = selfTestStateOf(status),
             detail = selfTestDetailOf(status),
-            fixLabel = if (status == SelfTestStatus.NotRun) "テスト実行" else "再実行",
+            fixLabel = selfTestActionLabel(status),
             onFix = handle::startSelfTest,
         )
     }
 }
 
 /** [SelfTestStatus] から動作チェックの合否状態への写像。実行中・未実行は情報表示に留める。 */
-private fun selfTestStateOf(status: SelfTestStatus): HealthCheckState = when (status) {
-    SelfTestStatus.NotRun, SelfTestStatus.Running -> HealthCheckState.INFO
-    is SelfTestStatus.Done ->
-        if (status.result == SelfTestResult.Delivered) HealthCheckState.PASS else HealthCheckState.FAILING
+private fun selfTestStateOf(status: SelfTestStatus): HealthCheckState = when (selfTestPassed(status)) {
+    null -> HealthCheckState.INFO
+    true -> HealthCheckState.PASS
+    false -> HealthCheckState.FAILING
 }
 
 /** [SelfTestStatus] の状態説明文。 */
 private fun selfTestDetailOf(status: SelfTestStatus): String = when (status) {
     SelfTestStatus.NotRun ->
         "まだ実行していません。テスト通知を自分宛にサーバ経由で送り、実際に受信できるかを確認します。"
-    SelfTestStatus.Running -> "確認中です。数秒お待ちください（自動で再チェックされます）。"
+    SelfTestStatus.Running -> SELF_TEST_RUNNING_DETAIL
     is SelfTestStatus.Done -> selfTestResultDetail(status.result)
 }
 
 /** [SelfTestResult] の結末ごとの事実記述と対処案内。 */
-private fun selfTestResultDetail(result: SelfTestResult): String = when (result) {
-    SelfTestResult.Delivered -> "サーバ経由の配送を確認しました。"
-    SelfTestResult.Timeout ->
-        "テスト通知を送信しましたが、5 秒以内に届きませんでした。ネットワークと購読接続の状態を確認して再実行してください。"
-    is SelfTestResult.PublishRejected ->
-        "サーバが送信を拒否しました（HTTP ${result.status}）。アクセストークンとサーバ設定を確認してください。"
-    SelfTestResult.PublishFailed -> "サーバに接続できませんでした。サーバ設定とネットワークを確認してください。"
+private fun selfTestResultDetail(result: SelfTestResult): String = selfTestResultFact(result) + when (result) {
+    SelfTestResult.Delivered -> ""
+    SelfTestResult.Timeout -> "ネットワークと購読接続の状態を確認して再実行してください。"
+    is SelfTestResult.PublishRejected -> "アクセストークンとサーバ設定を確認してください。"
+    SelfTestResult.PublishFailed -> "サーバ設定とネットワークを確認してください。"
 }

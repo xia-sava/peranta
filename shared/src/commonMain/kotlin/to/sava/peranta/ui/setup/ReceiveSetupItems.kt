@@ -4,6 +4,10 @@ import to.sava.peranta.net.EndpointServerMatch
 import to.sava.peranta.net.SelfTestResult
 import to.sava.peranta.net.SelfTestStatus
 import to.sava.peranta.ui.FixAid
+import to.sava.peranta.ui.SELF_TEST_RUNNING_DETAIL
+import to.sava.peranta.ui.selfTestActionLabel
+import to.sava.peranta.ui.selfTestPassed
+import to.sava.peranta.ui.selfTestResultFact
 
 /** ntfy のサーバ設定が不一致のときの事実と影響の記述。 */
 private val SERVER_CONFIG_MISMATCH_DETAIL: String =
@@ -234,7 +238,7 @@ private fun selfTestItem(
             selfTestBlockedDetail(endpointMatch)
         },
         action = SetupAction(
-            label = if (status == SelfTestStatus.NotRun) "テスト実行" else "再実行",
+            label = selfTestActionLabel(status),
             run = onRunSelfTest,
         ),
     )
@@ -248,27 +252,25 @@ private fun selfTestBlockedDetail(endpointMatch: EndpointServerMatch?): String =
     }
 
 private fun selfTestStatusOf(status: SelfTestStatus): SetupStatus =
-    when (status) {
-        SelfTestStatus.NotRun, SelfTestStatus.Running -> SetupStatus.UNKNOWN
-        is SelfTestStatus.Done ->
-            if (status.result == SelfTestResult.Delivered) SetupStatus.DONE else SetupStatus.TODO
+    when (selfTestPassed(status)) {
+        null -> SetupStatus.UNKNOWN
+        true -> SetupStatus.DONE
+        false -> SetupStatus.TODO
     }
 
 private fun selfTestDetailOf(status: SelfTestStatus, credentialProof: NtfyCredentialProof): String? =
     when (status) {
         SelfTestStatus.NotRun -> "まだ実行していません。"
-        SelfTestStatus.Running -> "確認中です。数秒お待ちください（自動で再チェックされます）。"
+        SelfTestStatus.Running -> SELF_TEST_RUNNING_DETAIL
         is SelfTestStatus.Done -> selfTestResultDetail(status.result, credentialProof)
     }
 
 private fun selfTestResultDetail(result: SelfTestResult, credentialProof: NtfyCredentialProof): String =
     when (result) {
-        SelfTestResult.Delivered -> "サーバ経由の配送を確認しました。"
+        SelfTestResult.Delivered -> selfTestResultFact(result)
         SelfTestResult.Timeout -> selfTestTimeoutDetail(credentialProof)
-        is SelfTestResult.PublishRejected ->
-            "サーバが送信を拒否しました（HTTP ${result.status}）。${SELF_TEST_REVIEW_RANGE}を確認してください。"
-        SelfTestResult.PublishFailed ->
-            "サーバに接続できませんでした。${SELF_TEST_REVIEW_RANGE}を確認してください。"
+        is SelfTestResult.PublishRejected, SelfTestResult.PublishFailed ->
+            selfTestResultFact(result) + "${SELF_TEST_REVIEW_RANGE}を確認してください。"
     }
 
 /**
@@ -276,7 +278,7 @@ private fun selfTestResultDetail(result: SelfTestResult, credentialProof: NtfyCr
  * 古いまま購読できていない見込みが高いため、その手順へ絞って案内する。
  */
 private fun selfTestTimeoutDetail(credentialProof: NtfyCredentialProof): String {
-    val sent = "テスト通知を送信しましたが、5 秒以内に届きませんでした。"
+    val sent = selfTestResultFact(SelfTestResult.Timeout)
     if (credentialProof != NtfyCredentialProof.STALE) {
         return sent + "${SELF_TEST_REVIEW_RANGE}を確認してください。"
     }
