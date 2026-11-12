@@ -24,6 +24,8 @@ import to.sava.peranta.blob.exceedsDecodedPixelLimit
 import to.sava.peranta.blob.exceedsFullTextAutoFetchLimit
 import to.sava.peranta.blob.shouldAutoFetch
 import to.sava.peranta.config.PerantaConfig
+import to.sava.peranta.config.requireKeyId
+import to.sava.peranta.config.sharedKeyBytes
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.nowEpochMillis
@@ -37,7 +39,6 @@ import to.sava.peranta.ui.displayAttachments
 import to.sava.peranta.ui.referencedAttachments
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.io.encoding.Base64
 import kotlin.math.roundToInt
 
 /** 復号済み添付キャッシュのディレクトリ名（res/xml/file_paths.xml の cache-path と一致させる）。 */
@@ -89,8 +90,8 @@ object AndroidAttachmentReceive {
     fun cache(context: Context, config: PerantaConfig): AndroidAttachmentCache =
         AndroidAttachmentCache(
             transport = transport(context, config),
-            sharedKey = Base64.decode(config.sharedKeyBase64!!),
-            keyId = config.keyId!!,
+            sharedKey = config.sharedKeyBytes(),
+            keyId = config.requireKeyId(),
             baseDir = attachmentsDir(context),
         )
 

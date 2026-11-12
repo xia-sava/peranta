@@ -30,6 +30,8 @@ import to.sava.peranta.blob.attachmentKindForMimeType
 import to.sava.peranta.blob.decodeAttachmentRef
 import to.sava.peranta.blob.encodeAttachmentRef
 import to.sava.peranta.blob.uploadAttachment
+import to.sava.peranta.config.blobCipher
+import to.sava.peranta.config.requireKeyId
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.newPayloadId
@@ -44,7 +46,6 @@ import java.io.File
 import java.io.FilterInputStream
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.io.encoding.Base64
 
 /**
  * 共有された画像・ファイルを暗号化して blobTopic へアップロードし、[FilePayload] として配送する
@@ -218,13 +219,13 @@ class AttachmentTransferService : Service() {
         caption: String?,
     ) {
         val repo = androidConfigRepository(applicationContext)
-        val config = repo.load().copy(deviceId = repo.ensureDeviceId())
+        val config = repo.loadWithDeviceId()
         if (!config.isReadyForSend) {
             recordError(NOT_CONFIGURED_MESSAGE)
             return
         }
         val blobTopic = config.blobTopic ?: repo.ensureBlobTopic()
-        val cipher = BlobCipher(Base64.decode(config.sharedKeyBase64!!), config.keyId!!)
+        val cipher = config.blobCipher()
         val transport = KtorBlobTransport(config, httpClient)
 
         val attachments = uris.mapNotNull { uri ->
@@ -238,7 +239,7 @@ class AttachmentTransferService : Service() {
         val payloads = buildFilePayloads(
             deviceId = config.deviceId!!,
             attachments = attachments,
-            keyId = config.keyId,
+            keyId = config.requireKeyId(),
             now = nowEpochMillis(),
             caption = caption,
             deviceName = config.deviceName,

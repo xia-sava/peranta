@@ -20,6 +20,8 @@ import to.sava.peranta.blob.TransferState
 import to.sava.peranta.blob.attachmentKindForMimeType
 import to.sava.peranta.blob.uploadAttachment
 import to.sava.peranta.config.PerantaConfig
+import to.sava.peranta.config.blobCipher
+import to.sava.peranta.config.requireKeyId
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.nowEpochMillis
@@ -48,7 +50,6 @@ import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import javax.imageio.ImageIO
-import kotlin.io.encoding.Base64
 import kotlin.math.roundToInt
 
 /** ファイル送信に失敗したときにタイムラインへ出す文言（§13 M9d）。 */
@@ -247,7 +248,7 @@ class DesktopComposer(
         val sources = mutableListOf<Closeable>()
         uploadProgress.value = TransferProgress(0, totalBytes, TransferState.RUNNING)
         return try {
-            val blobCipher = BlobCipher(Base64.decode(config.sharedKeyBase64!!), config.keyId!!)
+            val blobCipher = config.blobCipher()
             val transport = KtorBlobTransport(config, httpClient)
             val refs = files.map { file ->
                 uploadOne(file, blobCipher, transport, blobTopic, transferred, totalBytes, sources)
@@ -255,7 +256,7 @@ class DesktopComposer(
             val payloads = buildFilePayloads(
                 deviceId = config.deviceId!!,
                 attachments = refs,
-                keyId = config.keyId,
+                keyId = config.requireKeyId(),
                 now = nowEpochMillis(),
                 caption = text.ifBlank { null },
                 deviceName = config.deviceName,

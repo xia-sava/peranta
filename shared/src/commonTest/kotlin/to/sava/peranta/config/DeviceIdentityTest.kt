@@ -23,6 +23,34 @@ class DeviceIdentityTest {
         assertEquals(first, repo.load().deviceId)
     }
 
+    /** loadWithDeviceId は未設定なら deviceId を確定して永続化し、以後は同じ ID を返し続ける。 */
+    @Test
+    fun loadWithDeviceIdPersistsAndKeepsSameId() {
+        val repo = repo()
+        val first = repo.loadWithDeviceId().deviceId
+        assertTrue(!first.isNullOrBlank())
+        assertEquals(first, repo.loadWithDeviceId().deviceId)
+        assertEquals(first, repo.load().deviceId)
+    }
+
+    /** loadWithDeviceId は deviceId 以外の項目を load と同じ値で返す。 */
+    @Test
+    fun loadWithDeviceIdKeepsOtherFieldsOfLoad() {
+        val repo = repo()
+        repo.save(PerantaConfig(accessToken = "tok", deviceName = "phone"))
+        val loaded = repo.loadWithDeviceId()
+        assertEquals(repo.load(), loaded)
+        assertEquals("phone", loaded.deviceName)
+    }
+
+    /** 保存済みの deviceId があれば loadWithDeviceId はそれを返し、置き換えない。 */
+    @Test
+    fun loadWithDeviceIdKeepsStoredId() {
+        val repo = repo()
+        repo.save(PerantaConfig(deviceId = "dev-123"))
+        assertEquals("dev-123", repo.loadWithDeviceId().deviceId)
+    }
+
     /** 別々に生成した deviceId は互いに異なる（ランダム性）。 */
     @Test
     fun generatedDeviceIdsAreDistinct() {

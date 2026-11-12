@@ -10,13 +10,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import to.sava.peranta.blob.AttachmentUploadRequest
-import to.sava.peranta.blob.BlobCipher
 import to.sava.peranta.blob.KtorBlobTransport
 import to.sava.peranta.blob.uploadAttachment
 import to.sava.peranta.blob.uploadFullTextAttachment
 import to.sava.peranta.config.PerantaConfig
+import to.sava.peranta.config.blobCipher
+import to.sava.peranta.config.messageCipher
 import to.sava.peranta.config.timelineRetentionMaxAgeMillis
-import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.NotificationPayload
@@ -40,14 +40,6 @@ import to.sava.peranta.send.NotificationRepostTracker
 import to.sava.peranta.timeline.JsonlTimelineStore
 import to.sava.peranta.timeline.TimelineFeed
 import to.sava.peranta.timeline.defaultTimelineFile
-import kotlin.io.encoding.Base64
-
-/** 設定から共有鍵と keyId を取り出して [MessageCipher] を生成する。設定不足なら例外。 */
-internal fun perantaCipher(config: PerantaConfig): MessageCipher {
-    val keyBase64 = config.sharedKeyBase64 ?: error("shared key not configured")
-    val keyId = config.keyId ?: error("keyId not configured")
-    return MessageCipher(Base64.decode(keyBase64), keyId)
-}
 
 /**
  * Android 送信側のプロセス内シングルトン。
@@ -121,7 +113,7 @@ object PerantaSend {
             return false
         }
         return try {
-            val cipher = perantaCipher(config)
+            val cipher = config.messageCipher()
             val ntfy = KtorNtfyClient(config, httpClient)
             val pipeline = SendPipeline(cipher = cipher, ntfy = ntfy, store = timelineFeed)
             pipeline.dispatch(
@@ -193,7 +185,7 @@ object PerantaSend {
     private suspend fun uploadFullText(context: Context, config: PerantaConfig, text: String): AttachmentRef {
         val repo = androidConfigRepository(context)
         val blobTopic = config.blobTopic ?: repo.ensureBlobTopic()
-        val cipher = BlobCipher(Base64.decode(config.sharedKeyBase64!!), config.keyId!!)
+        val cipher = config.blobCipher()
         val transport = KtorBlobTransport(config, httpClient)
         return uploadFullTextAttachment(transport, cipher, blobTopic, text)
     }
@@ -265,7 +257,7 @@ object PerantaSend {
         uploadedImages.find(contentHash, nowEpochMillis())?.let { return it }
         val repo = androidConfigRepository(context)
         val blobTopic = config.blobTopic ?: repo.ensureBlobTopic()
-        val cipher = BlobCipher(Base64.decode(config.sharedKeyBase64!!), config.keyId!!)
+        val cipher = config.blobCipher()
         val transport = KtorBlobTransport(config, httpClient)
         val ref = uploadAttachment(
             transport = transport,
@@ -288,10 +280,10 @@ object PerantaSend {
      */
     suspend fun sendMessage(context: Context, text: String): Boolean {
         val repo = androidConfigRepository(context.applicationContext)
-        val config = repo.load().copy(deviceId = repo.ensureDeviceId())
+        val config = repo.loadWithDeviceId()
         if (!config.isReadyForSend) return false
         return try {
-            val cipher = perantaCipher(config)
+            val cipher = config.messageCipher()
             val ntfy = KtorNtfyClient(config, httpClient)
             to.sava.peranta.send.sendMessage(config, cipher, ntfy, SendPipeline(cipher = cipher, ntfy = ntfy, store = timelineFeed), text)
         } catch (cancellation: CancellationException) {
@@ -314,7 +306,7 @@ object PerantaSend {
             return false
         }
         return try {
-            val cipher = perantaCipher(config)
+            val cipher = config.messageCipher()
             val ntfy = KtorNtfyClient(config, httpClient)
             val sender = CommandSender(config, cipher, ntfy, SendPipeline(cipher = cipher, ntfy = ntfy, store = timelineFeed))
             sender.dismiss(notificationKey)

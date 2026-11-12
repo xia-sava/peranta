@@ -31,10 +31,12 @@ import to.sava.peranta.blob.shouldAutoFetch
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.isDevMode
+import to.sava.peranta.config.messageCipher
 import to.sava.peranta.config.notifiesOnReceive
+import to.sava.peranta.config.requireKeyId
+import to.sava.peranta.config.sharedKeyBytes
 import to.sava.peranta.config.timelineRetentionMaxAgeMillis
 import to.sava.peranta.config.withDevOverrides
-import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.model.AttachmentKind
 import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.NotificationPayload
@@ -99,7 +101,6 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
 import java.util.prefs.Preferences
-import kotlin.io.encoding.Base64
 
 /**
  * [repository] の永続化状態から Desktop 実行に必要な項目を補って設定を組み立てる。
@@ -186,7 +187,7 @@ class DesktopReceiver(
 ) : DesktopSelfTest {
     private val httpClient = createNtfyHttpClient()
     private val feed = TimelineFeed(JsonlTimelineStore(defaultTimelineFile()))
-    private val cipher = MessageCipher(Base64.decode(config.sharedKeyBase64!!), config.keyId!!)
+    private val cipher = config.messageCipher()
     private val ntfy = KtorNtfyClient(config, httpClient, Logger.withTag("NtfyClient"))
     private val toastJob = SupervisorJob()
     private val toastScope = CoroutineScope(toastJob + ioDispatcher)
@@ -206,8 +207,8 @@ class DesktopReceiver(
 
     private val attachmentCache = DesktopAttachmentCache(
         transport = KtorBlobTransport(config, httpClient),
-        sharedKey = Base64.decode(config.sharedKeyBase64!!),
-        keyId = config.keyId!!,
+        sharedKey = config.sharedKeyBytes(),
+        keyId = config.requireKeyId(),
     )
     private val attachmentStates = MutableStateFlow<Map<String, AttachmentDownloadState>>(emptyMap())
 

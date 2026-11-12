@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import to.sava.peranta.config.messageCipher
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.createNtfyHttpClient
@@ -77,7 +78,7 @@ suspend fun announcePresence(context: Context) = announceMutex.withLock {
 
     val httpClient = createNtfyHttpClient()
     try {
-        publishPresence(perantaCipher(config), KtorNtfyClient(config, httpClient), controlTopic, presence)
+        publishPresence(config.messageCipher(),KtorNtfyClient(config, httpClient), controlTopic, presence)
         announceGate.recordAnnounced(fingerprint, presence.sentAtEpochMillis)
     } catch (cancellation: CancellationException) {
         throw cancellation

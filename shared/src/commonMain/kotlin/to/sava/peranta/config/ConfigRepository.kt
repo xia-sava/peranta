@@ -100,6 +100,9 @@ class ConfigRepository(
         putOrClearSecret(SECRET_SHARED_KEY, config.sharedKeyBase64)
     }
 
+    /** deviceId を確定した設定を読む。ペイロードの from と宛先検証に使う。 */
+    fun loadWithDeviceId(): PerantaConfig = load().copy(deviceId = ensureDeviceId())
+
     /**
      * 端末に保存した設定を全て消す（§11）。共有鍵とアクセストークンも破棄するため、
      * 以後は初期設定からやり直しになる。

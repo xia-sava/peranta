@@ -13,6 +13,7 @@ import to.sava.peranta.config.PerantaConfig
 import to.sava.peranta.config.PipelineKey
 import to.sava.peranta.blob.AutoFetchRole
 import to.sava.peranta.blob.attachmentKindForMimeType
+import to.sava.peranta.config.messageCipher
 import to.sava.peranta.config.notifiesOnReceive
 import to.sava.peranta.config.toPipelineKey
 import to.sava.peranta.model.AttachmentKind
@@ -109,7 +110,7 @@ object PerantaReceive {
     suspend fun rebuildIfPipelineConfigChanged(context: Context) {
         val appContext = context.applicationContext
         val repo = androidConfigRepository(appContext)
-        val nextKey = repo.load().copy(deviceId = repo.ensureDeviceId()).toPipelineKey()
+        val nextKey = repo.loadWithDeviceId().toPipelineKey()
         val unchanged = mutex.withLock {
             if (pipeline != null && pipelineConfigKey == nextKey) return@withLock true
             pipeline = null
@@ -177,7 +178,7 @@ object PerantaReceive {
                 dismissLocal = { payloadId -> presenter.cancel(payloadId) },
             ),
         )
-        val cipher = perantaCipher(config)
+        val cipher = config.messageCipher()
         val created = ReceivePipeline(
             ntfy = null,
             cipher = cipher,
@@ -353,7 +354,7 @@ object PerantaReceive {
                 if (controlTopic == null || !fresh.hasSharedKey) {
                     RosterFetchResult.FetchFailed
                 } else {
-                    RosterStore(KtorNtfyClient(fresh, httpClient), perantaCipher(fresh), controlTopic).fetch()
+                    RosterStore(KtorNtfyClient(fresh, httpClient), fresh.messageCipher(), controlTopic).fetch()
                 }
             },
         )
@@ -446,12 +447,12 @@ object PerantaReceive {
      */
     private fun commandSender(appContext: Context): CommandSender? {
         val repo = androidConfigRepository(appContext)
-        val config = repo.load().copy(deviceId = repo.ensureDeviceId())
+        val config = repo.loadWithDeviceId()
         if (!config.isReadyForSend) {
             log.w { "not ready to send; cannot send command" }
             return null
         }
-        val cipher = perantaCipher(config)
+        val cipher = config.messageCipher()
         val ntfy = KtorNtfyClient(config, httpClient)
         return CommandSender(
             config,
@@ -470,7 +471,7 @@ object PerantaReceive {
                 onProblem = { kind, message -> reportCommandProblem(appContext, kind, message) },
                 history = { topic, sinceEpochMillis ->
                     val config = androidConfigRepository(appContext).load()
-                    ntfyCommandAckHistory(KtorNtfyClient(config, httpClient), perantaCipher(config))(topic, sinceEpochMillis)
+                    ntfyCommandAckHistory(KtorNtfyClient(config, httpClient), config.messageCipher())(topic, sinceEpochMillis)
                 },
             ).also { ackTracker = it }
         }

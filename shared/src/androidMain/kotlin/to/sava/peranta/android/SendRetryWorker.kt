@@ -17,6 +17,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
+import to.sava.peranta.config.messageCipher
 import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
@@ -66,7 +67,7 @@ class SendRetryWorker(
         val httpClient = createNtfyHttpClient()
         val ntfy = KtorNtfyClient(config, httpClient)
         return try {
-            val topics = storedTopics.ifEmpty { resolveSendTopics(config, perantaCipher(config), ntfy) }
+            val topics = storedTopics.ifEmpty { resolveSendTopics(config, config.messageCipher(), ntfy) }
             if (topics.isEmpty()) {
                 log.w { "delivery topics unresolved (attempt ${runAttemptCount + 1}/$MAX_RETRY_ATTEMPTS); retrying" }
                 Result.retry()
