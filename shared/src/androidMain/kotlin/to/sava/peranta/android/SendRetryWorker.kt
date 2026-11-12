@@ -18,7 +18,6 @@ import androidx.work.WorkerParameters
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import to.sava.peranta.config.messageCipher
-import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.NtfyPublishException
@@ -32,7 +31,6 @@ import to.sava.peranta.send.encodeRetryDisplayMeta
 import to.sava.peranta.send.isRetriablePublishError
 import to.sava.peranta.send.resolveSendTopics
 import to.sava.peranta.send.toSentNotification
-import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import java.util.concurrent.TimeUnit
 
@@ -131,17 +129,10 @@ class SendRetryWorker(
         }
     }
 
-    /** [message] をタイムラインへ ErrorItem として残す。 */
+    /** [message] をタイムラインへエラーとして残す。同じ文言の連続は時間枠で抑える（§10.1）。通知では知らせない。 */
     private suspend fun recordError(message: String) {
         runCatching {
-            PerantaSend.timelineFeed.append(
-                ErrorItem(
-                    id = newPayloadId(),
-                    timestampEpochMillis = nowEpochMillis(),
-                    message = message,
-                    kind = ErrorKind.OTHER,
-                ),
-            )
+            PerantaSend.timelineFeed.appendError(ErrorKind.OTHER, message, nowEpochMillis())
         }.onFailure { log.w { "failed to record error item (${it::class.simpleName})" } }
     }
 

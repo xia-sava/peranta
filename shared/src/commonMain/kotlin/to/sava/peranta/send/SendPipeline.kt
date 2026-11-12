@@ -12,13 +12,11 @@ import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.encodeEnvelope
-import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyPublishException
 import to.sava.peranta.platform.failureForLog
 import to.sava.peranta.platform.topicForLog
-import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.SentNotification
 import to.sava.peranta.timeline.TimelineStore
@@ -187,16 +185,13 @@ class SendPipeline(
         log.i { "sent notification recorded id=${payload.id}" }
     }
 
-    /** [message] をエラーとしてタイムラインへ追記する。 */
-    suspend fun recordError(message: String, kind: ErrorKind = ErrorKind.OTHER) {
-        store.append(
-            ErrorItem(
-                id = newPayloadId(),
-                timestampEpochMillis = now(),
-                message = message,
-                kind = kind,
-            ),
-        )
+    /**
+     * [message] をエラーとしてタイムラインへ追記する（§10.1）。抑止は [TimelineStore.appendError] の実装に従い、
+     * 抑止されたときは追記もログも行わない。通知では知らせないため、種別は [ErrorKind.OTHER] とする
+     * （[to.sava.peranta.timeline.TimelineFeed.appendError]）。
+     */
+    suspend fun recordError(message: String) {
+        store.appendError(ErrorKind.OTHER, message, now()) ?: return
         log.w { "send error recorded: $message" }
     }
 

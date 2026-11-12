@@ -20,7 +20,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * 外部から任意回数誘発できる受信エラーが、タイムライン・永続化・OS 通知へ際限なく積まれないこと（§10.5）。
+ * 外部から任意回数誘発できる受信エラーが、タイムライン・永続化・OS 通知へ際限なく積まれないこと（§10.1）。
  * 抑止しても各時間枠の 1 件目は必ず出る（黙って捨てない、という受信側の約束を壊さない）。
  */
 class ReceiveErrorSuppressionTest {
@@ -31,10 +31,13 @@ class ReceiveErrorSuppressionTest {
 
     private val appended = mutableListOf<TimelineItem>()
 
-    private fun pipeline(store: TimelineStore = JsonlTimelineStore(FakeTimelineFile())) = ReceivePipeline(
+    private fun pipeline(
+        store: TimelineStore = JsonlTimelineStore(FakeTimelineFile()),
+        feed: TimelineFeed = TimelineFeed(store),
+    ) = ReceivePipeline(
         FakeNtfyClient(),
         cipher,
-        TimelineFeed(store),
+        feed,
         "desk",
         now = { clock },
         onItemAppended = { appended += it },
@@ -111,5 +114,21 @@ class ReceiveErrorSuppressionTest {
         val error = p.items.value.single() as ErrorItem
         assertEquals(ErrorKind.KEY_ID_MISMATCH, error.kind)
         assertTrue(error.message.contains("ペアリング"))
+    }
+
+    /**
+     * 抑止の窓は同じ feed へ載せる経路で共有するが、タイムラインへの記録だけにする経路（[ErrorKind.OTHER]）が
+     * 同じ文言を先に載せても、通知でも知らせる経路のエラーは種別が違うため抑止されず、通知の起点を通る。
+     */
+    @Test
+    fun timelineOnlyErrorDoesNotSilenceNotifiedErrorWithSameMessage() = runTest {
+        val feed = TimelineFeed(JsonlTimelineStore(FakeTimelineFile()))
+        val p = pipeline(feed = feed)
+        val message = "phone から応答がありません"
+        feed.appendError(ErrorKind.OTHER, message, clock)
+
+        p.reportError(ErrorKind.COMMAND_UNACKNOWLEDGED, message)
+
+        assertEquals(ErrorKind.COMMAND_UNACKNOWLEDGED, (appended.single() as ErrorItem).kind)
     }
 }

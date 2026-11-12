@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** 抑止の単位が [ErrorKind.origin] で決まること（§10.5）。 */
+/** 抑止の単位が [ErrorKind.origin] で決まること（§10.1）。 */
 class ErrorSuppressorTest {
 
     private val window = ERROR_SUPPRESSION_WINDOW_MILLIS

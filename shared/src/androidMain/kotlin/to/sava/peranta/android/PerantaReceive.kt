@@ -17,7 +17,6 @@ import to.sava.peranta.config.messageCipher
 import to.sava.peranta.config.notifiesOnReceive
 import to.sava.peranta.config.toPipelineKey
 import to.sava.peranta.model.AttachmentKind
-import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
@@ -36,7 +35,6 @@ import to.sava.peranta.send.ntfyCommandAckHistory
 import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
-import to.sava.peranta.timeline.ErrorSuppressor
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
@@ -64,7 +62,6 @@ object PerantaReceive {
     private val mutex = Mutex()
     private var pipeline: ReceivePipeline? = null
     private var pipelineConfigKey: PipelineKey? = null
-    private val errorSuppressor = ErrorSuppressor()
     private val commandScope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val httpClient by lazy { createNtfyHttpClient() }
 
@@ -139,24 +136,12 @@ object PerantaReceive {
     }
 
     /**
-     * 登録などタイムライン処理の外で生じたエラーをタイムラインへ反映する（§10.5）。
-     * 画面回転などで同じエラーが連続して積まれないよう、抑止は受信中核と同じ [ErrorSuppressor] に委ねる。
+     * 登録などタイムライン処理の外で生じたエラーをタイムラインへ反映する（§10.1）。通知では知らせない。
+     * 画面回転などで同じエラーが連続して積まれないよう、抑止は受信中核と同じ窓
+     * （[to.sava.peranta.timeline.TimelineFeed.appendError]）に委ねる。
      */
     suspend fun reportError(context: Context, message: String) {
-        mutex.withLock {
-            val at = nowEpochMillis()
-            if (!errorSuppressor.allows(ErrorKind.OTHER, message, at)) {
-                log.i { "suppressing duplicate error: $message" }
-                return
-            }
-            val item = ErrorItem(
-                id = newPayloadId(),
-                timestampEpochMillis = at,
-                message = message,
-                kind = ErrorKind.OTHER,
-            )
-            PerantaSend.timelineFeed.record(item)
-        }
+        PerantaSend.timelineFeed.appendError(ErrorKind.OTHER, message, nowEpochMillis())
     }
 
     private suspend fun pipelineLocked(

@@ -6,6 +6,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import to.sava.peranta.model.newPayloadId
 
 /** 在メモリのタイムラインに載せる件数の上限。[TimelineStore.prune] の既定と揃える。 */
 const val MAX_IN_MEMORY_TIMELINE_ITEMS: Int = 1000
@@ -22,6 +25,9 @@ private const val PRUNE_INTERVAL_APPENDS: Int = 200
  * [items] は [maxItems] 件で頭打ちにし、超えた分は古い順に表示から落とす（§11）。
  * 永続側は起動時の [prune] だけでは稼働中に縮まないため、その呼び出しで受け取った条件を覚えておき、
  * 追記 [PRUNE_INTERVAL_APPENDS] 件ごとに同じ条件で剪定し直す。
+ *
+ * エラーの追記（[appendError]）は [ErrorSuppressor] の時間枠で抑える（§10.1）。窓はこの feed へ
+ * エラーを追記するすべての経路で共有する。
  */
 class TimelineFeed(
     private val store: TimelineStore,
@@ -39,6 +45,12 @@ class TimelineFeed(
 
     /** 稼働中の剪定を起動時と同じ条件で回すために覚えておく [prune] の引数。 */
     private data class PrunePolicy(val maxItems: Int, val maxAgeMillis: Long?)
+
+    /** エラー追記の抑止窓（§10.1）。種別ごとの性質は [ErrorKind.origin] が持つ。 */
+    private val errorSuppressor = ErrorSuppressor()
+
+    /** 並行する [appendError] が [errorSuppressor] を同時に触らないようにする。抑止の判定だけを囲む。 */
+    private val errorSuppressorMutex = Mutex()
 
     /** 永続化してから表示へ反映する。永続失敗は呼び出し側へ伝播し、表示へも載せない。 */
     override suspend fun append(item: TimelineItem) {
@@ -61,6 +73,29 @@ class TimelineFeed(
             log.e { "failed to persist timeline item id=${displayItem.id} (${e::class.simpleName})" }
         }
         return upsert(displayItem).also { prunePeriodically(displayItem.timestampEpochMillis) }
+    }
+
+    /**
+     * エラーを [errorSuppressor] の時間枠に通してから追記する（§10.1）。抑えるのは枠内の 2 件目以降だけで、
+     * 各枠の 1 件目は必ず追記する。戻り値は追記したアイテム。抑止したときは null。
+     * 追記は [record] で行うため、永続に失敗しても表示へは載る。
+     * 抑止した件数は、次に通した 1 件の時点で種別・文言とともにログへ残す。
+     *
+     * 窓は、通知でも知らせる経路（受信中核）とタイムラインへの記録だけにする経路とで共有する。
+     * 通知でも知らせる経路は [ErrorKind.OTHER] を使わず、タイムラインへの記録だけにする経路は
+     * [ErrorKind.OTHER] だけを使う。この分け方が崩れ、同じ種別・文言のエラーが先にタイムラインへの
+     * 記録だけにする経路で載ると、窓の間は通知でも知らせる経路の同じエラーも抑止されて通知が出ない。
+     */
+    override suspend fun appendError(kind: ErrorKind, message: String, at: Long): ErrorItem? {
+        val suppressedCount = errorSuppressorMutex.withLock {
+            if (!errorSuppressor.allows(kind, message, at)) return null
+            errorSuppressor.takeSuppressedCount(kind, message)
+        }
+        if (suppressedCount > 0) {
+            log.w { "error [$kind]: $message (suppressed $suppressedCount since last report)" }
+        }
+        return ErrorItem(id = newPayloadId(), timestampEpochMillis = at, message = message, kind = kind)
+            .also { record(it) }
     }
 
     /**

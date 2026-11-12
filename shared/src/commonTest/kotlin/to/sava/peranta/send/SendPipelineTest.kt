@@ -16,6 +16,8 @@ import to.sava.peranta.net.FakeNtfyClient
 import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyConnectionState
 import to.sava.peranta.net.NtfyEvent
+import to.sava.peranta.timeline.ErrorItem
+import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.SentNotification
 import to.sava.peranta.timeline.TimelineFeed
 import kotlin.test.Test
@@ -94,6 +96,41 @@ class SendPipelineTest {
             pipeline.send(payload(Priority.NORMAL), listOf("topic"), persistSensitive = true)
         }
         assertTrue(store.appended.isEmpty())
+    }
+
+    /** 抑止を持たない永続化層（[FakeTimelineStore]。appendError は既定の実装）では、同じ文言のエラーも呼ぶたびに積まれる。 */
+    @Test
+    fun recordErrorAppendsEveryTimeToPlainStore() = runTest {
+        val store = FakeTimelineStore()
+        val pipeline = SendPipeline(cipher(), FakeNtfyClient(), store, now = { 5000 })
+
+        pipeline.recordError(SEND_FAILED_MESSAGE)
+        pipeline.recordError(SEND_FAILED_MESSAGE)
+
+        assertEquals(listOf(SEND_FAILED_MESSAGE, SEND_FAILED_MESSAGE), store.appended.map { (it as ErrorItem).message })
+    }
+
+    /** 送信のエラーは、通知でも知らせる受信側のエラーと抑止の窓が重ならない種別で記録する。 */
+    @Test
+    fun recordErrorUsesOtherKind() = runTest {
+        val store = FakeTimelineStore()
+        val pipeline = SendPipeline(cipher(), FakeNtfyClient(), store, now = { 5000 })
+
+        pipeline.recordError(SEND_FAILED_MESSAGE)
+
+        assertEquals(ErrorKind.OTHER, (store.appended.single() as ErrorItem).kind)
+    }
+
+    /** [TimelineFeed] を渡すと、窓の中で続いた同じ文言のエラーは 1 件にまとまる。 */
+    @Test
+    fun recordErrorIsSuppressedThroughFeed() = runTest {
+        val feed = TimelineFeed(FakeTimelineStore())
+        val pipeline = SendPipeline(cipher(), FakeNtfyClient(), feed, now = { 5000 })
+
+        pipeline.recordError(SEND_FAILED_MESSAGE)
+        pipeline.recordError(SEND_FAILED_MESSAGE)
+
+        assertEquals(listOf(SEND_FAILED_MESSAGE), feed.items.value.map { (it as ErrorItem).message })
     }
 
     /** 配送先が複数でも封筒は 1 度だけ封緘し、同じ本文を各 topic に流す。 */

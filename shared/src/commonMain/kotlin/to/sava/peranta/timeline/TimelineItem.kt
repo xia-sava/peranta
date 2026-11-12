@@ -74,7 +74,7 @@ data class SentNotification(
 ) : TimelineItem()
 
 /**
- * エラーを誘発できる主体（§10.5）。発生回数を誰が握っているかで抑止の単位が変わるため、
+ * エラーを誘発できる主体（§10.1）。発生回数を誰が握っているかで抑止の単位が変わるため、
  * 種別ごとの性質を [ErrorKind] の定義側に持たせる。
  */
 enum class ErrorOrigin {

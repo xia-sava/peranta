@@ -4,7 +4,7 @@ package to.sava.peranta.timeline
 const val ERROR_SUPPRESSION_WINDOW_MILLIS: Long = 60 * 1000L
 
 /**
- * タイムラインへのエラー追記を時間枠ごとに 1 件へ抑える（§10.5）。永続化・OS 通知・トーストは
+ * タイムラインへのエラー追記を時間枠ごとに 1 件へ抑える（§10.1）。永続化・OS 通知・トーストは
  * いずれも追記を起点にするため、追記を抑えれば 3 つとも同時に抑えられる。
  *
  * 抑止の単位は [ErrorKind.origin] で決める。外部入力起因（[ErrorOrigin.UNTRUSTED_INPUT]）は

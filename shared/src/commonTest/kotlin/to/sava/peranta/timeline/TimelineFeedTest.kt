@@ -2,10 +2,14 @@ package to.sava.peranta.timeline
 
 import kotlinx.coroutines.test.runTest
 import to.sava.peranta.model.NotificationPayload
+import to.sava.peranta.platform.RecordingLogWriter
+import to.sava.peranta.platform.recordingLogger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TimelineFeedTest {
@@ -265,5 +269,84 @@ class TimelineFeedTest {
         feed.record(notification("new", 200))
 
         assertEquals(listOf("new"), feed.items.value.map { it.id })
+    }
+
+    /** appendError は渡した種別・文言・時刻のエラーを表示と永続の両方へ載せ、そのアイテムを返す。 */
+    @Test
+    fun appendErrorRecordsAndReturnsTheItem() = runTest {
+        val store = store()
+        val feed = TimelineFeed(store)
+
+        val item = assertNotNull(feed.appendError(ErrorKind.OTHER, "送信に失敗しました", 1_000))
+
+        assertEquals(ErrorKind.OTHER, item.kind)
+        assertEquals("送信に失敗しました", item.message)
+        assertEquals(1_000, item.timestampEpochMillis)
+        assertEquals(listOf<TimelineItem>(item), feed.items.value)
+        assertEquals(listOf<TimelineItem>(item), store.loadAll())
+    }
+
+    /** 同じ種別・文言の 2 件目は窓の中では null を返し、表示にも永続にも増えない。 */
+    @Test
+    fun appendErrorSuppressesSameMessageWithinWindow() = runTest {
+        val store = store()
+        val feed = TimelineFeed(store)
+        feed.appendError(ErrorKind.OTHER, "送信に失敗しました", 1_000)
+
+        val second = feed.appendError(ErrorKind.OTHER, "送信に失敗しました", 1_001)
+
+        assertNull(second)
+        assertEquals(1, feed.items.value.size)
+        assertEquals(1, store.loadAll().size)
+    }
+
+    /** 窓を過ぎれば同じ種別・文言のエラーも再び載る。 */
+    @Test
+    fun appendErrorAllowsAgainAfterWindow() = runTest {
+        val feed = TimelineFeed(store())
+        feed.appendError(ErrorKind.OTHER, "送信に失敗しました", 1_000)
+
+        feed.appendError(ErrorKind.OTHER, "送信に失敗しました", 1_000 + ERROR_SUPPRESSION_WINDOW_MILLIS + 1)
+
+        assertEquals(2, feed.items.value.size)
+    }
+
+    /** 外部入力起因のエラーは文言が違っても種別ごとに抑える。 */
+    @Test
+    fun appendErrorSuppressesUntrustedInputPerKind() = runTest {
+        val feed = TimelineFeed(store())
+        feed.appendError(ErrorKind.DECRYPTION, "一度目", 1_000)
+
+        val second = feed.appendError(ErrorKind.DECRYPTION, "二度目", 1_001)
+
+        assertNull(second)
+        assertEquals(1, feed.items.value.size)
+    }
+
+    /** 永続に失敗しても、エラーは表示へ載り、そのアイテムを返す。 */
+    @Test
+    fun appendErrorShowsItemWhenPersistFails() = runTest {
+        val feed = TimelineFeed(FailingStore())
+
+        val item = assertNotNull(feed.appendError(ErrorKind.OTHER, "送信に失敗しました", 1_000))
+
+        assertEquals(listOf<TimelineItem>(item), feed.items.value)
+    }
+
+    /** 抑止した件数は、次の窓で通った 1 件の時点で種別・文言とともにログへ残る。 */
+    @Test
+    fun appendErrorLogsSuppressedCountWithNextAllowedItem() = runTest {
+        val writer = RecordingLogWriter()
+        val feed = TimelineFeed(store(), log = recordingLogger(writer, "TimelineFeed"))
+        feed.appendError(ErrorKind.DECRYPTION, "通知の復号に失敗しました", 1_000)
+        repeat(3) { feed.appendError(ErrorKind.DECRYPTION, "通知の復号に失敗しました", 1_001L + it) }
+
+        feed.appendError(ErrorKind.DECRYPTION, "通知の復号に失敗しました", 1_000 + ERROR_SUPPRESSION_WINDOW_MILLIS + 1)
+
+        val reported = writer.recorded.filter { it.contains("suppressed") }
+        assertEquals(1, reported.size, "suppressed count was not logged once: ${writer.recorded}")
+        assertTrue(reported.single().contains("[${ErrorKind.DECRYPTION}]"))
+        assertTrue(reported.single().contains("通知の復号に失敗しました"))
+        assertTrue(reported.single().contains("suppressed 3 "))
     }
 }

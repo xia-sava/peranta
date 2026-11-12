@@ -40,7 +40,6 @@ import to.sava.peranta.net.createNtfyHttpClient
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.send.buildFilePayloads
 import to.sava.peranta.shared.R
-import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import java.io.File
 import java.io.FilterInputStream
@@ -382,16 +381,10 @@ class AttachmentTransferService : Service() {
         )
     }
 
+    /** [message] をタイムラインへエラーとして残す。同じ文言の連続は時間枠で抑える（§10.1）。通知では知らせない。 */
     private suspend fun recordError(message: String) {
         runCatching {
-            PerantaSend.timelineFeed.append(
-                ErrorItem(
-                    id = newPayloadId(),
-                    timestampEpochMillis = nowEpochMillis(),
-                    message = message,
-                    kind = ErrorKind.OTHER,
-                ),
-            )
+            PerantaSend.timelineFeed.appendError(ErrorKind.OTHER, message, nowEpochMillis())
         }.onFailure { log.w(it) { "failed to record upload error" } }
     }
 

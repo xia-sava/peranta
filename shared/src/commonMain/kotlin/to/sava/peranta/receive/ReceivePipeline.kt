@@ -3,8 +3,6 @@ package to.sava.peranta.receive
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerializationException
 import to.sava.peranta.crypto.DecryptionException
@@ -27,7 +25,6 @@ import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.model.Payload
 import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.decodeEnvelope
-import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.model.revisionOrZero
@@ -39,9 +36,7 @@ import to.sava.peranta.platform.topicForLog
 import to.sava.peranta.send.COMMAND_ACK_TIMEOUT_MILLIS
 import to.sava.peranta.send.CommandDelivery
 import to.sava.peranta.send.deliveryOf
-import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
-import to.sava.peranta.timeline.ErrorSuppressor
 import to.sava.peranta.timeline.ReceivedFile
 import to.sava.peranta.timeline.ReceivedMessage
 import to.sava.peranta.timeline.ReceivedNotification
@@ -83,7 +78,7 @@ private const val DEDUPE_CAPACITY = 1000
  * 別の端末を騙る payload を見分けるものではない。
  *
  * 復号前の入力から生じるエラーは鍵を持たない第三者でも任意回数起こせるため、タイムラインへの
- * 追記は [ErrorSuppressor] の時間枠で抑える（§10.5）。抑えるのは 2 件目以降だけで、
+ * 追記は [TimelineFeed.appendError] の時間枠で抑える（§10.1）。抑えるのは 2 件目以降だけで、
  * 各枠の 1 件目は必ず出す。
  *
  * 復号を通った payload は、表示・永続化の前に [normalizeReceivedPayload] でワイヤ形式の約束へ
@@ -118,12 +113,6 @@ class ReceivePipeline(
 
     /** 受信済み payload.id の集合。FIFO で [DEDUPE_CAPACITY] に丸める。 */
     private val seenIds = LinkedHashSet<String>()
-
-    /** エラー追記の抑止窓（§10.5）。種別ごとの性質は [ErrorKind.origin] が持つ。 */
-    private val errorSuppressor = ErrorSuppressor()
-
-    /** 受信処理と [reportError]（受信の外から呼ばれる）が [errorSuppressor] を同時に触らないようにする。 */
-    private val errorSuppressorMutex = Mutex()
 
     /**
      * 保存済み履歴を読み込み、タイムラインと重複排除の初期状態を作る。購読は行わない。
@@ -322,8 +311,10 @@ class ReceivePipeline(
     }
 
     /**
-     * 受信処理の外で生じたエラーを、受信由来のエラーと同じ抑止と表示の経路でタイムラインへ載せる（§10.5）。
+     * 受信処理の外で生じたエラーを、受信由来のエラーと同じ抑止と表示の経路でタイムラインへ載せる（§10.1）。
      * 新規に載ったときは [onItemAppended] を通るため、Desktop はトーストを、Android は OS 通知を出す。
+     * [kind] に [ErrorKind.OTHER] は使わない。抑止の窓をタイムラインへの記録だけにする経路と共有するため
+     * （[TimelineFeed.appendError]）。
      */
     suspend fun reportError(kind: ErrorKind, message: String) {
         recordError(kind, message)
@@ -558,8 +549,9 @@ class ReceivePipeline(
 
     /**
      * エラーをタイムラインへ載せる。外部から任意回数誘発できる種別が際限なく積まれないよう、
-     * [errorSuppressor] の時間枠を通してから追記する（§10.5）。抑止した分は次に通す 1 件のログへ
-     * 件数として畳み込み、追記そのものは行わない。
+     * [TimelineFeed.appendError] の時間枠を通してから追記する（§10.1）。抑止したときは追記もログも
+     * 通知も行わない。抑止した件数は、次に通した 1 件の時点で [feed] がログへ残す。
+     * 新規に載ったときだけ [onItemAppended] を呼ぶ。
      * 例外は種別名だけを残す。ktor の例外メッセージには接続先 URL（＝topic）が載るため、
      * スタックトレースごとログへ流さない（§11）。
      */
@@ -568,29 +560,15 @@ class ReceivePipeline(
         message: String,
         causeLabel: String? = null,
     ) {
-        val at = now()
-        val suppressed = errorSuppressorMutex.withLock {
-            if (!errorSuppressor.allows(kind, message, at)) return
-            errorSuppressor.takeSuppressedCount(kind, message)
-        }
-        log.w {
-            "receive error [$kind]: $message${causeLabel?.let { " ($it)" } ?: ""}" +
-                if (suppressed > 0) " (suppressed $suppressed since last report)" else ""
-        }
-        record(
-            ErrorItem(
-                id = newPayloadId(),
-                timestampEpochMillis = at,
-                message = message,
-                kind = kind,
-            ),
-        )
+        val item = feed.appendError(kind, message, now()) ?: return
+        log.w { "receive error [$kind]: $message${causeLabel?.let { " ($it)" } ?: ""}" }
+        onItemAppended(item)
     }
 
     /**
      * [persistItem] を永続化し、[displayItem] を表示（[items]）へ流す。
      * 受信通知では [persistItem] を伏せ字適用後に、[displayItem] を伏せ字前にすることで、
-     * 表示は本文を保ちつつ永続だけを伏せる（§11）。エラー等は両者が同一でよい。
+     * 表示は本文を保ちつつ永続だけを伏せる（§11）。受信メッセージ等は両者が同一でよい。
      * 永続失敗の握り潰しとログ化は [feed] の契約（[TimelineFeed.record]）に委ねる。
      * [onItemAppended] は新規追記のときだけ呼ぶ。同一 id の置換（[markSourceDismissed] 等による
      * 再記録）では呼ばないため、既存アイテムの再表示（トースト・ミラー通知の再発火）は起きない。
