@@ -409,7 +409,7 @@ class ReceivePipeline(
 
     private fun requireAppRule(payload: CommandPayload): AppRuleSettings =
         payload.appRule
-            ?: throw CommandExecutionException("${'$'}{payload.command} コマンドにアプリの扱いがありません")
+            ?: throw CommandExecutionException("${payload.command} コマンドにアプリの扱いがありません")
 
     private fun requirePackageName(payload: CommandPayload): String =
         payload.packageName
