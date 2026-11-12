@@ -55,6 +55,7 @@ import to.sava.peranta.platform.failureForLog
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
+import to.sava.peranta.receive.TimelineOperations
 import to.sava.peranta.receive.publishingCommandAcknowledger
 import to.sava.peranta.receive.revisionRefreshFor
 import to.sava.peranta.send.CommandAckTracker
@@ -234,6 +235,14 @@ class DesktopReceiver(
         interceptRawMessage = selfTestProbe::consumeMarker,
         commandAcknowledger = publishingCommandAcknowledger(cipher, ntfy),
         onCommandAck = ackTracker::onAck,
+    )
+    private val operations = TimelineOperations(
+        scope = toastScope,
+        items = ::currentItems,
+        commandSender = { commandSender },
+        markSourceDismissed = pipeline::markSourceDismissed,
+        hideFromTimeline = pipeline::hideFromTimeline,
+        withdrawDisplay = toaster::close,
     )
 
     /** UI が購読するタイムライン。 */
@@ -485,10 +494,10 @@ class DesktopReceiver(
     }
 
     /**
-     * トーストの「送信元の通知を消す」押下時に既読同期（§3.4）の dismiss を全端末へブロードキャストし、
-     * 自端末のタイムラインアイテムも sourceDismissed としてマークする（ブロードキャストは
-     * 自端末を除外するため、自分での操作は自分で反映する必要がある）。
+     * トーストの「送信元の通知を消す」押下・払いのけで、既読同期（§3.4）の dismiss を全端末へ送り、
+     * 自端末のタイムラインにもマークを反映する（[TimelineOperations.dismissSource]）。応答はトーストの送信元に求める。
      * 元通知に紐づかない（notificationKey を持たない）アイテムは取り下げ対象にならないためログのみとする。
+     * 失敗はログに残す。
      */
     private fun requestDismiss(payload: Payload) {
         val notificationKey = payload.notificationKeyOrNull() ?: run {
@@ -496,87 +505,28 @@ class DesktopReceiver(
             return
         }
         toastScope.launch {
-            commandSender.dismiss(notificationKey, sourceDeviceId = payload.from)
-            pipeline.markSourceDismissed(notificationKey)
-        }
-    }
-
-    /**
-     * タイムライン UI 用の操作束を作る（§10.1）。アクション発火・返信・非表示は送信元へ一点指定、
-     * 「送信元の通知を消す」は既読同期のため全端末へブロードキャストしつつ、表示済みトーストも取り下げる。
-     * mute はアプリフィルタ画面（§10.4-1）と同じ経路（[appFilterController]）でローカルミラーへも反映する。
-     */
-    fun timelineActions(): TimelineActions = TimelineActions(
-        invokeAction = { payload, index ->
-            toastScope.launch {
-                commandSender.invokeAction(payload.from, payload.notificationKey, index)
-            }
-        },
-        dismiss = { item -> dismissFromTimeline(item) },
-        muteApp = { payload ->
-            appFilterController().setMirroredMute(payload.packageName, payload.from, mute = true)
-        },
-        reply = { payload, index, text ->
-            toastScope.launch {
-                commandSender.reply(payload.from, payload.notificationKey, index, text)
-            }
-        },
-        hideFromTimeline = { item -> toastScope.launch { pipeline.hideFromTimeline(item.id) } },
-        dismissAll = { items -> dismissAllFromTimeline(items) },
-    )
-
-    /**
-     * 元通知が生きている通知をまとめて消す（§10.1）。同じ元通知を指すアイテムが複数あっても
-     * コマンドは 1 通知につき 1 回にまとめ、表示済みトーストはアイテムごとに取り下げる。
-     * 応答（§3.4）は転送元の端末ごとに最初の 1 件だけに求める。実行端末はコマンドを順に処理するため
-     * 後ろのものほど応答が遅れ、全件に求めると届いていても待ち時間を超えてしまう。
-     */
-    private fun dismissAllFromTimeline(items: List<ReceivedNotification>) {
-        toastScope.launch {
-            items.forEach { toaster.close(it.payload.id) }
-            val ackRequestedSources = mutableSetOf<String>()
-            items.mapNotNull { item -> item.payload.notificationKeyOrNull()?.let { it to item.payload.from } }
-                .distinctBy { (notificationKey, _) -> notificationKey }
-                .forEach { (notificationKey, sourceDeviceId) ->
-                    commandSender.dismiss(notificationKey, sourceDeviceId.takeIf { ackRequestedSources.add(it) })
-                    pipeline.markSourceDismissed(notificationKey)
-                }
-        }
-    }
-
-    /**
-     * 受信専用端末のアプリフィルタ画面（§10.4-1）向けコントローラを組む。
-     * チェック操作は [repository] のローカルミラー（filterRules）へ反映すると同時に、送信元の端末へ
-     * mute/unmute コマンドを送る。宛先はタイムライン履歴に記録された送信元 deviceId を使う。
-     */
-    fun appFilterController(): AppFilterController = AppFilterController(
-        repository = repository,
-        commandScope = toastScope,
-        sendMuteCommand = { packageName, senderDeviceId, mute ->
             try {
-                if (mute) {
-                    commandSender.muteApp(senderDeviceId, packageName)
-                } else {
-                    commandSender.unmuteApp(senderDeviceId, packageName)
-                }
+                operations.dismissSource(notificationKey, sourceDeviceId = payload.from)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
                 // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
-                log.w { "failed to send mute command for $packageName (${error::class.simpleName})" }
+                log.w { "failed to dismiss source notification (${error::class.simpleName})" }
             }
-        },
-        sendAppRuleCommand = { packageName, senderDeviceId, settings ->
-            try {
-                commandSender.setAppRule(senderDeviceId, packageName, settings)
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (error: Exception) {
-                // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
-                log.w { "failed to send app rule command for $packageName (${error::class.simpleName})" }
-            }
-        },
-    )
+        }
+    }
+
+    /**
+     * タイムライン UI 用の操作束を作る（§10.1、[TimelineOperations.timelineActions]）。
+     * 「送信元の通知を消す」では表示済みトーストも取り下げる。
+     */
+    fun timelineActions(): TimelineActions = operations.timelineActions(appFilterController())
+
+    /**
+     * 受信専用端末のアプリフィルタ画面（§10.4-1）向けコントローラを組む（[TimelineOperations.appFilterController]）。
+     * ローカルミラー（filterRules）は [repository] へ反映する。
+     */
+    fun appFilterController(): AppFilterController = operations.appFilterController(repository)
 
     /**
      * composer からの送信操作束を組む（§5.2・§13 M9d）。送信設定が揃っていなければ null（composer 非表示）。
@@ -592,18 +542,6 @@ class DesktopReceiver(
             selfDeviceId = config.deviceId,
             fetch = { RosterStore(ntfy, cipher, controlTopic).fetch() },
         )
-    }
-
-    private fun dismissFromTimeline(item: ReceivedNotification) {
-        toastScope.launch {
-            toaster.close(item.payload.id)
-            val notificationKey = item.payload.notificationKeyOrNull() ?: run {
-                log.i { "dismiss ignored (no notification key) payload=${item.payload.id}" }
-                return@launch
-            }
-            commandSender.dismiss(notificationKey, sourceDeviceId = item.payload.from)
-            pipeline.markSourceDismissed(notificationKey)
-        }
     }
 
     /**

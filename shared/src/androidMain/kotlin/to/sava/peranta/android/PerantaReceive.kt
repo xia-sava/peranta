@@ -15,7 +15,6 @@ import to.sava.peranta.blob.AutoFetchRole
 import to.sava.peranta.config.messageCipher
 import to.sava.peranta.config.notifiesOnReceive
 import to.sava.peranta.config.toPipelineKey
-import to.sava.peranta.model.notificationKeyOrNull
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.NtfyEvent
@@ -25,6 +24,7 @@ import to.sava.peranta.receive.LocalDismissCommandExecutor
 import to.sava.peranta.receive.ReceivePipeline
 import to.sava.peranta.receive.RevisionRefresh
 import to.sava.peranta.receive.RoutingCommandExecutor
+import to.sava.peranta.receive.TimelineOperations
 import to.sava.peranta.receive.isRevisionImagesCurrent
 import to.sava.peranta.receive.notificationDisplayFor
 import to.sava.peranta.receive.publishingCommandAcknowledger
@@ -87,7 +87,8 @@ object PerantaReceive {
     }
 
     /**
-     * 保持中の受信パイプラインを破棄する。次回の [prime] / [handleEnvelope] で最新設定から作り直される。
+     * 保持中の受信パイプラインを破棄する。次回の [prime] / [handleEnvelope] / [dismissSourceNotification]
+     * などで最新設定から作り直される。
      * 設定変更後、Activity 再生成（recreate）だけではプロセス内シングルトンの状態が更新されないため、
      * その直前に呼んで確実に最新設定を反映させる。
      */
@@ -284,98 +285,39 @@ object PerantaReceive {
     )
 
     /**
-     * タイムライン UI 用の操作束を作る（§10.1）。アクション発火・返信・非表示は送信元へ一点指定、
-     * 「送信元の通知を消す」は既読同期のため全端末へブロードキャストしつつ、表示済みローカル通知も
-     * 取り下げる。
-     * mute はアプリフィルタ画面（§10.4-1）と同じ経路（[appFilterController]）でローカルミラーへも反映する。
+     * タイムライン UI 用の操作束を作る（§10.1、[TimelineOperations.timelineActions]）。
+     * 「送信元の通知を消す」では表示済みのミラー通知も取り下げる。
      */
     fun timelineActions(context: Context): TimelineActions {
         val appContext = context.applicationContext
-        val filterController = appFilterController(appContext)
-        return TimelineActions(
-            invokeAction = { payload, index ->
-                launchCommand(appContext) { it.invokeAction(payload.from, payload.notificationKey, index) }
-            },
-            dismiss = { item -> dismissFromTimeline(appContext, item) },
-            muteApp = { payload ->
-                filterController.setMirroredMute(payload.packageName, payload.from, mute = true)
-            },
-            reply = { payload, index, text ->
-                launchCommand(appContext) { it.reply(payload.from, payload.notificationKey, index, text) }
-            },
-            hideFromTimeline = { item -> commandScope.launch { hideFromTimeline(item.id) } },
-            dismissAll = { items -> dismissAllFromTimeline(appContext, items) },
-        )
+        val operations = timelineOperations(appContext)
+        return operations.timelineActions(operations.appFilterController(androidConfigRepository(appContext)))
     }
 
     /**
-     * 元通知が生きている通知をまとめて消す（§10.1）。同じ元通知を指すアイテムが複数あっても
-     * コマンドは 1 通知につき 1 回にまとめ、ミラー通知はアイテムごとに取り下げる。
-     * 応答（§3.4）は転送元の端末ごとに最初の 1 件だけに求める。実行端末はコマンドを順に処理するため
-     * 後ろのものほど応答が遅れ、全件に求めると届いていても待ち時間を超えてしまう。
-     */
-    private fun dismissAllFromTimeline(appContext: Context, items: List<ReceivedNotification>) {
-        commandScope.launch {
-            try {
-                val presenter = AndroidNotificationPresenter(appContext)
-                items.forEach { presenter.cancel(it.payload.id) }
-                val ackRequestedSources = mutableSetOf<String>()
-                items.mapNotNull { item -> item.payload.notificationKeyOrNull()?.let { it to item.payload.from } }
-                    .distinctBy { (notificationKey, _) -> notificationKey }
-                    .forEach { (notificationKey, sourceDeviceId) ->
-                        dismissSourceNotification(
-                            appContext,
-                            notificationKey,
-                            sourceDeviceId.takeIf { ackRequestedSources.add(it) },
-                        )
-                    }
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (error: Exception) {
-                // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
-                log.w { "failed to dismiss all from timeline (${error::class.simpleName})" }
-            }
-        }
-    }
-
-    /**
-     * 受信専用端末のアプリフィルタ画面（§10.4-1）向けコントローラを組む。
-     * チェック操作は自端末のローカルミラー（filterRules）へ反映すると同時に、送信元の端末へ
-     * mute/unmute コマンドを送る。宛先はタイムライン履歴に記録された送信元 deviceId を使う。
+     * 受信専用端末のアプリフィルタ画面（§10.4-1）向けコントローラを組む（[TimelineOperations.appFilterController]）。
+     * ローカルミラー（filterRules）は自端末の設定へ反映する。
      */
     fun appFilterController(context: Context): AppFilterController {
         val appContext = context.applicationContext
-        return AppFilterController(
-            repository = androidConfigRepository(appContext),
-            commandScope = commandScope,
-            sendMuteCommand = { packageName, senderDeviceId, mute ->
-                try {
-                    commandSender(appContext)?.let { sender ->
-                        if (mute) {
-                            sender.muteApp(senderDeviceId, packageName)
-                        } else {
-                            sender.unmuteApp(senderDeviceId, packageName)
-                        }
-                    }
-                } catch (cancellation: CancellationException) {
-                    throw cancellation
-                } catch (error: Exception) {
-                    // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
-                    log.w { "failed to send mute command for $packageName (${error::class.simpleName})" }
-                }
-            },
-            sendAppRuleCommand = { packageName, senderDeviceId, settings ->
-                try {
-                    commandSender(appContext)?.setAppRule(senderDeviceId, packageName, settings)
-                } catch (cancellation: CancellationException) {
-                    throw cancellation
-                } catch (error: Exception) {
-                    // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
-                    log.w { "failed to send app rule command for $packageName (${error::class.simpleName})" }
-                }
-            },
-        )
+        return timelineOperations(appContext).appFilterController(androidConfigRepository(appContext))
     }
+
+    /**
+     * 受信アイテムへの操作（[TimelineOperations]）を組む。[CommandSender] は送るたびに設定を読み直して組む
+     * （[commandSender]）。sourceDismissed のマークとタイムラインからの非表示は、保持中のパイプラインへ
+     * 依頼し、パイプライン未生成なら何もしない（[heldPipeline]）。
+     * ミラー通知を取り下げる presenter は、コンストラクタがチャネル作成の binder 呼び出しを出すため、
+     * 画面の組み立てと同じスレッドで呼ばれる操作束の生成時には作らず、取り下げのたびに作る。
+     */
+    private fun timelineOperations(appContext: Context): TimelineOperations = TimelineOperations(
+        scope = commandScope,
+        items = { PerantaSend.timelineFeed.items.value },
+        commandSender = { commandSender(appContext) },
+        markSourceDismissed = { notificationKey -> heldPipeline()?.markSourceDismissed(notificationKey) },
+        hideFromTimeline = { itemId -> heldPipeline()?.hideFromTimeline(itemId) },
+        withdrawDisplay = { payloadId -> AndroidNotificationPresenter(appContext).cancel(payloadId) },
+    )
 
     /** 参加端末一覧ドロップダウンの取得口を組む（§3.5）。control topic か共有鍵が無ければ null。 */
     fun rosterUi(context: Context): RosterUi? {
@@ -398,85 +340,44 @@ object PerantaReceive {
     }
 
     /**
-     * 既読同期（§3.4）の dismiss を全端末へ送り、自端末のタイムラインにもマークを反映する。
-     * ミラー通知の「送信元の通知を消す」（[NotificationDismissReceiver]）とタイムラインの操作の
-     * 共通経路。ブロードキャストは自端末を除外するため、マークは自分で付ける。
+     * 既読同期（§3.4）の dismiss を全端末へ送り、自端末のタイムラインにもマークを反映する
+     * （[TimelineOperations.dismissSource]）。ミラー通知の「送信元の通知を消す」と払いのけ
+     * （[NotificationDismissReceiver]）が使う。
+     *
+     * 先に受信パイプラインを用意して履歴の読み込みを済ませ（[preparePipeline]）、それから応答を求める相手
+     * （元通知を転送した端末）をタイムラインから引く。プロセスが無い状態から起こされたときも、
+     * 履歴から転送元を引いて応答を求め、自端末のタイムラインにマークを反映する。受信パイプラインは受信処理と
+     * 同じ排他の中で用意し、受信処理は応答の publish（§3.4）など通信をまたいで排他を握ることがあるため、
+     * dismiss の送信がその終わりを待つことがある。
+     * 用意に失敗しても dismiss は送る。そのときは転送元が引けなければ応答を求めず、マークも反映しない。
      */
     suspend fun dismissSourceNotification(context: Context, notificationKey: String) {
-        dismissSourceNotification(context, notificationKey, sourceDeviceOf(notificationKey))
-    }
-
-    /** [ackSourceDeviceId] に応答（§3.4）を求めて dismiss を送る。null なら応答を求めない。 */
-    private suspend fun dismissSourceNotification(
-        context: Context,
-        notificationKey: String,
-        ackSourceDeviceId: String?,
-    ) {
         val appContext = context.applicationContext
-        commandSender(appContext)?.dismiss(notificationKey, ackSourceDeviceId)
-        markSourceDismissed(notificationKey)
+        try {
+            preparePipeline(appContext)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            log.w { "failed to prepare receive pipeline for dismiss (${error::class.simpleName})" }
+        }
+        timelineOperations(appContext).dismissSource(notificationKey)
     }
 
     /**
-     * [notificationKey] の元通知を転送した端末（§3.4 の応答を求める相手）をタイムラインから引く。
-     * ミラー通知の操作は key しか運ばないため、受信アイテムの送信元から補う。見つからなければ null。
+     * 受信パイプラインを保持していなければ、受信設定が揃っているときだけ組んで履歴を読み込む。
+     * 受信処理と同じ排他（[mutex]）の中で行うため、進行中の受信処理の終わりを待つことがある。
      */
-    private fun sourceDeviceOf(notificationKey: String): String? =
-        PerantaSend.timelineFeed.items.value.asSequence()
-            .filterIsInstance<ReceivedNotification>()
-            .lastOrNull { it.payload.notificationKeyOrNull() == notificationKey }
-            ?.payload
-            ?.from
-
-    private fun dismissFromTimeline(appContext: Context, item: ReceivedNotification) {
-        commandScope.launch {
-            try {
-                AndroidNotificationPresenter(appContext).cancel(item.payload.id)
-                val notificationKey = item.payload.notificationKeyOrNull() ?: run {
-                    log.i { "dismiss ignored (no notification key) payload=${item.payload.id}" }
-                    return@launch
-                }
-                dismissSourceNotification(appContext, notificationKey)
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (error: Exception) {
-                // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
-                log.w { "failed to dismiss from timeline (${error::class.simpleName})" }
-            }
+    private suspend fun preparePipeline(appContext: Context) {
+        mutex.withLock {
+            if (pipeline != null) return
+            val config = androidConfigRepository(appContext).load()
+            if (!config.isReadyForUnifiedPushReceive) return
+            pipelineLocked(appContext, config)
         }
     }
 
-    /**
-     * 既読同期のブロードキャストが自端末を除外するため、自端末での「送信元の通知を消す」操作は自分の
-     * タイムラインアイテムに sourceDismissed（§3.4）が反映されない穴がある。保持中のパイプラインへ
-     * 直接マークを依頼して埋める。パイプライン未生成（未 prime）なら何もしない。
-     */
-    private suspend fun markSourceDismissed(notificationKey: String) {
-        val current = mutex.withLock { pipeline } ?: return
-        current.markSourceDismissed(notificationKey)
-    }
-
-    /**
-     * 保持中のパイプラインへタイムラインからの非表示（§10.1）を依頼する。
-     * パイプライン未生成（未 prime）なら何もしない。
-     */
-    private suspend fun hideFromTimeline(itemId: String) {
-        val current = mutex.withLock { pipeline } ?: return
-        current.hideFromTimeline(itemId)
-    }
-
-    private fun launchCommand(appContext: Context, block: suspend (CommandSender) -> Unit) {
-        commandScope.launch {
-            try {
-                commandSender(appContext)?.let { block(it) }
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (error: Exception) {
-                // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
-                log.w { "failed to send command (${error::class.simpleName})" }
-            }
-        }
-    }
+    /** 保持中の受信パイプライン。パイプライン未生成（未 prime）なら null。 */
+    private suspend fun heldPipeline(): ReceivePipeline? = mutex.withLock { pipeline }
 
     /**
      * 受信端末から送信元の端末へコマンドを送るための [CommandSender] を組む。

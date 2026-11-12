@@ -176,7 +176,8 @@ private fun actionLabel(payload: NotificationPayload, index: Int, name: String):
 /**
  * 受信通知アイテムに対する操作（§3.4 / §10.1）。送信元へ command を返送するものと、この端末の
  * タイムラインだけを変える [hideFromTimeline] からなる。
- * すべて fire-and-forget で、呼び出し側（プラットフォーム配線）がコルーチンで実際の処理を行う。
+ * すべて fire-and-forget で、操作束を組む側（[to.sava.peranta.receive.TimelineOperations]）がコルーチンで
+ * 実際の処理を行う。
  * 既定は no-op で、コマンド送信能力を持たない画面（送信ロール・空状態）では操作 UI を出さない。
  */
 class TimelineActions(
