@@ -2,6 +2,7 @@ package to.sava.peranta.platform
 
 import co.touchlab.kermit.Logger
 import co.touchlab.kermit.platformLogWriter
+import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -13,16 +14,24 @@ import kotlin.test.assertTrue
  */
 class PerantaLoggingTest {
 
-    /** グローバルの Logger を書き換えるため、他のテストへ影響を残さないよう既定へ戻す。 */
+    /** テストが作った一時ディレクトリ。後始末で中身ごと消す。 */
+    private val tempDirs = mutableListOf<File>()
+
+    private fun createTempDir(prefix: String): File =
+        Files.createTempDirectory(prefix).toFile().also { tempDirs += it }
+
+    /** グローバルの Logger を書き換えるため他のテストへ影響を残さないよう既定へ戻し、一時ディレクトリを消す。 */
     @AfterTest
-    fun restoreGlobalLogger() {
+    fun cleanUp() {
         configurePerantaLogging(verboseLogging = true, platformLogWriter())
+        tempDirs.forEach { it.deleteRecursively() }
+        tempDirs.clear()
     }
 
     /** 出力先がディレクトリで書き込めなくても、ログの呼び出しは例外を投げない。 */
     @Test
     fun logCallDoesNotThrowWhenLogFileIsNotWritable() {
-        val unwritable = Files.createTempDirectory("peranta-log-unwritable").toFile().apply { deleteOnExit() }
+        val unwritable = createTempDir("peranta-log-unwritable")
         initLogging(verboseLogging = false, logFile = unwritable)
 
         Logger.withTag("Logging").w(IllegalStateException("boom")) { "write fails" }
@@ -31,7 +40,7 @@ class PerantaLoggingTest {
     /** 書き込める出力先には、重大度・タグ・メッセージを含む行が追記される。 */
     @Test
     fun logCallAppendsLineWhenLogFileIsWritable() {
-        val dir = Files.createTempDirectory("peranta-log-writable").toFile().apply { deleteOnExit() }
+        val dir = createTempDir("peranta-log-writable")
         val logFile = dir.resolve("logs").resolve("peranta.log")
         initLogging(verboseLogging = false, logFile = logFile)
 
@@ -39,7 +48,5 @@ class PerantaLoggingTest {
 
         val content = logFile.readText()
         assertTrue(content.contains("Warn [Logging] written line"), "unexpected log content: $content")
-        logFile.deleteOnExit()
-        logFile.parentFile.deleteOnExit()
     }
 }

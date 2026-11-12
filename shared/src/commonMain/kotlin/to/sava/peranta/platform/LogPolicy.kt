@@ -3,12 +3,17 @@ package to.sava.peranta.platform
 import co.touchlab.kermit.LogWriter
 import co.touchlab.kermit.Logger
 import co.touchlab.kermit.Severity
+import to.sava.peranta.net.NtfyHistoryException
+import to.sava.peranta.net.NtfyPublishException
 
 /** ログに残す topic 末尾の文字数（§8）。 */
 private const val TOPIC_LOG_SUFFIX_LENGTH = 4
 
 /** 省略した先頭部分を表す記号。 */
 private const val TRUNCATION_MARK = "…"
+
+/** 種別名を持たない（無名の）例外を表す文字列。 */
+private const val ANONYMOUS_FAILURE = "unknown"
 
 /**
  * ログの出力先と、ログに残す最小重大度を設定する（§11）。両プラットフォームとも起動時にこれだけを呼ぶ。
@@ -39,3 +44,17 @@ fun topicForLog(topic: String): String =
         ?.takeLast(TOPIC_LOG_SUFFIX_LENGTH)
         ?.let { "$TRUNCATION_MARK$it" }
         ?: TRUNCATION_MARK
+
+/**
+ * 例外をログへ出すための短い表現（§11）。例外メッセージは接続先 URL を含みうるため載せず、
+ * 種別名と、自前の例外が持つ HTTP ステータスだけを残す。
+ * ステータスは認証・権限・サイズ・流量のどれで拒まれたかの切り分けに要る。
+ */
+fun failureForLog(error: Throwable): String {
+    val name = error::class.simpleName ?: ANONYMOUS_FAILURE
+    return when (error) {
+        is NtfyPublishException -> "$name status=${error.status}"
+        is NtfyHistoryException -> "$name status=${error.status}"
+        else -> name
+    }
+}

@@ -34,6 +34,7 @@ import to.sava.peranta.model.revisionOrZero
 import to.sava.peranta.model.truncateToUtf8Bytes
 import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyEvent
+import to.sava.peranta.platform.failureForLog
 import to.sava.peranta.platform.topicForLog
 import to.sava.peranta.send.COMMAND_ACK_TIMEOUT_MILLIS
 import to.sava.peranta.timeline.ErrorItem
@@ -67,7 +68,7 @@ private const val DEDUPE_CAPACITY = 1000
  * Envelope の入手経路は問わない。Desktop は [ntfy] の WebSocket 購読（[start]）で、
  * Android は UnifiedPush のコールバックから [loadHistory] + [handleEvent] を直接呼んで駆動する。
  * UnifiedPush 駆動時は購読しないため [ntfy] は null でよい。
- * 各段階を kermit で構造化ログに残す。本文は info に出さず debug のみとする（§16）。
+ * 各段階を kermit で構造化ログに残す。本文とタイトルはどの重大度でも出さない（§11）。
  *
  * [persistSensitiveHistory] が false（既定）のとき、OTP・SMS の本文は履歴保存時に伏せる（§11）。
  * 表示用の [items] と [onItemAppended] には伏せ字前の本文を渡し、永続のみを伏せる。
@@ -285,8 +286,8 @@ class ReceivePipeline(
      * 応答するのは指名された端末（[CommandPayload.ackBy]）だけで、全端末宛の dismiss でも他の端末は黙る。
      * 送り先が ntfy の topic 名の形をしていなければ応答しない（任意のパスへ publish させないため）。
      * 送信端末が待つ時間を過ぎた応答は意味を持たないため、publish はその時間で打ち切る。
-     * 応答の失敗はコマンドの実行結果を変えないので、ログに残すだけにする。例外は種別名だけを残す
-     * （ktor の例外メッセージには接続先 URL（＝topic）が載る、§16）。
+     * 応答の失敗はコマンドの実行結果を変えないので、ログに残すだけにする。例外は種別名（と自前の例外が持つ
+     * HTTP ステータス）だけを残す（ktor の例外メッセージには接続先 URL（＝topic）が載る、§11）。
      */
     private suspend fun acknowledge(command: CommandPayload, failure: CommandFailure?) {
         val topic = command.ackTopic ?: return
@@ -314,7 +315,7 @@ class ReceivePipeline(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            log.w { "failed to send command ack id=${command.id} (${error::class.simpleName})" }
+            log.w { "failed to send command ack id=${command.id} (${failureForLog(error)})" }
         }
     }
 
@@ -549,7 +550,7 @@ class ReceivePipeline(
      * [errorSuppressor] の時間枠を通してから追記する（§10.5）。抑止した分は次に通す 1 件のログへ
      * 件数として畳み込み、追記そのものは行わない。
      * 例外は種別名だけを残す。ktor の例外メッセージには接続先 URL（＝topic）が載るため、
-     * スタックトレースごとログへ流さない（§16）。
+     * スタックトレースごとログへ流さない（§11）。
      */
     private suspend fun recordError(
         kind: ErrorKind,

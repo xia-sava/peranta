@@ -8,6 +8,7 @@ import to.sava.peranta.model.PresencePayload
 import to.sava.peranta.model.decodeEnvelope
 import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyEvent
+import to.sava.peranta.platform.failureForLog
 import to.sava.peranta.receive.normalizeReceivedPayload
 
 /** control topic 履歴取得の打ち切り時間枠（ミリ秒）。即時送信を長時間ブロックしないための上限。 */
@@ -72,8 +73,8 @@ class RosterStore(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な control topic）が載る（§16）。
-            log.w { "failed to fetch control topic history (${error::class.simpleName})" }
+            // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な control topic）が載る（§11）。
+            log.w { "failed to fetch control topic history (${failureForLog(error)})" }
             null
         }
 

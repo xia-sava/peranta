@@ -16,6 +16,7 @@ import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.net.NtfyPublishException
+import to.sava.peranta.platform.failureForLog
 import to.sava.peranta.platform.topicForLog
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
@@ -97,7 +98,7 @@ class SendPipeline(
             throw cancellation
         } catch (error: Exception) {
             // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
-            log.w { "dispatch failed for id=${payload.id} (${error::class.simpleName})" }
+            log.w { "dispatch failed for id=${payload.id} (${failureForLog(error)})" }
             runCatching { recordError(SEND_FAILED_MESSAGE) }
                 .onFailure { log.w(it) { "failed to record send error item" } }
             false
@@ -161,10 +162,10 @@ class SendPipeline(
         } catch (error: Exception) {
             // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
             if (isRetriablePublishError(error)) {
-                log.w { "immediate publish failed for id=${payload.id}; enqueuing retry (${error::class.simpleName})" }
+                log.w { "immediate publish failed for id=${payload.id}; enqueuing retry (${failureForLog(error)})" }
                 PublishOutcome.RETRY
             } else {
-                log.w { "immediate publish rejected for id=${payload.id}; giving up (${error::class.simpleName})" }
+                log.w { "immediate publish rejected for id=${payload.id}; giving up (${failureForLog(error)})" }
                 PublishOutcome.REJECTED
             }
         }

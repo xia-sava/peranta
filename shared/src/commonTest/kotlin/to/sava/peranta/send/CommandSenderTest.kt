@@ -352,7 +352,10 @@ class CommandSenderTest {
         val ok = sender.muteApp("phone", "com.spam")
 
         assertFalse(ok)
-        assertTrue(writer.recorded.isNotEmpty(), "no log line was recorded")
+        assertTrue(
+            writer.recorded.any { it.contains("failed to send command=") },
+            "publish failure was not logged: ${writer.recorded}",
+        )
         assertTrue(writer.recorded.none { it.contains(leakedTopic) }, "topic appeared in log: ${writer.recorded}")
     }
 }

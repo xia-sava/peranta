@@ -14,6 +14,7 @@ import to.sava.peranta.model.encodeEnvelope
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.model.truncateToUtf8Bytes
 import to.sava.peranta.net.NtfyClient
+import to.sava.peranta.platform.failureForLog
 import to.sava.peranta.roster.RosterFetchResult
 import to.sava.peranta.roster.RosterStore
 import to.sava.peranta.roster.resolveTargetTopic
@@ -190,7 +191,7 @@ class CommandSender(
         } catch (error: Exception) {
             tracker?.cancel(payload.id)
             // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
-            log.w { "failed to send command=$command to=$to (${error::class.simpleName})" }
+            log.w { "failed to send command=$command to=$to (${failureForLog(error)})" }
             false
         }
     }

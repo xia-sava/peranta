@@ -3,6 +3,8 @@ package to.sava.peranta.platform
 import co.touchlab.kermit.Logger
 import co.touchlab.kermit.Severity
 import co.touchlab.kermit.platformLogWriter
+import to.sava.peranta.net.NtfyHistoryException
+import to.sava.peranta.net.NtfyPublishException
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -11,6 +13,15 @@ import kotlin.test.assertTrue
 
 /** 実際に採番される長さの topic。末尾以外が残らないことの確認に使う。 */
 private const val SAMPLE_TOPIC = "peranta-control-3k9wq2ax7fzb1m4d"
+
+/** 例外メッセージに載りうる接続先 URL。完全な topic を含む。 */
+private const val LEAKING_URL = "https://ntfy.example.com/$SAMPLE_TOPIC"
+
+/** 権限で拒まれたときの HTTP ステータス。 */
+private const val HTTP_FORBIDDEN = 403
+
+/** 流量で拒まれたときの HTTP ステータス。 */
+private const val HTTP_TOO_MANY_REQUESTS = 429
 
 /**
  * ログに残すものの方針。設定に応じて最小重大度が変わることと、
@@ -66,5 +77,30 @@ class LogPolicyTest {
     fun topicForLogHidesTopicsTooShortToTruncate() {
         assertEquals("…", topicForLog("abcd"))
         assertEquals("…", topicForLog(""))
+    }
+
+    /** publish の失敗は、種別名と HTTP ステータスだけが残り、例外メッセージは残らない。 */
+    @Test
+    fun failureForLogKeepsStatusOfPublishException() {
+        val shown = failureForLog(NtfyPublishException(HTTP_FORBIDDEN, "POST $LEAKING_URL failed"))
+
+        assertEquals("NtfyPublishException status=403", shown)
+    }
+
+    /** 履歴取得の失敗も、種別名と HTTP ステータスだけが残り、例外メッセージは残らない。 */
+    @Test
+    fun failureForLogKeepsStatusOfHistoryException() {
+        val shown = failureForLog(NtfyHistoryException(HTTP_TOO_MANY_REQUESTS, "GET $LEAKING_URL failed"))
+
+        assertEquals("NtfyHistoryException status=429", shown)
+    }
+
+    /** 自前以外の例外は種別名だけが残り、メッセージ中の接続先 URL は残らない。 */
+    @Test
+    fun failureForLogKeepsOnlyTypeNameOfOtherExceptions() {
+        val shown = failureForLog(IllegalStateException("Request timeout has expired [url=$LEAKING_URL]"))
+
+        assertEquals("IllegalStateException", shown)
+        assertFalse(shown.contains(SAMPLE_TOPIC), "topic must not appear")
     }
 }

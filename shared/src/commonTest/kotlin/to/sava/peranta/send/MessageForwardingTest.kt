@@ -137,7 +137,10 @@ class MessageForwardingTest {
         )
 
         assertFalse(delivered)
-        assertTrue(writer.recorded.isNotEmpty(), "no log line was recorded")
+        assertTrue(
+            writer.recorded.any { it.contains("message send failed") },
+            "publish failure was not logged: ${writer.recorded}",
+        )
         val leaked = writer.recorded.filter { it.contains(leakedTopic) || it.contains("text-never-logged") }
         assertTrue(leaked.isEmpty(), "secret appeared in log: $leaked")
     }

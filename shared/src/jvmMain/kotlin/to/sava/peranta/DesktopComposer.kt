@@ -25,6 +25,7 @@ import to.sava.peranta.model.AttachmentRef
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.NtfyClient
 import to.sava.peranta.platform.JvmPaths
+import to.sava.peranta.platform.failureForLog
 import to.sava.peranta.send.SendPipeline
 import to.sava.peranta.send.buildFilePayloads
 import to.sava.peranta.send.resolveSendTopics
@@ -269,8 +270,8 @@ class DesktopComposer(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: Exception) {
-            // 例外そのものは流さない。ktor の例外メッセージには blob の送り先 URL（＝ホスト）が載る（§16）。
-            log.w { "file send failed (${error::class.simpleName})" }
+            // 例外そのものは流さない。ktor の例外メッセージには blob の送り先 URL（＝ホスト）が載る（§11）。
+            log.w { "file send failed (${failureForLog(error)})" }
             runCatching { sendPipeline.recordError(FILE_SEND_FAILED_MESSAGE) }
             false
         } finally {

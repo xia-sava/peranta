@@ -57,6 +57,9 @@ private const val LEAKING_URL = "https://ntfy.example.com/$TOPIC_MARKER"
 /** リトライで回復し得ない HTTP ステータス。 */
 private const val HTTP_BAD_REQUEST = 400
 
+/** 権限がなく拒否された HTTP ステータス。リトライで回復し得ない。 */
+private const val HTTP_FORBIDDEN = 403
+
 /** リトライで回復し得る HTTP ステータス。 */
 private const val HTTP_SERVICE_UNAVAILABLE = 503
 
@@ -238,6 +241,17 @@ class SendLogHygieneTest {
     fun rejectedDispatchKeepsBodyOutOfLog() = runTest {
         dispatch(sms(), RejectingNtfyClient(HTTP_BAD_REQUEST))
         assertLoggedWithoutMarkers()
+    }
+
+    /** 拒否された送信のログには、拒否の HTTP ステータスが残る（認証・権限・サイズ・流量の切り分けに使う）。 */
+    @Test
+    fun rejectedDispatchKeepsHttpStatusInLog() = runTest {
+        dispatch(sms(), RejectingNtfyClient(HTTP_FORBIDDEN))
+
+        assertTrue(
+            writer.recorded.any { it.contains("immediate publish rejected") && it.contains("status=$HTTP_FORBIDDEN") },
+            "rejection status was not logged: ${writer.recorded}",
+        )
     }
 
     /** 再送へ回す失敗の例外メッセージに接続先 URL があっても、完全な topic はログに出ない。 */

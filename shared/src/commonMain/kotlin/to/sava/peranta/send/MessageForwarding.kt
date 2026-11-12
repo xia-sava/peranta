@@ -11,6 +11,7 @@ import to.sava.peranta.model.newPayloadId
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.model.truncateToUtf8Bytes
 import to.sava.peranta.net.NtfyClient
+import to.sava.peranta.platform.failureForLog
 
 /** メッセージ送信に失敗したときにタイムラインへ出す文言。 */
 const val MESSAGE_SEND_FAILED_MESSAGE: String = "メッセージの送信に失敗しました"
@@ -59,7 +60,7 @@ suspend fun sendMessage(
         throw cancellation
     } catch (error: Exception) {
         // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
-        log.w { "message send failed id=${payload.id} (${error::class.simpleName})" }
+        log.w { "message send failed id=${payload.id} (${failureForLog(error)})" }
         runCatching { pipeline.recordError(MESSAGE_SEND_FAILED_MESSAGE) }
         false
     }

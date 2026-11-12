@@ -22,6 +22,7 @@ import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.NtfyPublishException
 import to.sava.peranta.net.createNtfyHttpClient
+import to.sava.peranta.platform.failureForLog
 import to.sava.peranta.send.RetryDisplayMeta
 import to.sava.peranta.send.SEND_REJECTED_MESSAGE
 import to.sava.peranta.send.SEND_RETRY_GAVE_UP_MESSAGE
@@ -78,9 +79,8 @@ class SendRetryWorker(
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (error: NtfyPublishException) {
-            // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
             if (isRetriablePublishError(error)) {
-                log.w { "retry publish failed (attempt ${runAttemptCount + 1}); backing off (${error::class.simpleName})" }
+                log.w { "retry publish failed (attempt ${runAttemptCount + 1}); backing off (${failureForLog(error)})" }
                 Result.retry()
             } else {
                 log.w { "retry publish rejected (${error.status}); giving up" }

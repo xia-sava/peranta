@@ -10,6 +10,7 @@ import kotlinx.coroutines.sync.withLock
 import to.sava.peranta.model.nowEpochMillis
 import to.sava.peranta.net.KtorNtfyClient
 import to.sava.peranta.net.createNtfyHttpClient
+import to.sava.peranta.platform.failureForLog
 import to.sava.peranta.platform.ioDispatcher
 import to.sava.peranta.roster.PresenceAnnounceGate
 import to.sava.peranta.roster.PresenceAnnounceScheduler
@@ -82,7 +83,7 @@ suspend fun announcePresence(context: Context) = announceMutex.withLock {
         throw cancellation
     } catch (error: Exception) {
         // 例外そのものは流さない。ktor の例外メッセージには接続先 URL（＝完全な topic）が載る（§11）。
-        presenceLog.w { "presence announce failed (${error::class.simpleName})" }
+        presenceLog.w { "presence announce failed (${failureForLog(error)})" }
     } finally {
         httpClient.close()
     }
