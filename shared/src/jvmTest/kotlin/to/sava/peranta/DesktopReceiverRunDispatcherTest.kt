@@ -16,15 +16,16 @@ import to.sava.peranta.timeline.TimelineItem
 import to.sava.peranta.timeline.TimelineStore
 import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.io.encoding.Base64
 import kotlin.test.AfterTest
 import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNotSame
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /** 受信機に渡すディスパッチャのスレッドの名前。呼び出し元のスレッドと見分けるために付ける。 */
@@ -104,21 +105,26 @@ class DesktopReceiverRunDispatcherTest {
         dispatcher = receiverExecutor.asCoroutineDispatcher(),
     ).also { receivers.add(it) }
 
-    /** 起動時の剪定も履歴の読み込みも、呼び出し元のスレッドではなく受信機に渡したディスパッチャのスレッドで動く。 */
+    /**
+     * 起動時の剪定も履歴の読み込みも、受信機に渡したディスパッチャのスレッドで動く。
+     * スレッドは名前ではなく実体で比べる。コルーチンのデバッグモードは、コルーチンを動かしている間だけスレッドの名前に
+     * ` @coroutine#N` を付けるため、比べる時点で同じスレッドの上で別のコルーチンが動いていると名前が一致しない。
+     */
     @Test
     fun runExecutesOnTheReceiverDispatcher() = runBlocking {
         val store = ThreadRecordingStore()
         val receiver = receiver(store)
         val callerThread = Thread.currentThread()
+        val receiverThread = receiverExecutor.submit(Callable { Thread.currentThread() }).get()
 
         val running = launch { receiver.run() }
         val loadThread = withTimeout(AWAIT_TIMEOUT_MILLIS) { store.loadThread.await() }
         val pruneThread = store.pruneThread.await()
         running.cancelAndJoin()
 
-        assertNotEquals(callerThread, pruneThread)
-        assertEquals(RECEIVER_THREAD_NAME, pruneThread.name)
-        assertEquals(RECEIVER_THREAD_NAME, loadThread.name)
+        assertNotSame(callerThread, pruneThread)
+        assertSame(receiverThread, pruneThread)
+        assertSame(receiverThread, loadThread)
     }
 
     /** 呼び出し元のスレッドが塞がっていても、受信の本体は先へ進む（UI スレッドが止まっても受信は止まらない）。 */
