@@ -1,8 +1,16 @@
 package to.sava.peranta.toast
 
+import co.touchlab.kermit.Logger
+import co.touchlab.kermit.Severity
+import co.touchlab.kermit.loggerConfigInit
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import to.sava.peranta.platform.RecordingLogWriter
 import to.sava.peranta.platform.recordingLogger
@@ -116,6 +124,39 @@ class ComposeToasterTest {
         assertTrue(toaster.active.isEmpty())
     }
 
+    /**
+     * 表示の積み上げ・取り下げと並行して close・update が走っても、表示中の一覧の走査が例外で止まらない。
+     * 取り下げ（他端末からの dismiss の受信）と表示（トーストのコルーチン）は別々のスレッドで動くため（§3.3）。
+     */
+    @Test
+    fun closeAndUpdateTolerateConcurrentShows() = runBlocking {
+        val toaster = ComposeToaster(log = quietLogger(), maxConcurrent = Int.MAX_VALUE)
+        val resident = (0 until RESIDENT_TOASTS).map { index ->
+            async(Dispatchers.Default) { toaster.show(toastItem("resident-$index")) }
+        }
+        toaster.awaitActive(RESIDENT_TOASTS)
+
+        withContext(Dispatchers.Default) {
+            launch {
+                repeat(CONCURRENT_ROUNDS) { round ->
+                    val shown = async(start = CoroutineStart.UNDISPATCHED) { toaster.show(toastItem("churn-$round")) }
+                    toaster.close("churn-$round")
+                    shown.await()
+                }
+            }
+            launch {
+                repeat(CONCURRENT_ROUNDS) {
+                    toaster.update(toastItem("absent"))
+                    toaster.close("absent")
+                }
+            }
+        }
+        toaster.active.toList().forEach { it.finish(ToastResult.Dismissed) }
+        resident.awaitAll()
+
+        assertTrue(toaster.active.isEmpty())
+    }
+
     /** 同時表示の上限を超えた表示要求は待たずに Failed を返す。 */
     @Test
     fun showRejectsWhenLimitReached() = runBlocking {
@@ -127,5 +168,16 @@ class ComposeToasterTest {
 
         toaster.active.first().finish(ToastResult.Dismissed)
         assertEquals(ToastResult.Dismissed, withTimeout(timeoutMillis) { first.await() })
+    }
+
+    private companion object {
+        /** 並行する操作の間ずっと表示しておくトーストの数。走査に時間をかけ、並行する変更と重なりやすくする。 */
+        const val RESIDENT_TOASTS: Int = 100
+
+        /** 表示と取り下げ、走査をそれぞれ繰り返す回数。 */
+        const val CONCURRENT_ROUNDS: Int = 2_000
+
+        /** 何も出さないロガー。繰り返しの表示で記録が膨らまないようにする。 */
+        fun quietLogger(): Logger = Logger(loggerConfigInit(minSeverity = Severity.Assert), "Toaster")
     }
 }

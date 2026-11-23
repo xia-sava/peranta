@@ -1,6 +1,11 @@
 package to.sava.peranta.timeline
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import to.sava.peranta.model.NotificationPayload
 import to.sava.peranta.platform.RecordingLogWriter
 import to.sava.peranta.platform.recordingLogger
@@ -242,6 +247,40 @@ class TimelineFeedTest {
         assertTrue(calls.all { it == 500 to 42L })
     }
 
+    /** 剪定の回数だけを数える永続側。並行する剪定を数え漏らさないよう、数えるのは Mutex の中で行う。 */
+    private class PruneCountingStore : TimelineStore {
+        private val mutex = Mutex()
+        var pruneCalls = 0
+            private set
+
+        override suspend fun append(item: TimelineItem) {}
+        override suspend fun loadAll(): List<TimelineItem> = emptyList()
+        override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) {
+            mutex.withLock { pruneCalls++ }
+        }
+    }
+
+    /**
+     * 複数のスレッドから同時に追記しても、稼働中の剪定は追記の件数どおりの回数だけ走る。
+     * 受信・トースト・添付の操作の追記は別々のスレッドから届くため、剪定までの件数を取りこぼさない。
+     */
+    @Test
+    fun concurrentAppendsArePrunedAtTheExactInterval() = runTest {
+        val store = PruneCountingStore()
+        val feed = TimelineFeed(store, maxItems = 10)
+        feed.prune(maxItems = 500, now = 0, maxAgeMillis = null)
+
+        withContext(Dispatchers.Default) {
+            repeat(CONCURRENT_WRITERS) { writer ->
+                launch {
+                    repeat(APPENDS_PER_WRITER) { feed.record(notification("w$writer-$it", 100L + it)) }
+                }
+            }
+        }
+
+        assertEquals(1 + CONCURRENT_WRITERS * APPENDS_PER_WRITER / PRUNE_INTERVAL_APPENDS, store.pruneCalls)
+    }
+
     /** 起動時の prune を通っていなければ、稼働中に永続側の剪定は走らない。 */
     @Test
     fun storeIsNotPrunedWithoutStartupPrune() = runTest {
@@ -348,5 +387,13 @@ class TimelineFeedTest {
         assertTrue(reported.single().contains("[${ErrorKind.DECRYPTION}]"))
         assertTrue(reported.single().contains("通知の復号に失敗しました"))
         assertTrue(reported.single().contains("suppressed 3 "))
+    }
+
+    private companion object {
+        /** 同時に追記するコルーチンの数。 */
+        const val CONCURRENT_WRITERS: Int = 8
+
+        /** コルーチン 1 本あたりの追記件数。合計が剪定の間隔で割り切れるようにする。 */
+        const val APPENDS_PER_WRITER: Int = 1_000
     }
 }

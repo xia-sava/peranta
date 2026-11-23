@@ -17,6 +17,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import to.sava.peranta.blob.AttachmentCache
 import to.sava.peranta.blob.AutoFetchRole
@@ -165,7 +166,7 @@ interface DesktopSelfTest {
  * 前提で生成すること。受信通知はトーストにも表示する（[toaster]）。
  * [repository] はアプリフィルタ画面（§10.4-1）のローカルミラー永続化と共有する設定リポジトリ。
  * [feed] はタイムライン、[newBlobTransport] は添付の blob を取得する転送の組み立て、[attachmentsDir] は
- * 復号済み添付の置き場、[dispatcher] はトースト・添付の取得などの処理を動かすディスパッチャ。
+ * 復号済み添付の置き場、[dispatcher] は受信（[run]）・トースト・添付の取得などの処理を動かすディスパッチャ。
  * [openFile] と [chooseSaveDestination] は添付を開く・保存するときの OS への受け渡し（[DesktopAttachmentActions]）。
  * 公開の生成口は、アプリデータの領域（[JvmPaths]）・ntfy・IO ディスパッチャ・OS の既定アプリと保存ダイアログを使う。
  */
@@ -179,7 +180,7 @@ class DesktopReceiver internal constructor(
     private val feed: TimelineFeed,
     newBlobTransport: (HttpClient) -> BlobTransport,
     attachmentsDir: File,
-    dispatcher: CoroutineDispatcher,
+    private val dispatcher: CoroutineDispatcher,
     openFile: (file: File) -> Unit,
     chooseSaveDestination: (suggestedName: String) -> File?,
 ) : DesktopSelfTest {
@@ -301,26 +302,33 @@ class DesktopReceiver internal constructor(
         pipeline.reportError(kind, message)
     }
 
-    /** 起動時剪定と presence 告知を行い、受信 topic の購読を開始する。キャンセルまで戻らない。 */
+    /**
+     * 起動時剪定と presence 告知を行い、受信 topic の購読を開始する。キャンセルまで戻らない。
+     * 本体は [dispatcher] の上で動かす。呼び出し元（Compose の UI スレッド）が止まっても、受信・他端末からの
+     * コマンドの実行と応答・履歴の保存を続けるため（§3.3）。
+     * キャンセルされたときは、本体が止まり切ってから戻る。
+     */
     suspend fun run() {
-        try {
-            feed.prune(now = nowEpochMillis(), maxAgeMillis = config.timelineRetentionMaxAgeMillis)
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (error: Exception) {
-            log.w(error) { "timeline prune failed" }
+        withContext(dispatcher) {
+            try {
+                feed.prune(now = nowEpochMillis(), maxAgeMillis = config.timelineRetentionMaxAgeMillis)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                log.w(error) { "timeline prune failed" }
+            }
+            try {
+                attachmentCache.prune()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                log.w(error) { "attachment cache prune failed" }
+            }
+            presenceAnnouncer.announce()
+            toastScope.launch { primeCachedAttachmentStates() }
+            log.i { "starting desktop receiver for device=${config.deviceName}" }
+            pipeline.start(config.receiveTopic!!)
         }
-        try {
-            attachmentCache.prune()
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (error: Exception) {
-            log.w(error) { "attachment cache prune failed" }
-        }
-        presenceAnnouncer.announce()
-        toastScope.launch { primeCachedAttachmentStates() }
-        log.i { "starting desktop receiver for device=${config.deviceName}" }
-        pipeline.start(config.receiveTopic!!)
     }
 
     /**

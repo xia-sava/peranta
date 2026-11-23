@@ -3,6 +3,8 @@ package to.sava.peranta.receive
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerializationException
 import to.sava.peranta.crypto.DecryptionException
@@ -114,6 +116,13 @@ class ReceivePipeline(
 
     /** 受信済み payload.id の集合。FIFO で [DEDUPE_CAPACITY] に丸める。 */
     private val seenIds = LinkedHashSet<String>()
+
+    /**
+     * タイムラインの既存アイテムを読んで書き戻す処理（改版の差し替え・[markSourceDismissed]・[hideFromTimeline]）を
+     * 直列化する。受信のコルーチンと、トーストやタイムラインの操作のコルーチンから並行して呼ばれるため、
+     * 一方の書き戻しが、その間に他方が加えた変更を古い内容で上書きしないようにする。
+     */
+    private val rewriteMutex = Mutex()
 
     /**
      * 保存済み履歴を読み込み、タイムラインと重複排除の初期状態を作る。購読は行わない。
@@ -360,16 +369,18 @@ class ReceivePipeline(
      * 対象が見つからない、または全件マーク済みなら何もしない。
      */
     suspend fun markSourceDismissed(notificationKey: String) {
-        val targets = items.value.asSequence()
-            .filterIsInstance<ReceivedNotification>()
-            .filter { it.payload.notificationKeyOrNull() == notificationKey && !it.sourceDismissed }
-            .toList()
-        if (targets.isEmpty()) return
-        targets.forEach { target ->
-            val marked = target.copy(sourceDismissed = true)
-            record(displayItem = marked, persistItem = persistItemFor(marked, marked.payload))
+        rewriteMutex.withLock {
+            val targets = items.value.asSequence()
+                .filterIsInstance<ReceivedNotification>()
+                .filter { it.payload.notificationKeyOrNull() == notificationKey && !it.sourceDismissed }
+                .toList()
+            if (targets.isEmpty()) return
+            targets.forEach { target ->
+                val marked = target.copy(sourceDismissed = true)
+                record(displayItem = marked, persistItem = persistItemFor(marked, marked.payload))
+            }
+            log.i { "notification marked source-dismissed key=$notificationKey count=${targets.size}" }
         }
-        log.i { "notification marked source-dismissed key=$notificationKey count=${targets.size}" }
     }
 
     /**
@@ -379,12 +390,14 @@ class ReceivePipeline(
      * 対象が見つからない、または既に消し済みなら何もしない。
      */
     suspend fun hideFromTimeline(itemId: String) {
-        val target = items.value.asSequence()
-            .filterIsInstance<ReceivedNotification>()
-            .firstOrNull { it.id == itemId && !it.hiddenFromTimeline } ?: return
-        val hidden = target.copy(hiddenFromTimeline = true)
-        record(displayItem = hidden, persistItem = persistItemFor(hidden, hidden.payload))
-        log.i { "notification hidden from timeline id=$itemId" }
+        rewriteMutex.withLock {
+            val target = items.value.asSequence()
+                .filterIsInstance<ReceivedNotification>()
+                .firstOrNull { it.id == itemId && !it.hiddenFromTimeline } ?: return
+            val hidden = target.copy(hiddenFromTimeline = true)
+            record(displayItem = hidden, persistItem = persistItemFor(hidden, hidden.payload))
+            log.i { "notification hidden from timeline id=$itemId" }
+        }
     }
 
     private fun requireKey(payload: CommandPayload): String =
@@ -450,26 +463,28 @@ class ReceivePipeline(
      * 配送順が入れ替わって古い改版が後から届いたときは、既に載っている新しい内容を守るため捨てる。
      */
     private suspend fun appendReceived(payload: Payload) {
-        val existing = existingNotification(payload.id)
-        if (revisionOf(existing?.payload) > revisionOf(payload)) {
-            log.d { "dropping superseded payload id=${payload.id} revision=${revisionOf(payload)}" }
-            return
-        }
-        val revised = existing?.takeIf { revisionOf(payload) > 0 }
-        val displayItem = revised?.copy(payload = payload, expiresAtEpochMillis = expiresAtOf(payload))
-            ?: ReceivedNotification(
-                id = payload.id,
-                timestampEpochMillis = now(),
-                payload = payload,
-                expiresAtEpochMillis = expiresAtOf(payload),
+        rewriteMutex.withLock {
+            val existing = existingNotification(payload.id)
+            if (revisionOf(existing?.payload) > revisionOf(payload)) {
+                log.d { "dropping superseded payload id=${payload.id} revision=${revisionOf(payload)}" }
+                return
+            }
+            val revised = existing?.takeIf { revisionOf(payload) > 0 }
+            val displayItem = revised?.copy(payload = payload, expiresAtEpochMillis = expiresAtOf(payload))
+                ?: ReceivedNotification(
+                    id = payload.id,
+                    timestampEpochMillis = now(),
+                    payload = payload,
+                    expiresAtEpochMillis = expiresAtOf(payload),
+                )
+            record(
+                displayItem = displayItem,
+                persistItem = persistItemFor(displayItem, payload),
+                replaced = revised,
             )
-        record(
-            displayItem = displayItem,
-            persistItem = persistItemFor(displayItem, payload),
-            replaced = revised,
-        )
-        val outcome = if (revised != null) "revised" else "appended"
-        log.i { "notification $outcome id=${payload.id} revision=${revisionOf(payload)}" }
+            val outcome = if (revised != null) "revised" else "appended"
+            log.i { "notification $outcome id=${payload.id} revision=${revisionOf(payload)}" }
+        }
     }
 
     /** タイムラインに載っている同一 id の受信通知。無ければ null。 */

@@ -1,7 +1,12 @@
 package to.sava.peranta.receive
 
 import to.sava.peranta.model.AppRuleSettings
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import to.sava.peranta.crypto.MessageCipher
 import to.sava.peranta.crypto.generateKey
@@ -24,6 +29,7 @@ import to.sava.peranta.model.SmsPayload
 import to.sava.peranta.model.encodeEnvelope
 import to.sava.peranta.net.FakeNtfyClient
 import to.sava.peranta.net.NtfyEvent
+import to.sava.peranta.send.FakeTimelineStore
 import to.sava.peranta.timeline.ErrorItem
 import to.sava.peranta.timeline.ErrorKind
 import to.sava.peranta.timeline.FakeTimelineFile
@@ -43,6 +49,7 @@ import kotlin.test.assertTrue
 /** 呼ぶたびに進む時計の 1 回あたりの進み幅。 */
 private const val ADVANCING_CLOCK_STEP_MILLIS = 1_000L
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ReceivePipelineTest {
 
     private val now = 10_000L
@@ -320,6 +327,82 @@ class ReceivePipelineTest {
         p.hideFromTimeline(id)
         p.hideFromTimeline(id)
         assertEquals(1, p.items.value.filterIsInstance<ReceivedNotification>().size)
+    }
+
+    /**
+     * 次の 1 回の追記だけを [release] まで止める永続側。止めたことは [held] で知らせる。
+     * 既存アイテムの書き戻しの途中に、別のコルーチンの書き戻しを割り込ませるために使う。
+     */
+    private class HeldAppendStore : TimelineStore {
+        private val delegate = FakeTimelineStore()
+        private var holdNext = false
+        val held = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+
+        fun holdNextAppend() {
+            holdNext = true
+        }
+
+        override suspend fun append(item: TimelineItem) {
+            if (holdNext) {
+                holdNext = false
+                held.complete(Unit)
+                release.await()
+            }
+            delegate.append(item)
+        }
+
+        override suspend fun loadAll(): List<TimelineItem> = delegate.loadAll()
+        override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) =
+            delegate.prune(maxItems, now, maxAgeMillis)
+    }
+
+    /**
+     * 「元通知は消えた」のマーク（§3.4）とタイムラインからの非表示（§10.1）が同じ通知へ並行して走っても、両方の印が残る。
+     * 他端末からの dismiss は受信のコルーチンで、タイムラインの操作は別のコルーチンで動くため、
+     * 一方の書き戻しが他方の印を古い内容で上書きしない。
+     */
+    @Test
+    fun concurrentMarkAndHideKeepBothFlags() = runTest {
+        val store = HeldAppendStore()
+        val p = pipeline(store)
+        p.handleEvent(eventFor(notification()))
+        store.holdNextAppend()
+
+        val marking = launch { p.markSourceDismissed(notification().notificationKey) }
+        store.held.await()
+        val hiding = launch { p.hideFromTimeline("n1") }
+        runCurrent()
+        store.release.complete(Unit)
+        joinAll(marking, hiding)
+
+        val received = p.items.value.filterIsInstance<ReceivedNotification>().single()
+        assertTrue(received.sourceDismissed)
+        assertTrue(received.hiddenFromTimeline)
+    }
+
+    /**
+     * 改版の差し替え（§4.3.1）と「元通知は消えた」のマーク（§3.4）が並行して走っても、改版の内容とマークの両方が残る。
+     * 改版は受信のコルーチンで、トーストやタイムラインからのマークは別のコルーチンで動くため。
+     */
+    @Test
+    fun concurrentRevisionAndMarkKeepBoth() = runTest {
+        val store = HeldAppendStore()
+        val p = pipeline(store)
+        p.handleEvent(eventFor(notification()))
+        val revisionEvent = eventFor(revisedNotification())
+        store.holdNextAppend()
+
+        val revising = launch { p.handleEvent(revisionEvent) }
+        store.held.await()
+        val marking = launch { p.markSourceDismissed(notification().notificationKey) }
+        runCurrent()
+        store.release.complete(Unit)
+        joinAll(revising, marking)
+
+        val received = p.items.value.filterIsInstance<ReceivedNotification>().single()
+        assertTrue(received.sourceDismissed)
+        assertEquals(listOf("blob-img"), (received.payload as NotificationPayload).attachments.map { it.blobId })
     }
 
     /** 画像添付を足した改版（§4.3.1）。同じ id・改版番号だけが異なる。 */

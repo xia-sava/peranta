@@ -14,7 +14,7 @@ import to.sava.peranta.model.newPayloadId
 const val MAX_IN_MEMORY_TIMELINE_ITEMS: Int = 1000
 
 /** 稼働中に [TimelineStore] の剪定を挟む追記件数の間隔。 */
-private const val PRUNE_INTERVAL_APPENDS: Int = 200
+internal const val PRUNE_INTERVAL_APPENDS: Int = 200
 
 /**
  * プロセス内で共有するタイムラインの単一ソース（§10.1・§11）。
@@ -38,10 +38,20 @@ class TimelineFeed(
     private val _items = MutableStateFlow<List<TimelineItem>>(emptyList())
     val items: StateFlow<List<TimelineItem>> = _items.asStateFlow()
 
-    /** 直近の [prune] で受け取った条件。null なら起動時の剪定をまだ通っておらず、稼働中も剪定しない。 */
+    /**
+     * 直近の [prune] で受け取った条件。null なら起動時の剪定をまだ通っておらず、稼働中も剪定しない。
+     * 読み書きは [pruneMutex] の中で行う。
+     */
     private var prunePolicy: PrunePolicy? = null
 
+    /** 直近の剪定からの追記件数。読み書きは [pruneMutex] の中で行う。 */
     private var appendsSincePrune = 0
+
+    /**
+     * 複数のスレッドから並行して届く追記と [prune] が、[prunePolicy] と [appendsSincePrune] を同時に触らないようにする。
+     * 剪定するかの判定だけを囲み、[store] の剪定はこの外で行う。
+     */
+    private val pruneMutex = Mutex()
 
     /** 稼働中の剪定を起動時と同じ条件で回すために覚えておく [prune] の引数。 */
     private data class PrunePolicy(val maxItems: Int, val maxAgeMillis: Long?)
@@ -125,8 +135,10 @@ class TimelineFeed(
      * （直後に [load] する運用）を前提とする。
      */
     override suspend fun prune(maxItems: Int, now: Long, maxAgeMillis: Long?) {
-        prunePolicy = PrunePolicy(maxItems, maxAgeMillis)
-        appendsSincePrune = 0
+        pruneMutex.withLock {
+            prunePolicy = PrunePolicy(maxItems, maxAgeMillis)
+            appendsSincePrune = 0
+        }
         store.prune(maxItems, now, maxAgeMillis)
     }
 
@@ -135,9 +147,12 @@ class TimelineFeed(
      * 起動時の [prune] を通っていなければ何もしない。剪定の失敗は握ってログに残し、追記は継続する。
      */
     private suspend fun prunePeriodically(now: Long) {
-        val policy = prunePolicy ?: return
-        if (++appendsSincePrune < PRUNE_INTERVAL_APPENDS) return
-        appendsSincePrune = 0
+        val policy = pruneMutex.withLock {
+            val current = prunePolicy ?: return
+            if (++appendsSincePrune < PRUNE_INTERVAL_APPENDS) return
+            appendsSincePrune = 0
+            current
+        }
         try {
             store.prune(policy.maxItems, now, policy.maxAgeMillis)
         } catch (e: CancellationException) {

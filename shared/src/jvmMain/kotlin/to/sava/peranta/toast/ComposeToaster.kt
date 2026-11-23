@@ -48,7 +48,12 @@ class ComposeToaster(
     private val maxConcurrent: Int = MAX_CONCURRENT_TOASTS,
 ) : Toaster {
 
-    /** 表示中のトースト。古い順に並ぶ。 */
+    /**
+     * 表示中のトースト。古い順に並ぶ。
+     * UI スレッドのほか、表示・差し替え・取り下げを求める各スレッドから並行して触られる。走査は
+     * [SnapshotStateList.toList] で得た変わらない一覧に対して行う。並行する追加・取り除きがあると、
+     * この一覧を直に走査する途中で [ConcurrentModificationException] が投げられるため。
+     */
     val active: SnapshotStateList<ActiveToast> = mutableStateListOf()
 
     override suspend fun show(item: ReceivedNotificationToast): ToastResult {
@@ -71,14 +76,14 @@ class ComposeToaster(
      * 表示中でない id の取り下げは何もせず、記録も残さない（取り下げの要求は表示の有無を問わず届く）。
      */
     override suspend fun close(id: String) {
-        val targets = active.filter { it.item.id == id }
+        val targets = active.toList().filter { it.item.id == id }
         if (targets.isEmpty()) return
         targets.forEach { it.finish(ToastResult.Closed) }
         log.i { "toast close id=$id count=${targets.size}" }
     }
 
     override suspend fun update(item: ReceivedNotificationToast) {
-        val targets = active.filter { it.item.id == item.id }
+        val targets = active.toList().filter { it.item.id == item.id }
         if (targets.isEmpty()) return
         targets.forEach { it.item = item }
         log.i { "toast updated id=${item.id}" }
