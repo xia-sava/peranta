@@ -227,6 +227,13 @@ private suspend fun saveWindowGeometryChanges(state: WindowState, store: WindowG
         .collectLatest { store.save(it) }
 }
 
+/**
+ * 既定の画面の描画設定のクラス名。Java2D が Direct3D を使っていれば `D3DGraphicsConfig`、
+ * 使っていなければ `Win32GraphicsConfig` になる。
+ */
+private fun defaultGraphicsConfigurationName(): String =
+    GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice.defaultConfiguration.javaClass.simpleName
+
 /** 接続中の全画面の矩形（AWT 座標）。 */
 private fun screenBounds(): List<Rectangle> =
     GraphicsEnvironment.getLocalGraphicsEnvironment().screenDevices.map { it.defaultConfiguration.bounds }
@@ -256,6 +263,8 @@ fun main(args: Array<String>) {
     val desktopSettings = DesktopSettings()
     applyLogVerbosity(desktopSettings.config.verboseLogging)
     val log = Logger.withTag("Main")
+    // Java2D の Direct3D を JVM 引数で切っているので（§3.3）、配布物で効いているかを起動ごとに残す。
+    log.i { "java2d graphics configuration: ${defaultGraphicsConfigurationName()}" }
     // 描画 API を決めるのはウィンドウを作る前なので、どのウィンドウよりも先に始める（§3.3）。
     installGpuResetRecovery()
     val settingsController = desktopSettings.controller

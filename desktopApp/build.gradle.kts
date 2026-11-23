@@ -56,6 +56,10 @@ compose.desktop {
         jvmArgs += listOf(
             "-Dperanta.versionCode=$perantaVersionCode",
             "-Dperanta.versionName=$perantaVersionName",
+            // Java2D の Direct3D 9 は使わない（§3.3）。デバイスの作り直しが GPU ドライバの中で落ちる・
+            // 戻らないことがあり、待っている EDT ごと止まる。Compose の描画は Skiko が別に持つので影響しない。
+            // 描画系の初期化より先に効かせる必要があるため、main() の中ではなく JVM 引数で渡す。
+            "-Dsun.java2d.d3d=false",
         )
 
         nativeDistributions {
