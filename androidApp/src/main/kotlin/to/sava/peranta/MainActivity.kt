@@ -490,6 +490,7 @@ class MainActivity : ComponentActivity() {
                                             },
                                             scrollToItemId = pendingScrollItemId,
                                             onScrollToItemHandled = { pendingScrollItemId = null },
+                                            confirmDismissAll = config.confirmDismissAll,
                                         )
                                     }
                                     composerUi?.let { MessageComposer(it) }

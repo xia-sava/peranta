@@ -557,6 +557,7 @@ fun main(args: Array<String>) {
                                             onScrollToItemHandled = { pendingScrollItemId = null },
                                             replyRequest = pendingReplyRequest,
                                             onReplyRequestHandled = { pendingReplyRequest = null },
+                                            confirmDismissAll = currentReceiver.config.confirmDismissAll,
                                         )
                                         else -> App()
                                     }

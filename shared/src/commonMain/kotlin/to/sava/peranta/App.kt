@@ -37,6 +37,7 @@ fun App(
     onScrollToItemHandled: () -> Unit = {},
     replyRequest: TimelineReplyRequest? = null,
     onReplyRequestHandled: () -> Unit = {},
+    confirmDismissAll: Boolean = true,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         TimelineScreen(
@@ -50,6 +51,7 @@ fun App(
             onScrollToItemHandled = onScrollToItemHandled,
             replyRequest = replyRequest,
             onReplyRequestHandled = onReplyRequestHandled,
+            confirmDismissAll = confirmDismissAll,
         )
     }
 }

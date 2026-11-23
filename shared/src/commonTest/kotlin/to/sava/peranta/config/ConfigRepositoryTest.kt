@@ -341,6 +341,18 @@ class ConfigRepositoryTest {
         assertTrue(repo.load().autoDisplayImages)
     }
 
+    /** まとめて消す前の確認トグルは既定 true で、false に設定しても save/load で往復する（§10.1）。 */
+    @Test
+    fun confirmDismissAllToggleRoundTrips() {
+        val settings = MapSettings()
+        val repo = ConfigRepository(settings, SettingsSecretStore(settings))
+        assertTrue(repo.load().confirmDismissAll)
+        repo.save(PerantaConfig(confirmDismissAll = false))
+        assertFalse(repo.load().confirmDismissAll)
+        repo.save(PerantaConfig(confirmDismissAll = true))
+        assertTrue(repo.load().confirmDismissAll)
+    }
+
     /** 受信時の通知トグルは既定 true で、false に設定しても save/load で往復する（§3.2 / §3.3）。 */
     @Test
     fun notifyOnReceiveToggleRoundTrips() {

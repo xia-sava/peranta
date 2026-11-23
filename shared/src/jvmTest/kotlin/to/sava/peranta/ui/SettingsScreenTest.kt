@@ -248,6 +248,44 @@ class SettingsScreenTest {
         assertEquals(false, repo.load().autoDisplayImages)
     }
 
+    /** まとめて消す前の確認チェックボックスは既定 ON で初期表示される（§10.1）。 */
+    @Test
+    fun confirmDismissAllCheckboxShowsDefaultOn() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_CONFIRM_DISMISS_ALL).performScrollTo().assertIsOn()
+    }
+
+    /** 保存済みのまとめて消す前の確認設定（OFF）がチェックボックスの初期状態に反映される。 */
+    @Test
+    fun confirmDismissAllCheckboxReflectsSavedConfig() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig().copy(confirmDismissAll = false))
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_CONFIRM_DISMISS_ALL).performScrollTo().assertIsOff()
+    }
+
+    /** まとめて消す前の確認チェックボックスをトグルすると、即座に値が ConfigRepository に反映される。 */
+    @Test
+    fun togglingConfirmDismissAllCheckboxPersistsImmediately() = runComposeUiTest {
+        val repo = ConfigRepository(MapSettings())
+        repo.save(readyConfig())
+        val controller = SettingsController(repo)
+
+        setContent { SettingsScreen(controller) }
+
+        onNodeWithTag(TAG_CONFIRM_DISMISS_ALL).performScrollTo().performClick()
+
+        assertEquals(false, repo.load().confirmDismissAll)
+    }
+
     /** 受信時の通知チェックボックスは既定 ON で、トグルすると即座に ConfigRepository へ反映される（§10.2）。 */
     @Test
     fun togglingNotifyOnReceiveCheckboxPersistsImmediately() = runComposeUiTest {

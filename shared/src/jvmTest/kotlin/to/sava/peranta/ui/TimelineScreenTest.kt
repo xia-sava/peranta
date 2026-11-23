@@ -226,6 +226,22 @@ class TimelineScreenTest {
         assertEquals(listOf("n1"), dismissedAll)
     }
 
+    /** confirmDismissAll = false なら、確認ダイアログを経ずに押した時点で対象が渡る（§10.1）。 */
+    @Test
+    fun dismissAllPassesTargetsWithoutConfirmationWhenConfirmationDisabled() = runComposeUiTest {
+        var dismissedAll: List<String>? = null
+        setContent {
+            TimelineScreen(
+                items(),
+                actions = TimelineActions(dismissAll = { list -> dismissedAll = list.map { it.id } }),
+                confirmDismissAll = false,
+            )
+        }
+        onNodeWithTag(TAG_TIMELINE_DISMISS_ALL).performClick()
+        assertEquals(listOf("n1"), dismissedAll)
+        onAllNodesWithTag(TAG_TIMELINE_DISMISS_ALL_CONFIRM).assertCountEquals(0)
+    }
+
     /** 元通知が消えたアイテムしか無ければ、まとめて消すバーを出さない。 */
     @Test
     fun dismissAllBarHiddenWhenNoLiveSources() = runComposeUiTest {

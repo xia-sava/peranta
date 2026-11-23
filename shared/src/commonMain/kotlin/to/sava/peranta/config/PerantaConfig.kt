@@ -24,6 +24,8 @@ const val DEFAULT_HOST: String = "peranta.example.com"
  * [autoDisplayImages] が true のとき、タイムラインに現れた画像添付を自動でダウンロードして表示する（§4.3）。
  * false なら従来どおり手動でダウンロードボタンを押すまで取得しない。端末ローカルの表示設定であり
  * ペアリング QR には含めない。
+ * [confirmDismissAll] が true のとき、タイムライン上部のまとめて消す操作（§10.1）の前に確認を挟む。
+ * false なら確認せずに消す。端末ローカルの表示設定でありペアリング QR には含めない。
  * [notifyOnReceive] が true のとき、受信したアイテムをこの端末の通知（Android の通知・Desktop のトースト）で
  * 知らせる（§3.2 / §3.3）。false ならタイムラインへ記録するだけにする。受信エラーはこの設定に依らず知らせる。
  * 端末ローカルの表示設定でありペアリング QR には含めない。
@@ -63,6 +65,7 @@ data class PerantaConfig(
     val attachFullTextWhenTruncated: Boolean = true,
     val timelineRetentionDays: Int? = null,
     val autoDisplayImages: Boolean = true,
+    val confirmDismissAll: Boolean = true,
     val notifyOnReceive: Boolean = true,
     val attachNotificationImages: Boolean = true,
     val verboseLogging: Boolean = false,

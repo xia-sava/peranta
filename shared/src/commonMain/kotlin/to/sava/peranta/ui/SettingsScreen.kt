@@ -95,6 +95,11 @@ private const val PERSIST_SENSITIVE_HISTORY_DESCRIPTION: String =
 private const val AUTO_DISPLAY_IMAGES_DESCRIPTION: String =
     "受信した画像を自動でダウンロードして表示します。通信量が気になる場合は OFF にしてください。"
 
+/** まとめて消す前の確認トグルの説明文（§10.1）。 */
+private const val CONFIRM_DISMISS_ALL_DESCRIPTION: String =
+    "OFF にすると、「元通知が残っているものをまとめて消す」ボタンを押した時点で、確認せずに消します。" +
+        "元端末と他の受信端末からも消え、取り消せません。"
+
 /** 受信時の通知トグルの説明文（§3.2 / §3.3）。 */
 private const val NOTIFY_ON_RECEIVE_DESCRIPTION: String =
     "OFF にすると、受信した通知・SMS・メッセージ・ファイルを通知で知らせず、タイムラインに記録するだけにします。" +
@@ -205,6 +210,7 @@ fun SettingsScreen(
     var attachNotificationImages by remember { mutableStateOf(initial.attachNotificationImages) }
     var timelineRetentionDays by remember { mutableStateOf(initial.timelineRetentionDays?.toString().orEmpty()) }
     var autoDisplayImages by remember { mutableStateOf(initial.autoDisplayImages) }
+    var confirmDismissAll by remember { mutableStateOf(initial.confirmDismissAll) }
     var notifyOnReceive by remember { mutableStateOf(initial.notifyOnReceive) }
     var verboseLogging by remember { mutableStateOf(initial.verboseLogging) }
     var sendEnabled by remember { mutableStateOf(initial.sendEnabled) }
@@ -240,6 +246,7 @@ fun SettingsScreen(
             attachFullTextWhenTruncated = attachFullTextWhenTruncated,
             timelineRetentionDays = timelineRetentionDays.toIntOrNull(),
             autoDisplayImages = autoDisplayImages,
+            confirmDismissAll = confirmDismissAll,
             notifyOnReceive = notifyOnReceive,
             attachNotificationImages = attachNotificationImages,
             verboseLogging = verboseLogging,
@@ -446,6 +453,17 @@ fun SettingsScreen(
                 )
                 Text(
                     text = AUTO_DISPLAY_IMAGES_DESCRIPTION,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                LabeledCheckbox(
+                    checked = confirmDismissAll,
+                    onCheckedChange = { confirmDismissAll = it; persistConnection() },
+                    label = "まとめて消す前に確認する",
+                    tag = TAG_CONFIRM_DISMISS_ALL,
+                )
+                Text(
+                    text = CONFIRM_DISMISS_ALL_DESCRIPTION,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -862,6 +880,7 @@ const val TAG_PERSIST_SENSITIVE: String = "settings-persist-sensitive"
 const val TAG_ATTACH_FULL_TEXT: String = "settings-attach-full-text"
 const val TAG_TIMELINE_RETENTION_DAYS: String = "settings-timeline-retention-days"
 const val TAG_AUTO_DISPLAY_IMAGES: String = "settings-auto-display-images"
+const val TAG_CONFIRM_DISMISS_ALL: String = "settings-confirm-dismiss-all"
 
 /** 受信時の通知トグルのテストタグ。 */
 const val TAG_NOTIFY_ON_RECEIVE: String = "settings-notify-on-receive"

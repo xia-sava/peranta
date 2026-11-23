@@ -30,6 +30,7 @@ class SettingsControllerTest {
         attachFullTextWhenTruncated: Boolean = true,
         timelineRetentionDays: Int? = null,
         autoDisplayImages: Boolean = true,
+        confirmDismissAll: Boolean = true,
         notifyOnReceive: Boolean = true,
         attachNotificationImages: Boolean = true,
         verboseLogging: Boolean = false,
@@ -42,6 +43,7 @@ class SettingsControllerTest {
         attachFullTextWhenTruncated = attachFullTextWhenTruncated,
         timelineRetentionDays = timelineRetentionDays,
         autoDisplayImages = autoDisplayImages,
+        confirmDismissAll = confirmDismissAll,
         notifyOnReceive = notifyOnReceive,
         attachNotificationImages = attachNotificationImages,
         verboseLogging = verboseLogging,
@@ -145,6 +147,20 @@ class SettingsControllerTest {
         controller.saveConnection(autoDisplayImages = true)
 
         assertTrue(repo.load().autoDisplayImages)
+    }
+
+    /** まとめて消す前の確認トグル（§10.1）の保存/読み込みラウンドトリップ。 */
+    @Test
+    fun saveConnectionSettingsPersistsConfirmDismissAll() {
+        val (controller, repo) = controllerWith(PerantaConfig(confirmDismissAll = true))
+
+        controller.saveConnection(confirmDismissAll = false)
+
+        assertFalse(repo.load().confirmDismissAll)
+
+        controller.saveConnection(confirmDismissAll = true)
+
+        assertTrue(repo.load().confirmDismissAll)
     }
 
     /** 受信時の通知トグル（§3.2 / §3.3）の保存/読み込みラウンドトリップ。 */

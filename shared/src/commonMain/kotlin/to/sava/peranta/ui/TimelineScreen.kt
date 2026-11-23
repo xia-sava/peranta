@@ -216,6 +216,8 @@ data class TimelineReplyRequest(val itemId: String, val actionIndex: Int)
  * （対象が表示リストに無ければスクロールせず消費のみ通知する）。最下部追従ロジックとは独立して動く。
  * [replyRequest] が非 null になると、対象アイテムの吹き出しが返信入力を開き、[onReplyRequestHandled]
  * で消費を通知する（対象が表示リストに無ければここで消費のみ通知する）。
+ * [confirmDismissAll] が false のとき、まとめて消す操作は確認を挟まずに実行する
+ * （[to.sava.peranta.config.PerantaConfig.confirmDismissAll]）。
  */
 @Composable
 fun TimelineScreen(
@@ -231,6 +233,7 @@ fun TimelineScreen(
     onScrollToItemHandled: () -> Unit = {},
     replyRequest: TimelineReplyRequest? = null,
     onReplyRequestHandled: () -> Unit = {},
+    confirmDismissAll: Boolean = true,
 ) {
     val list by items.collectAsState()
     val visible = list.filterNot { it is ReceivedNotification && it.hiddenFromTimeline }
@@ -313,7 +316,7 @@ fun TimelineScreen(
             EmptyState(emptyStateMessage)
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
-                actions?.let { DismissAllBar(dismissableSources(visible), it.dismissAll) }
+                actions?.let { DismissAllBar(dismissableSources(visible), it.dismissAll, confirmDismissAll) }
                 Box(modifier = Modifier.weight(1f)) {
                     LazyColumn(
                         state = listState,
@@ -359,12 +362,14 @@ private fun dismissableSources(visible: List<TimelineItem>): List<ReceivedNotifi
 
 /**
  * 元通知が生きている通知をまとめて消すバー（§10.1）。対象が無いときは出さない。
- * 全端末へ及んで取り消せない操作のため、確認を挟んでから実行する。
+ * 全端末へ及んで取り消せない操作のため、[confirm] が true のときは確認を挟んでから実行する。
+ * false のときは押した時点で実行する。
  */
 @Composable
 private fun DismissAllBar(
     targets: List<ReceivedNotification>,
     onDismissAll: (items: List<ReceivedNotification>) -> Unit,
+    confirm: Boolean,
 ) {
     if (targets.isEmpty()) return
     var confirming by remember { mutableStateOf(false) }
@@ -375,7 +380,7 @@ private fun DismissAllBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TextButton(
-                onClick = { confirming = true },
+                onClick = { if (confirm) confirming = true else onDismissAll(targets) },
                 modifier = Modifier.testTag(TAG_TIMELINE_DISMISS_ALL),
             ) { Text("元通知が残っているものをまとめて消す（${targets.size}）") }
         }
