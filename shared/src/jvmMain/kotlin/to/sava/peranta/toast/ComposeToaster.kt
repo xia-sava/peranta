@@ -66,10 +66,15 @@ class ComposeToaster(
         }
     }
 
-    /** 同じ通知の再投稿で同一 id が複数並ぶことがあるため、一致するものを全件取り下げる。 */
+    /**
+     * 同じ通知の再投稿で同一 id が複数並ぶことがあるため、一致するものを全件取り下げる。
+     * 表示中でない id の取り下げは何もせず、記録も残さない（取り下げの要求は表示の有無を問わず届く）。
+     */
     override suspend fun close(id: String) {
-        active.filter { it.item.id == id }.forEach { it.finish(ToastResult.Closed) }
-        log.i { "toast close id=$id" }
+        val targets = active.filter { it.item.id == id }
+        if (targets.isEmpty()) return
+        targets.forEach { it.finish(ToastResult.Closed) }
+        log.i { "toast close id=$id count=${targets.size}" }
     }
 
     override suspend fun update(item: ReceivedNotificationToast) {

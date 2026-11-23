@@ -4,6 +4,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import to.sava.peranta.platform.RecordingLogWriter
+import to.sava.peranta.platform.recordingLogger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -60,6 +62,33 @@ class ComposeToasterTest {
 
         assertEquals(ToastResult.Closed, withTimeout(timeoutMillis) { first.await() })
         assertEquals(ToastResult.Closed, withTimeout(timeoutMillis) { second.await() })
+    }
+
+    /** 表示していない id の close は何もせず、記録も残さない。 */
+    @Test
+    fun closeForMissingToastLeavesNoRecord() = runBlocking {
+        val writer = RecordingLogWriter()
+        val toaster = ComposeToaster(log = recordingLogger(writer, "Toaster"))
+
+        toaster.close("gone")
+
+        assertTrue(writer.recorded.none { it.contains("toast close") }, "${writer.recorded}")
+    }
+
+    /** close で表示を取り下げたときは、取り下げた件数を記録に残す。 */
+    @Test
+    fun closeRecordsHowManyToastsItFinished() = runBlocking {
+        val writer = RecordingLogWriter()
+        val toaster = ComposeToaster(log = recordingLogger(writer, "Toaster"))
+        val first = async { toaster.show(toastItem("dup")) }
+        val second = async { toaster.show(toastItem("dup")) }
+        toaster.awaitActive(2)
+
+        toaster.close("dup")
+        withTimeout(timeoutMillis) { first.await() }
+        withTimeout(timeoutMillis) { second.await() }
+
+        assertTrue(writer.recorded.any { it.contains("toast close id=dup count=2") }, "${writer.recorded}")
     }
 
     /** update は表示中のトーストの内容を差し替える（後から届いた画像の差し込み、§4.3.1）。 */
