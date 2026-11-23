@@ -3,6 +3,7 @@ package to.sava.peranta.receive
 import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import to.sava.peranta.config.ConfigRepository
 import to.sava.peranta.model.notificationKeyOrNull
@@ -33,6 +34,8 @@ class TimelineOperations(
     private val withdrawDisplay: suspend (payloadId: String) -> Unit,
     private val log: Logger = Logger.withTag("TimelineOps"),
 ) {
+    /** 実行中のまとめて消す処理（[dismissItems]）。 */
+    private var dismissAllJob: Job? = null
 
     /**
      * タイムライン UI 用の操作束を作る（§10.1）。アクション発火・返信・非表示は送信元へ一点指定し、
@@ -140,9 +143,15 @@ class TimelineOperations(
      * 応答（§3.4）は転送元の端末ごとに最初の 1 件だけに求める。実行端末はコマンドを順に処理するため
      * 後ろのものほど応答が遅れ、全件に求めると届いていても待ち時間を超えてしまう。
      * 途中で失敗したら、残りは行わない。
+     * 前の呼び出しの処理が終わるまでに呼ばれたら、何もしない。同じ元通知へ dismiss を重ねて送ると、
+     * 実行端末が順に処理するコマンドが増えて応答が遅れ、待ち時間を超えるため。
      */
     private fun dismissItems(targets: List<ReceivedNotification>) {
-        scope.launch {
+        if (dismissAllJob?.isActive == true) {
+            log.i { "dismiss all ignored (previous request still running) targets=${targets.size}" }
+            return
+        }
+        dismissAllJob = scope.launch {
             try {
                 targets.forEach { withdrawDisplay(it.payload.id) }
                 val ackRequestedSources = mutableSetOf<String>()

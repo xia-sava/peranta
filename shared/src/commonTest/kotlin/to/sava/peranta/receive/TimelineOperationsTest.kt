@@ -254,6 +254,47 @@ class TimelineOperationsTest {
         )
     }
 
+    /** まとめて消す処理が終わるまでに再び呼ばれても、dismiss を重ねて送らない。 */
+    @Test
+    fun dismissAllIgnoresRequestWhilePreviousIsRunning() = runTest {
+        val harness = harness()
+        val targets = listOf(notification("n1", key = "0|k1"))
+
+        harness.actions.dismissAll(targets)
+        harness.actions.dismissAll(targets)
+        runCurrent()
+
+        assertEquals(
+            listOf("withdraw:p-n1", "publish:phone-topic", "publish:tablet-topic", "mark:0|k1"),
+            harness.events,
+        )
+    }
+
+    /** まとめて消す処理が終わったあとは、次の呼び出しを受け付ける。 */
+    @Test
+    fun dismissAllAcceptsRequestAfterPreviousFinished() = runTest {
+        val harness = harness()
+
+        harness.actions.dismissAll(listOf(notification("n1", key = "0|k1")))
+        runCurrent()
+        harness.actions.dismissAll(listOf(notification("n2", key = "0|k2")))
+        runCurrent()
+
+        assertEquals(
+            listOf(
+                "withdraw:p-n1",
+                "publish:phone-topic",
+                "publish:tablet-topic",
+                "mark:0|k1",
+                "withdraw:p-n2",
+                "publish:phone-topic",
+                "publish:tablet-topic",
+                "mark:0|k2",
+            ),
+            harness.events,
+        )
+    }
+
     /** 同じ元通知を指すアイテムが複数あっても、表示はアイテムごとに取り下げ、dismiss とマークは 1 回にまとめる。 */
     @Test
     fun dismissAllSendsOneCommandPerNotificationKey() = runTest {
