@@ -20,6 +20,20 @@ dependencies {
     implementation(libs.compose.uiToolingPreview)
 }
 
+/** Desktop を動かす JetBrains Runtime のバージョン。コンパイルにも同じバージョンの JetBrains Runtime を使う。 */
+val jetBrainsRuntimeVersion = libs.versions.desktop.jdk.get().toInt()
+
+/** コンパイル、`run`、配布物に使う JetBrains Runtime。 */
+val jetBrainsRuntimeSpec = Action<JavaToolchainSpec> {
+    languageVersion.set(JavaLanguageVersion.of(jetBrainsRuntimeVersion))
+    vendor.set(JvmVendorSpec.JETBRAINS)
+}
+val jetBrainsRuntime = extensions.getByType<JavaToolchainService>().launcherFor(jetBrainsRuntimeSpec)
+
+kotlin {
+    jvmToolchain(jetBrainsRuntimeSpec)
+}
+
 // 配布物の名前。インストール先ディレクトリ・ランチャー exe・スタートメニューの表示名になる。
 val perantaPackageName = "Peranta"
 
@@ -51,6 +65,9 @@ tasks.named<ProcessResources>("processResources") {
 compose.desktop {
     application {
         mainClass = "to.sava.peranta.MainKt"
+
+        // `run` で動かし、配布物へ入れるランタイム。
+        javaHome = jetBrainsRuntime.get().metadata.installationPath.asFile.path
 
         // 生成リソースを読めない実行経路（IDE の直接 run 等）でも版数が効くよう -D でも渡す。
         jvmArgs += listOf(

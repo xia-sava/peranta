@@ -1750,6 +1750,7 @@ MSI は版数が major.minor.patch に限られるため組まない（Desktop �
 | 設定保持 | multiplatform-settings（鍵保管のみ expect/actual） |
 | 通知履歴 | JSONL（`TimelineStore` interface、アプリ専用領域に保存） |
 | Desktop 受信 | Compose for Desktop / JVM（Windows 専用）, トレイ常駐 + WebSocket 購読 + 自前描画トースト |
+| JDK | JetBrains Runtime 25（Gradle のデーモン・Desktop のコンパイル・配布物に同梱するランタイム） |
 
 ---
 

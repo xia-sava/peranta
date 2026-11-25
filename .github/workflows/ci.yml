@@ -15,6 +15,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # Gradle のデーモンと Desktop のコンパイル・テストに使う JetBrains Runtime のバージョン。
+  # gradle/gradle-daemon-jvm.properties の toolchainVersion と libs.versions.toml の desktop-jdk に揃え、
+  # Gradle がダウンロードせずに見つけられるようにする。
   JAVA_VERSION: "25"
 
 jobs:
@@ -29,7 +32,7 @@ jobs:
 
       - uses: actions/setup-java@v6
         with:
-          distribution: temurin
+          distribution: jetbrains
           java-version: ${{ env.JAVA_VERSION }}
 
       # リポジトリに置いている gradle-wrapper.jar が公式のものであることを確かめる。

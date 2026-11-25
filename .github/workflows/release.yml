@@ -14,6 +14,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Gradle のデーモン、Desktop のコンパイルとテスト、配布物に使う JetBrains Runtime のバージョン。
+  # gradle/gradle-daemon-jvm.properties の toolchainVersion と libs.versions.toml の desktop-jdk に揃える。
   JAVA_VERSION: "25"
   # jpackage が使えるのは WiX 3 系のみ。ランナーに無いときに入れる版を固定する。
   WIX_VERSION: "3.14.1"
@@ -89,7 +91,7 @@ jobs:
 
       - uses: actions/setup-java@v6
         with:
-          distribution: temurin
+          distribution: jetbrains
           java-version: ${{ env.JAVA_VERSION }}
 
       # リポジトリに置いている gradle-wrapper.jar が公式のものであることを確かめる。
@@ -121,7 +123,7 @@ jobs:
 
       - uses: actions/setup-java@v6
         with:
-          distribution: temurin
+          distribution: jetbrains
           java-version: ${{ env.JAVA_VERSION }}
 
       # キャッシュ機能は MIT ライセンスの外にあり、利用規約への同意を要する。
@@ -183,7 +185,7 @@ jobs:
 
       - uses: actions/setup-java@v6
         with:
-          distribution: temurin
+          distribution: jetbrains
           java-version: ${{ env.JAVA_VERSION }}
 
       # キャッシュ機能は MIT ライセンスの外にあり、利用規約への同意を要する。

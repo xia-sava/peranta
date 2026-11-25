@@ -99,8 +99,9 @@ Play ストアには出していないため、Android では初回インスト�
 
 ## ビルド
 
-ビルドには JDK 25 を使う。`gradle/gradle-daemon-jvm.properties` の指定に従って Gradle が自動で取得するので、
-手元には `gradlew` を起動できる JDK があればよい。
+ビルドには JetBrains Runtime 25 を使う。Gradle のデーモンも Desktop のコンパイルと配布物もこれで動かす。
+デーモンの JDK は `gradle/gradle-daemon-jvm.properties`、Desktop の JDK は `gradle/libs.versions.toml` の
+`desktop-jdk` が持ち、両者を揃える。Gradle が自動で取得するので、手元には `gradlew` を起動できる JDK があればよい。
 
 ```sh
 # 全テスト
