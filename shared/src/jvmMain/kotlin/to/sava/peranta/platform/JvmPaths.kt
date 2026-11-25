@@ -4,6 +4,8 @@ import co.touchlab.kermit.Logger
 import to.sava.peranta.timeline.timelineFileIn
 import to.sava.peranta.timeline.timelineTempFiles
 import java.io.File
+import java.io.IOException
+import java.nio.file.Files
 
 private const val LOG_DIR_NAME = "logs"
 private const val ATTACHMENTS_DIR_NAME = "attachments"
@@ -111,15 +113,27 @@ internal fun migrateAppData(target: File, legacy: File?) {
     val staging = File(target.parentFile, "${target.name}$MIGRATION_STAGING_SUFFIX")
     staging.deleteRecursively()
     runCatching {
-        if (!legacy.renameTo(target)) {
+        if (!legacy.moveWithoutReplacing(target)) {
             legacy.copyRecursively(staging, overwrite = true)
-            check(staging.renameTo(target)) { "could not place the migrated data directory" }
+            check(staging.moveWithoutReplacing(target)) { "could not place the migrated data directory" }
             if (!legacy.deleteRecursively()) log.w { "moved the data directory but could not remove the old one" }
         }
     }.onFailure {
         staging.deleteRecursively()
         log.w { "could not move the data directory; keeping the previous one (${it::class.simpleName})" }
     }
+}
+
+/**
+ * [target] に何も無いときだけ、この場所を [target] へ付け替える。付け替えられなければ false を返す
+ * （[target] に何かある・別のボリュームにある等）。
+ * `File.renameTo` は実行環境によって [target] にあるものを置き換えるため使わない。
+ */
+private fun File.moveWithoutReplacing(target: File): Boolean = try {
+    Files.move(toPath(), target.toPath())
+    true
+} catch (_: IOException) {
+    false
 }
 
 /**
