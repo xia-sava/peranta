@@ -21,7 +21,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.awt.SwingWindow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.pointerInput
@@ -30,7 +32,7 @@ import kotlinx.coroutines.CoroutineScope
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowDecoration
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.launch
@@ -38,8 +40,11 @@ import to.sava.peranta.ui.PerantaTheme
 import java.awt.GraphicsEnvironment
 import java.awt.MouseInfo
 import java.awt.Rectangle
+import java.awt.Window
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
+import java.awt.event.WindowAdapter
+import java.awt.event.WindowEvent
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.roundToInt
@@ -87,24 +92,44 @@ fun ToastHost(toaster: ComposeToaster) {
 
 /**
  * トースト 1 件を独立したウィンドウとして画面右下に出す。
- * 枠なし・透過・常に最前面・フォーカスを奪わない設定で、内容の高さに合わせてウィンドウが伸びる。
+ * 枠なし・透過・常に最前面で、内容の高さに合わせてウィンドウが伸びる。
  * 横方向のドラッグにはウィンドウごと追従し、振り切ったところで消す。
+ *
+ * ウィンドウは表示し終えるまでフォーカスを受けられない状態にしておき、表示した後に受けられる状態へ切り替える。
+ * 表示した時点で受けられる状態だと、同じアプリの別のウィンドウ（メインウィンドウなど）がアクティブなとき
+ * そこからフォーカスを取り、入力中の文字がトーストへ流れる。
+ * 受けられない状態のままにすると、Windows の「ホバーでアクティブ化」が有効な環境ではマウスの押下が届かなくなり、
+ * ボタンもスワイプも効かない。JetBrains Runtime はこの設定が有効なとき、フォーカスを受けられないウィンドウでも
+ * 押下でアクティブ化を試みるため。
+ * フォーカスを受けられるウィンドウでもタスクバーと Alt+Tab に載らないよう、ツールウィンドウとして作る。
+ * キー入力は受け付けない。アクティブになったトーストへ流れた Tab や Enter でボタンが押されないようにするため。
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun ToastWindow(toast: ActiveToast, stack: ToastStack, order: List<ActiveToast>) {
     val state = rememberWindowState(
         size = DpSize(TOAST_WIDTH.dp, Dp.Unspecified),
         position = WindowPosition(Alignment.BottomEnd),
     )
-    Window(
+    var opened by remember { mutableStateOf(false) }
+    SwingWindow(
         onCloseRequest = { toast.finish(ToastResult.Dismissed) },
         state = state,
         title = "Peranta",
-        undecorated = true,
+        decoration = WindowDecoration.Undecorated(),
         transparent = true,
         resizable = false,
-        focusable = false,
+        focusable = opened,
         alwaysOnTop = true,
+        onPreviewKeyEvent = { true },
+        init = { window ->
+            window.type = Window.Type.UTILITY
+            window.addWindowListener(object : WindowAdapter() {
+                override fun windowOpened(event: WindowEvent) {
+                    opened = true
+                }
+            })
+        },
     ) {
         var windowHeight by remember { mutableStateOf(window.height) }
         DisposableEffect(window) {
